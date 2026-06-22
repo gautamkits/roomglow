@@ -1,0 +1,193 @@
+"use client";
+
+import { useState } from "react";
+import { Sofa, PartyPopper, Calendar } from "lucide-react";
+import { EVENTS } from "@/lib/events";
+import type { AppMode, EventConfig } from "@/lib/types";
+import ImageUpload from "./ImageUpload";
+
+interface SetupPanelProps {
+  onImageSelected: (
+    base64: string,
+    mode: AppMode,
+    eventConfig: EventConfig | null
+  ) => void;
+}
+
+function Chip({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1.5 rounded-lg text-xs transition-colors border ${
+        selected
+          ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
+          : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
+  const [mode, setMode] = useState<AppMode>("space");
+  const [eventId, setEventId] = useState<string | null>(null);
+  const [subTheme, setSubTheme] = useState<string | null>(null);
+  const [colorScheme, setColorScheme] = useState<string | null>(null);
+  const [honoree, setHonoree] = useState("");
+  const [eventDate, setEventDate] = useState("");
+
+  const event = EVENTS.find((e) => e.id === eventId);
+  const eventReady = mode === "space" || (!!event && !!subTheme && !!colorScheme);
+
+  const buildConfig = (): EventConfig | null => {
+    if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
+    return {
+      eventType: event.id,
+      eventLabel: event.label,
+      subTheme,
+      colorScheme,
+      honoree: honoree.trim() || undefined,
+      eventDate: eventDate || undefined,
+    };
+  };
+
+  const handleImage = (base64: string) => {
+    onImageSelected(base64, mode, buildConfig());
+  };
+
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-4">
+      {/* Mode toggle */}
+      <div className="grid grid-cols-2 gap-2">
+        {(
+          [
+            { id: "space", Icon: Sofa, label: "Interior designer" },
+            { id: "event", Icon: PartyPopper, label: "Event planner" },
+          ] as const
+        ).map(({ id, Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => setMode(id)}
+            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+              mode === id
+                ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
+                : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+            }`}
+          >
+            <Icon size={16} strokeWidth={1.75} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Inline event options */}
+      {mode === "event" && (
+        <div className="space-y-3 animate-fade-up">
+          <div className="flex flex-wrap gap-1.5">
+            {EVENTS.map((e) => (
+              <button
+                key={e.id}
+                onClick={() => {
+                  setEventId(e.id);
+                  setSubTheme(null);
+                  setColorScheme(null);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
+                  eventId === e.id
+                    ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
+                    : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                }`}
+              >
+                <span>{e.icon}</span>
+                {e.label}
+              </button>
+            ))}
+          </div>
+
+          {event && (
+            <div className="space-y-2.5 animate-fade-up">
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                  Theme
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {event.subThemes.map((t) => (
+                    <Chip
+                      key={t}
+                      label={t}
+                      selected={subTheme === t}
+                      onClick={() => setSubTheme(t)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                  Colors
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {event.colorSchemes.map((c) => (
+                    <Chip
+                      key={c}
+                      label={c}
+                      selected={colorScheme === c}
+                      onClick={() => setColorScheme(c)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <input
+                type="text"
+                value={honoree}
+                onChange={(e) => setHonoree(e.target.value)}
+                placeholder="Who's it for? (optional)"
+                className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+              />
+              <div className="relative">
+                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                <input
+                  type="date"
+                  value={eventDate}
+                  onChange={(e) => setEventDate(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                  placeholder="Event date (optional)"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Photo tips */}
+      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-stone-100 dark:bg-zinc-800/50">
+        <span className="text-xs text-zinc-400 mt-0.5 shrink-0">Tip</span>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
+          Upload a clean, uncluttered photo with good lighting. Clear away
+          personal items for the best results.
+        </p>
+      </div>
+
+      {/* Upload — gated until event options are set */}
+      <div className="pt-1">
+        {eventReady ? (
+          <ImageUpload onImageSelected={handleImage} />
+        ) : (
+          <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
+            <p className="text-sm text-zinc-500">
+              Pick an occasion, theme &amp; colors to upload your photo
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,286 @@
+"use client";
+
+import { useState, useCallback } from "react";
+import type {
+  AppMode,
+  EventConfig,
+  FlowStep,
+  RoomAnalysis,
+  SuggestedProduct,
+  ProductRecommendation,
+  ProductResult,
+  Hotspot,
+} from "@/lib/types";
+
+function buildEventContext(cfg: EventConfig | null): string | undefined {
+  if (!cfg) return undefined;
+  const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
+  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${honoree}`;
+}
+
+export function useRoomFlow() {
+  const [step, setStep] = useState<FlowStep>("upload");
+  const [mode, setMode] = useState<AppMode>("space");
+  const [eventConfig, setEventConfig] = useState<EventConfig | null>(null);
+  const [image, setImage] = useState<string | null>(null);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [roomAnalysis, setRoomAnalysis] = useState<RoomAnalysis | null>(null);
+  const [products, setProducts] = useState<ProductResult[]>([]);
+  const [hotspots, setHotspots] = useState<Hotspot[]>([]);
+  const [designNarrative, setDesignNarrative] = useState<string>("");
+  const [designId, setDesignId] = useState<string | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
+
+  const selectMode = useCallback((m: AppMode) => {
+    setMode(m);
+    setError(null);
+    setStep(m === "event" ? "event-setup" : "upload");
+  }, []);
+
+  const submitEventConfig = useCallback((cfg: EventConfig) => {
+    setEventConfig(cfg);
+    setStep("upload");
+  }, []);
+
+  const handleImageSelected = useCallback(
+    async (base64: string, selectedMode?: AppMode, selectedEventConfig?: EventConfig | null) => {
+      const activeMode = selectedMode || mode;
+      const activeEventConfig = selectedEventConfig !== undefined ? selectedEventConfig : eventConfig;
+      if (selectedMode) setMode(activeMode);
+      if (selectedEventConfig !== undefined) setEventConfig(activeEventConfig);
+
+      setImage(base64);
+      setStep("analyzing");
+      setError(null);
+
+      const eventContext = buildEventContext(activeMode === "event" ? activeEventConfig : null);
+      const isEvent = activeMode === "event";
+
+      setStatusMessage(
+        isEvent
+          ? "Your event planner is studying the venue..."
+          : "Your designer is studying the space..."
+      );
+
+      try {
+        const res = await fetch("/api/analyze-room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64, eventContext }),
+        });
+        if (!res.ok) {
+          const { error: msg } = await res.json().catch(() => ({ error: "" }));
+          throw new Error(
+            msg || "We couldn't read your photo. Try a clearer, well-lit shot."
+          );
+        }
+        const analysis: RoomAnalysis = await res.json();
+        setRoomAnalysis(analysis);
+        setStep("product-selection");
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Failed to analyze your room. Please try again."
+        );
+        setStep("upload");
+      }
+    },
+    [mode, eventConfig]
+  );
+
+  const handleProductSelection = useCallback(
+    async (selected: SuggestedProduct[]) => {
+      if (!roomAnalysis || !image) return;
+      setStep("generating");
+      setError(null);
+
+      const eventContext = buildEventContext(
+        mode === "event" ? eventConfig : null
+      );
+      const isEvent = mode === "event";
+      const eventLabel = eventConfig?.eventLabel || "event";
+      const subTheme = eventConfig?.subTheme || "";
+
+      const callStep = async (
+        url: string,
+        body: unknown,
+        failMsg: string
+      ) => {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const { error: msg } = await res.json().catch(() => ({ error: "" }));
+          throw new Error(msg || failMsg);
+        }
+        return res.json();
+      };
+
+      try {
+        setStatusMessage(
+          isEvent
+            ? `Creating a ${subTheme} decoration plan...`
+            : "Creating a design vision for your room..."
+        );
+        const {
+          products: recs,
+          designVision,
+        }: {
+          products: ProductRecommendation[];
+          designVision: string;
+        } = await callStep(
+          "/api/recommend-products",
+          {
+            roomAnalysis,
+            userAnswers: {},
+            selectedProductTypes: selected.map((p) => p.label),
+            eventContext,
+          },
+          "We couldn't create a design plan. Please try again."
+        );
+
+        setStatusMessage(
+          isEvent
+            ? `Finding the best ${eventLabel} decorations on Amazon...`
+            : "Your planner is finding matching products on Amazon..."
+        );
+        const { categories } = await callStep(
+          "/api/search-products",
+          { products: recs },
+          "We couldn't find products on Amazon. Try selecting different items."
+        );
+
+        setStep("curating");
+        setStatusMessage(
+          isEvent
+            ? "Curating a cohesive party look..."
+            : "Selecting the perfect combination..."
+        );
+        const { products: curatedProducts, designNarrative: narrative } =
+          await callStep(
+            "/api/curate-products",
+            {
+              originalImage: image,
+              designVision:
+                designVision || "Create a cohesive, stylish design",
+              categories,
+            },
+            "We couldn't finalize the product selection. Please try again."
+          );
+
+        setProducts(curatedProducts);
+        setDesignNarrative(narrative || "");
+
+        setStatusMessage(
+          isEvent
+            ? "Rendering your decorated venue..."
+            : "Rendering your redesigned space..."
+        );
+        const design = await callStep(
+          "/api/generate-image",
+          {
+            originalImage: image,
+            eventContext,
+            products: curatedProducts.map((p: ProductResult) => ({
+              category: p.recommendation.category,
+              placement: p.recommendation.placement,
+              title: p.amazonProduct?.title || p.recommendation.category,
+              colorSuggestion: p.recommendation.colorSuggestion,
+              imageUrl: p.amazonProduct?.imageUrl || "",
+            })),
+          },
+          "We couldn't render your room. Please try again."
+        );
+
+        const genImg = design.generatedImage
+          ? `data:image/png;base64,${design.generatedImage}`
+          : image;
+        setGeneratedImage(genImg);
+        setHotspots(design.hotspots || []);
+
+        // Save to DB. If the user is already signed in, save-design returns
+        // isUnlocked=true and the design is linked to their account immediately.
+        setStatusMessage("Saving your design...");
+        try {
+          const saveRes = await callStep(
+            "/api/save-design",
+            {
+              mode,
+              eventConfig,
+              roomAnalysis,
+              products: curatedProducts,
+              hotspots: design.hotspots || [],
+              designNarrative: narrative || "",
+              originalImage: image,
+              generatedImage: genImg,
+            },
+            "Failed to save your design."
+          );
+          setDesignId(saveRes.designId);
+          setIsUnlocked(!!saveRes.isUnlocked);
+        } catch {
+          // Non-fatal — still show the result, just unsaved/locked
+          setDesignId(null);
+          setIsUnlocked(false);
+        }
+
+        setStep("results");
+      } catch (e) {
+        setError(
+          e instanceof Error
+            ? e.message
+            : "Something went wrong. Please try again."
+        );
+        setStep("product-selection");
+      }
+    },
+    [roomAnalysis, image, mode, eventConfig]
+  );
+
+  const handleUnlocked = useCallback(() => {
+    setIsUnlocked(true);
+  }, []);
+
+  const reset = useCallback(() => {
+    setStep("upload");
+    setMode("space");
+    setEventConfig(null);
+    setImage(null);
+    setGeneratedImage(null);
+    setRoomAnalysis(null);
+    setProducts([]);
+    setHotspots([]);
+    setDesignNarrative("");
+    setDesignId(null);
+    setIsUnlocked(false);
+    setError(null);
+    setStatusMessage("");
+  }, []);
+
+  return {
+    step,
+    mode,
+    eventConfig,
+    image,
+    generatedImage,
+    roomAnalysis,
+    products,
+    hotspots,
+    designNarrative,
+    designId,
+    isUnlocked,
+    error,
+    statusMessage,
+    selectMode,
+    submitEventConfig,
+    handleImageSelected,
+    handleProductSelection,
+    handleUnlocked,
+    reset,
+  };
+}
