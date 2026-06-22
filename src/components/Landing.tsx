@@ -9,9 +9,18 @@ import {
   ShieldCheck,
   Star,
   ArrowRight,
+  PartyPopper,
 } from "lucide-react";
 import Footer from "./Footer";
 import BeforeAfterSlider from "./BeforeAfterSlider";
+import { EVENTS } from "@/lib/events";
+
+const EVENT_HOOKS: Record<string, string> = {
+  birthday: "Balloon arches, backdrops & themed décor",
+  anniversary: "Romantic, elegant celebration setups",
+  annaprasan: "Traditional rice-ceremony décor",
+  baby_shower: "Sweet, cohesive welcome themes",
+};
 
 const STEPS = [
   {
@@ -62,6 +71,10 @@ const FAQS = [
     a: "Yes. Each item in your design links to a real listing with live pricing, so you can recreate the exact look.",
   },
   {
+    q: "Can I use it for parties and events?",
+    a: "Yes — pick your occasion (birthday, anniversary, annaprasan, baby shower) and a theme, upload the venue photo, and get a shoppable decoration plan.",
+  },
+  {
     q: "Is my photo private?",
     a: "Your photos are used only to generate your design and are saved to your private profile. We never sell your data.",
   },
@@ -83,7 +96,7 @@ export default function Landing() {
           <div className="animate-fade-up">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-600 dark:text-zinc-300 mb-5 backdrop-blur-sm">
               <Sparkles size={13} className="text-orange-700" />
-              Designer-quality rooms from one photo
+              Designer rooms & event décor — from one photo
             </div>
             <h1 className="text-4xl sm:text-5xl lg:text-[3.4rem] font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.04] mb-5">
               Redesign your room.
@@ -160,6 +173,78 @@ export default function Landing() {
               <p className="text-sm text-zinc-500 leading-relaxed">{desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ─── CELEBRATIONS ─── */}
+      <section className="bg-white dark:bg-zinc-900/40 border-y border-zinc-200 dark:border-zinc-800">
+        <div className="max-w-5xl mx-auto px-5 py-16 w-full grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium mb-4">
+              <PartyPopper size={13} />
+              Also for celebrations
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
+              Planning a celebration? We design that too.
+            </h2>
+            <p className="text-zinc-500 mb-6 max-w-md">
+              Upload a photo of your venue and get a themed decoration plan —
+              balloons, backdrops, lights and more — every item shoppable in one
+              tap.
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mb-7">
+              {EVENTS.map((e) => (
+                <div
+                  key={e.id}
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900 p-4"
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-xl leading-none">{e.icon}</span>
+                    <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
+                      {e.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 leading-relaxed mb-2">
+                    {EVENT_HOOKS[e.id]}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {e.subThemes.slice(0, 3).map((t) => (
+                      <span
+                        key={t}
+                        className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={go}
+              className="group inline-flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-colors"
+            >
+              Plan my event — free
+              <ArrowRight
+                size={16}
+                className="group-hover:translate-x-0.5 transition-transform"
+              />
+            </button>
+          </div>
+
+          <div>
+            <BeforeAfterSlider
+              beforeSrc="/samples/birthday-before.jpg"
+              afterSrc="/samples/birthday-after.png"
+              beforeLabel="Before"
+              afterLabel="RoomGlow"
+            />
+            <p className="text-center text-xs text-zinc-400 mt-3">
+              A real superhero birthday, designed from one photo
+            </p>
+          </div>
         </div>
       </section>
 
