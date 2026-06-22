@@ -8,13 +8,10 @@ import {
   Sparkles,
   ShieldCheck,
   Star,
-  Sofa,
-  Lamp,
-  Flower2,
-  Frame,
   ArrowRight,
 } from "lucide-react";
 import Footer from "./Footer";
+import BeforeAfterSlider from "./BeforeAfterSlider";
 
 const STEPS = [
   {
@@ -122,9 +119,17 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Stylized before → after preview */}
+          {/* Real before → after transformation */}
           <div className="animate-fade-up-delay-1">
-            <HeroPreview />
+            <BeforeAfterSlider
+              beforeSrc="/samples/patio-before.jpg"
+              afterSrc="/samples/patio-after.png"
+              beforeLabel="Before"
+              afterLabel="RoomGlow"
+            />
+            <p className="text-center text-xs text-zinc-400 mt-3">
+              ← Drag to see a real transformation
+            </p>
           </div>
         </div>
       </section>
@@ -155,6 +160,38 @@ export default function Landing() {
               <p className="text-sm text-zinc-500 leading-relaxed">{desc}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ─── REAL TRANSFORMATIONS ─── */}
+      <section className="bg-white dark:bg-zinc-900/40 border-y border-zinc-200 dark:border-zinc-800">
+        <div className="max-w-5xl mx-auto px-5 py-16 w-full">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
+              Real rooms, redesigned by AI
+            </h2>
+            <p className="text-zinc-500">Drag each one to reveal the transformation.</p>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
+            <div>
+              <BeforeAfterSlider
+                beforeSrc="/samples/patio-before.jpg"
+                afterSrc="/samples/patio-after.png"
+              />
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mt-3">
+                Bare balcony → cozy outdoor lounge
+              </p>
+            </div>
+            <div>
+              <BeforeAfterSlider
+                beforeSrc="/samples/kitchen-before.jpg"
+                afterSrc="/samples/kitchen-after.png"
+              />
+              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mt-3">
+                Plain kitchen → warm, styled space
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -239,68 +276,3 @@ export default function Landing() {
   );
 }
 
-/* Asset-free stylized before → after preview */
-function HeroPreview() {
-  return (
-    <div className="relative">
-      {/* After (styled room) */}
-      <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-orange-50 via-stone-50 to-amber-50 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950 shadow-xl overflow-hidden">
-        <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-zinc-200/70 dark:border-zinc-800">
-          <span className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-          <span className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-          <span className="w-2.5 h-2.5 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-          <span className="ml-2 text-[11px] text-zinc-400">
-            Your redesigned room
-          </span>
-        </div>
-        <div className="relative aspect-[4/3] p-5">
-          {/* floor / wall */}
-          <div className="absolute inset-x-5 top-5 bottom-1/3 rounded-lg bg-white/60 dark:bg-zinc-800/40" />
-          <div className="absolute inset-x-5 bottom-5 h-1/3 rounded-lg bg-stone-200/60 dark:bg-zinc-800/60" />
-
-          {/* furniture silhouettes */}
-          <Lamp className="absolute left-9 top-10 text-orange-700/70" size={30} />
-          <Frame className="absolute left-1/2 top-9 -translate-x-1/2 text-zinc-400" size={34} />
-          <Sofa className="absolute left-1/2 bottom-14 -translate-x-1/2 text-zinc-500 dark:text-zinc-400" size={64} />
-          <Flower2 className="absolute right-10 bottom-16 text-green-700/70" size={30} />
-
-          {/* shoppable hotspots */}
-          {[
-            { n: 1, c: "left-10 top-9" },
-            { n: 2, c: "left-1/2 top-8 -translate-x-1/2" },
-            { n: 3, c: "left-1/2 bottom-20 -translate-x-1/2" },
-            { n: 4, c: "right-11 bottom-20" },
-          ].map((h) => (
-            <span
-              key={h.n}
-              className={`absolute ${h.c} w-6 h-6 rounded-full bg-orange-700 text-white text-[11px] font-semibold flex items-center justify-center shadow-md ring-2 ring-white dark:ring-zinc-900`}
-            >
-              {h.n}
-            </span>
-          ))}
-
-          {/* price chip */}
-          <div className="absolute right-6 top-1/2 -translate-y-1/2 rounded-lg bg-white dark:bg-zinc-900 shadow-lg border border-zinc-200 dark:border-zinc-800 px-3 py-2">
-            <p className="text-[10px] text-zinc-400">Shop the look</p>
-            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              ₹12,480
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Before (small, overlapping) */}
-      <div className="absolute -bottom-6 -left-4 w-32 sm:w-40 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg overflow-hidden rotate-[-4deg]">
-        <div className="px-2.5 py-1 text-[10px] text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
-          Before
-        </div>
-        <div className="relative aspect-[4/3] bg-zinc-100 dark:bg-zinc-800">
-          <Sofa
-            className="absolute left-1/2 bottom-3 -translate-x-1/2 text-zinc-300 dark:text-zinc-600"
-            size={36}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
