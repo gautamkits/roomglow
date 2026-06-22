@@ -51,6 +51,18 @@ body {
   animation: fade-up 0.4s ease-out 0.24s both;
 }
 
+.bg-hero-glow {
+  background:
+    radial-gradient(60% 50% at 75% 20%, rgba(194, 65, 12, 0.10), transparent 70%),
+    radial-gradient(50% 45% at 15% 80%, rgba(245, 158, 11, 0.08), transparent 70%);
+}
+
+.bg-cta-glow {
+  background:
+    radial-gradient(50% 80% at 80% 30%, rgba(194, 65, 12, 0.45), transparent 70%),
+    radial-gradient(45% 70% at 10% 90%, rgba(120, 53, 15, 0.4), transparent 70%);
+}
+
 .progress-bar::after {
   content: "";
   position: absolute;

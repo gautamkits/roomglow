@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { SessionProvider, useSession, signIn, signOut } from "next-auth/react";
 import {
-  Camera,
   Wand2,
-  ShoppingBag,
   RotateCcw,
   Loader2,
   Check,
@@ -19,14 +17,11 @@ import SetupPanel from "@/components/SetupPanel";
 import ProductSelection from "@/components/ProductSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
+import Landing from "@/components/Landing";
+import BeforeAfterSlider from "@/components/BeforeAfterSlider";
+import Footer from "@/components/Footer";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
-
-const STEPS = [
-  { Icon: Camera, title: "Upload a photo", desc: "Any room, any angle" },
-  { Icon: Wand2, title: "AI redesigns it", desc: "Real products, placed naturally" },
-  { Icon: ShoppingBag, title: "Shop the look", desc: "Buy each piece on Amazon" },
-];
 
 
 function HomeContent() {
@@ -123,7 +118,11 @@ function HomeContent() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-5">
+      <main
+        className={
+          sessionStatus === "unauthenticated" ? "" : "max-w-5xl mx-auto px-5"
+        }
+      >
         {error && (
           <div className="mt-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300 text-sm">
             {error}
@@ -137,66 +136,7 @@ function HomeContent() {
           </div>
         )}
 
-        {sessionStatus === "unauthenticated" && (
-          <div className="grid md:grid-cols-2 gap-10 lg:gap-16 items-center py-12 md:py-20">
-            <div className="animate-fade-up">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-500 mb-5">
-                <span className="w-1.5 h-1.5 rounded-full bg-orange-700" />
-                AI space &amp; event design
-              </div>
-              <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.05] mb-4">
-                Design any space,
-                <br />
-                for any moment.
-              </h1>
-              <p className="text-base text-zinc-500 dark:text-zinc-400 leading-relaxed max-w-md mb-8">
-                Your personal interior designer or event planner — upload a
-                photo and they&apos;ll style your space with real products,
-                placed naturally. Then show you exactly what to buy.
-              </p>
-              <div className="space-y-4">
-                {STEPS.map(({ Icon, title, desc }) => (
-                  <div key={title} className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 flex items-center justify-center shrink-0">
-                      <Icon size={17} strokeWidth={1.75} className="text-orange-700" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                        {title}
-                      </p>
-                      <p className="text-xs text-zinc-500">{desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="animate-fade-up-delay-1">
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8 text-center">
-                <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center mx-auto mb-4">
-                  <Wand2 size={24} className="text-orange-700" />
-                </div>
-                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50 mb-1">
-                  Sign in to start
-                </h2>
-                <p className="text-sm text-zinc-500 mb-6">
-                  Create an account to design your space and save every result
-                  to your profile.
-                </p>
-                <button
-                  onClick={() => signIn("google")}
-                  className="w-full py-3 rounded-lg font-medium text-white bg-orange-700 hover:bg-orange-800 transition-colors flex items-center justify-center gap-2"
-                >
-                  <User size={16} />
-                  Continue with Google
-                </button>
-                <p className="text-xs text-zinc-400 mt-4">
-                  Free to start · Your designs are saved automatically
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {sessionStatus === "unauthenticated" && <Landing />}
 
         {sessionStatus === "authenticated" && (
           <>
@@ -385,7 +325,7 @@ function HomeContent() {
               </div>
 
               <div className="flex items-center gap-2">
-                {generatedImage && image && (
+                {generatedImage && image && isUnlocked && (
                   <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
                     <button
                       onClick={() => setShowBefore(false)}
@@ -395,7 +335,7 @@ function HomeContent() {
                           : "text-zinc-500"
                       }`}
                     >
-                      After
+                      Design
                     </button>
                     <button
                       onClick={() => setShowBefore(true)}
@@ -405,7 +345,7 @@ function HomeContent() {
                           : "text-zinc-500"
                       }`}
                     >
-                      Before
+                      Compare
                     </button>
                   </div>
                 )}
@@ -431,13 +371,25 @@ function HomeContent() {
             )}
 
             <div className="animate-fade-up-delay-1 relative">
-              <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none"}>
-                <ImageWithHotspots
-                  imageSrc={showBefore ? image! : generatedImage || image!}
-                  hotspots={showBefore || !isUnlocked ? [] : hotspots}
-                  products={products}
-                />
-              </div>
+              {isUnlocked && showBefore && generatedImage && image ? (
+                <div className="max-w-3xl mx-auto">
+                  <BeforeAfterSlider
+                    beforeSrc={image}
+                    afterSrc={generatedImage}
+                  />
+                  <p className="text-center text-xs text-zinc-400 mt-3">
+                    Drag the handle to compare your original room with the new design
+                  </p>
+                </div>
+              ) : (
+                <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none"}>
+                  <ImageWithHotspots
+                    imageSrc={generatedImage || image!}
+                    hotspots={isUnlocked ? hotspots : []}
+                    products={products}
+                  />
+                </div>
+              )}
 
               {!isUnlocked && (
                 <PaywallOverlay
@@ -470,6 +422,7 @@ function HomeContent() {
           </>
         )}
       </main>
+      {sessionStatus === "authenticated" && <Footer />}
     </div>
   );
 }
