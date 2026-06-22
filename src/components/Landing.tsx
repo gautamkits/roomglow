@@ -178,8 +178,8 @@ export default function Landing() {
 
       {/* ─── CELEBRATIONS ─── */}
       <section className="bg-white dark:bg-zinc-900/40 border-y border-zinc-200 dark:border-zinc-800">
-        <div className="max-w-5xl mx-auto px-5 py-16 w-full grid lg:grid-cols-2 gap-10 lg:gap-14 items-center">
-          <div>
+        <div className="max-w-5xl mx-auto px-5 py-16 w-full">
+          <div className="text-center max-w-xl mx-auto mb-10">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium mb-4">
               <PartyPopper size={13} />
               Also for celebrations
@@ -187,41 +187,41 @@ export default function Landing() {
             <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
               Planning a celebration? We design that too.
             </h2>
-            <p className="text-zinc-500 mb-6 max-w-md">
+            <p className="text-zinc-500">
               Upload a photo of your venue and get a themed decoration plan —
               balloons, backdrops, lights and more — every item shoppable in one
               tap.
             </p>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3 mb-7">
-              {EVENTS.map((e) => (
-                <div
-                  key={e.id}
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900 p-4"
-                >
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span className="text-xl leading-none">{e.icon}</span>
-                    <span className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
-                      {e.label}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
+            {EVENTS.map((e) => (
+              <div
+                key={e.id}
+                className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900 p-5"
+              >
+                <span className="text-2xl leading-none">{e.icon}</span>
+                <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100 mt-3">
+                  {e.label}
+                </p>
+                <p className="text-xs text-zinc-500 leading-relaxed mt-1 mb-3">
+                  {EVENT_HOOKS[e.id]}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {e.subThemes.slice(0, 3).map((t) => (
+                    <span
+                      key={t}
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500"
+                    >
+                      {t}
                     </span>
-                  </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed mb-2">
-                    {EVENT_HOOKS[e.id]}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {e.subThemes.slice(0, 3).map((t) => (
-                      <span
-                        key={t}
-                        className="px-2 py-0.5 rounded-md bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[10px] text-zinc-500"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
 
+          <div className="text-center">
             <button
               onClick={go}
               className="group inline-flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-colors"
@@ -232,18 +232,6 @@ export default function Landing() {
                 className="group-hover:translate-x-0.5 transition-transform"
               />
             </button>
-          </div>
-
-          <div>
-            <BeforeAfterSlider
-              beforeSrc="/samples/birthday-before.jpg"
-              afterSrc="/samples/birthday-after.png"
-              beforeLabel="Before"
-              afterLabel="RoomGlow"
-            />
-            <p className="text-center text-xs text-zinc-400 mt-3">
-              A real superhero birthday, designed from one photo
-            </p>
           </div>
         </div>
       </section>
