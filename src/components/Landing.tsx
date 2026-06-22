@@ -163,38 +163,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ─── REAL TRANSFORMATIONS ─── */}
-      <section className="bg-white dark:bg-zinc-900/40 border-y border-zinc-200 dark:border-zinc-800">
-        <div className="max-w-5xl mx-auto px-5 py-16 w-full">
-          <div className="text-center mb-10">
-            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
-              Real rooms, redesigned by AI
-            </h2>
-            <p className="text-zinc-500">Drag each one to reveal the transformation.</p>
-          </div>
-          <div className="grid sm:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            <div>
-              <BeforeAfterSlider
-                beforeSrc="/samples/patio-before.jpg"
-                afterSrc="/samples/patio-after.png"
-              />
-              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mt-3">
-                Bare balcony → cozy outdoor lounge
-              </p>
-            </div>
-            <div>
-              <BeforeAfterSlider
-                beforeSrc="/samples/kitchen-before.jpg"
-                afterSrc="/samples/kitchen-after.png"
-              />
-              <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300 mt-3">
-                Plain kitchen → warm, styled space
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* ─── SOCIAL PROOF ─── */}
       <section className="bg-white dark:bg-zinc-900/40 border-y border-zinc-200 dark:border-zinc-800">
         <div className="max-w-5xl mx-auto px-5 py-16 w-full">
