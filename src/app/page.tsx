@@ -218,27 +218,25 @@ function HomeContent() {
               )}
             </div>
 
-            <div className="grid lg:grid-cols-[1.5fr_1fr] gap-5 items-start animate-fade-up-delay-1">
-              {/* Left: create panel */}
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
-                    <Wand2 size={15} className="text-white" />
-                  </span>
-                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                    Start a new design
-                  </h2>
+            {!libraryLoading && designs.length > 0 ? (
+              /* ─── Has designs: two-column layout ─── */
+              <div className="grid lg:grid-cols-[1.5fr_1fr] gap-5 items-start animate-fade-up-delay-1">
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
+                      <Wand2 size={15} className="text-white" />
+                    </span>
+                    <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                      Start a new design
+                    </h2>
+                  </div>
+                  <SetupPanel onImageSelected={handleImageSelected} />
                 </div>
-                <SetupPanel onImageSelected={handleImageSelected} />
-              </div>
 
-              {/* Right: upcoming events + recent designs */}
-              <div className="space-y-5">
-                {!libraryLoading && eventDates.length > 0 && (
-                  <UpcomingEvents eventDates={eventDates} />
-                )}
-
-                {!libraryLoading && designs.length > 0 && (
+                <div className="space-y-5">
+                  {eventDates.length > 0 && (
+                    <UpcomingEvents eventDates={eventDates} />
+                  )}
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
@@ -255,9 +253,27 @@ function HomeContent() {
                     </div>
                     <DesignGrid designs={designs} limit={4} />
                   </div>
-                )}
+                </div>
               </div>
-            </div>
+            ) : (
+              /* ─── No designs: centered single column ─── */
+              <div className="max-w-xl mx-auto animate-fade-up-delay-1">
+                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
+                      <Wand2 size={15} className="text-white" />
+                    </span>
+                    <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                      Create your first design
+                    </h2>
+                  </div>
+                  <SetupPanel onImageSelected={handleImageSelected} />
+                </div>
+                <p className="text-center text-xs text-zinc-400 mt-4">
+                  Powered by AI · Products from Amazon
+                </p>
+              </div>
+            )}
           </div>
         )}
 
