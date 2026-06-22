@@ -5,8 +5,6 @@ import { SessionProvider, useSession, signIn, signOut } from "next-auth/react";
 import {
   Wand2,
   RotateCcw,
-  Loader2,
-  Check,
   User,
   Sparkles,
   Download,
@@ -20,6 +18,7 @@ import PaywallOverlay from "@/components/PaywallOverlay";
 import Landing from "@/components/Landing";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
+import ProcessingView from "@/components/ProcessingView";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -54,11 +53,8 @@ function HomeContent() {
 
   const isLoading =
     step === "analyzing" || step === "generating" || step === "curating";
-  const loadingIndex =
-    step === "analyzing" ? 0 : step === "generating" ? 1 : step === "curating" ? 2 : 0;
 
   const isEvent = mode === "event";
-  const persona = isEvent ? "Your event planner" : "Your interior designer";
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
@@ -219,68 +215,12 @@ function HomeContent() {
 
         {/* ─── LOADING ─── */}
         {isLoading && (
-          <div className="flex flex-col items-center justify-center py-28">
-            <div className="w-full max-w-md">
-              <div className="flex items-center gap-2.5 mb-5">
-                <Loader2 size={18} className="text-orange-700 animate-spin" />
-                <p className="text-base font-medium text-zinc-900 dark:text-zinc-100">
-                  {step === "analyzing" &&
-                    `${persona} is studying your space...`}
-                  {step === "generating" &&
-                    `${persona} is creating a design plan...`}
-                  {step === "curating" &&
-                    `${persona} is hand-picking the best products...`}
-                </p>
-              </div>
-
-              {/* thin indeterminate progress bar */}
-              <div className="relative h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden progress-bar mb-6" />
-
-              {/* stepper with persona-driven labels */}
-              <div className="flex items-center justify-between">
-                {(isEvent
-                  ? ["Understanding", "Planning", "Sourcing", "Staging"]
-                  : ["Understanding", "Designing", "Sourcing", "Rendering"]
-                ).map((label, i) => {
-                  const done = i < loadingIndex;
-                  const active = i === loadingIndex;
-                  return (
-                    <div
-                      key={label}
-                      className="flex flex-col items-center gap-1.5"
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-semibold transition-colors ${
-                          done
-                            ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                            : active
-                            ? "bg-orange-700 text-white"
-                            : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
-                        }`}
-                      >
-                        {done ? <Check size={12} strokeWidth={3} /> : i + 1}
-                      </div>
-                      <span
-                        className={`text-[11px] ${
-                          active
-                            ? "text-zinc-900 dark:text-zinc-100 font-medium"
-                            : "text-zinc-400"
-                        }`}
-                      >
-                        {label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {statusMessage && (
-                <p className="text-sm text-zinc-500 text-center mt-6 italic">
-                  {statusMessage}
-                </p>
-              )}
-            </div>
-          </div>
+          <ProcessingView
+            image={image}
+            step={step as "analyzing" | "generating" | "curating"}
+            isEvent={isEvent}
+            statusMessage={statusMessage}
+          />
         )}
 
         {/* ─── PRODUCT SELECTION ─── */}
