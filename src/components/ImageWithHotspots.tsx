@@ -128,9 +128,10 @@ export default function ImageWithHotspots({
                 {isHidden ? <EyeOff size={12} /> : hotspot.productIndex + 1}
               </button>
 
+              {/* Desktop popup — hidden on mobile */}
               {isActive && !isHidden && (
                 <div
-                  className="absolute z-50"
+                  className="absolute z-50 hidden sm:block"
                   style={{
                     [isRight ? "right" : "left"]: "2.25rem",
                     [isBottom ? "bottom" : "top"]: "-0.5rem",
@@ -152,6 +153,29 @@ export default function ImageWithHotspots({
           );
         })}
       </div>
+
+      {/* ─── Mobile bottom sheet for active product ─── */}
+      {activeHotspot !== null && (() => {
+        const hotspot = hotspots[activeHotspot];
+        const product = hotspot ? products[hotspot.productIndex] : null;
+        if (!product || hiddenProducts.has(hotspot.productIndex)) return null;
+        return (
+          <div className="sm:hidden fixed inset-0 z-50" onClick={() => setActiveHotspot(null)}>
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="absolute bottom-0 left-0 right-0" onClick={(e) => e.stopPropagation()}>
+              <ProductCard
+                variant="sheet"
+                product={product}
+                onClose={() => setActiveHotspot(null)}
+                onHide={() => {
+                  toggleProduct(hotspot.productIndex);
+                  setActiveHotspot(null);
+                }}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ─── Shop the look sidebar ─── */}
       <aside className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
@@ -194,24 +218,24 @@ export default function ImageWithHotspots({
                   <img
                     src={ap.imageUrl}
                     alt={ap.title}
-                    className="w-12 h-12 object-contain shrink-0 rounded-md bg-stone-50 dark:bg-zinc-800 p-1"
+                    className="w-10 h-10 object-contain shrink-0 rounded-md bg-stone-50 dark:bg-zinc-800 p-0.5"
                   />
                 ) : (
-                  <div className="w-12 h-12 shrink-0 rounded-md bg-stone-100 dark:bg-zinc-800" />
+                  <div className="w-10 h-10 shrink-0 rounded-md bg-stone-100 dark:bg-zinc-800" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1">
+                  <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 line-clamp-2 leading-snug">
                     {ap?.title || product.recommendation.category}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
                     {ap && (
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                      <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
                         {ap.price}
                       </span>
                     )}
                     {ap && ap.rating > 0 && (
-                      <span className="flex items-center gap-0.5 text-[11px] text-zinc-400">
-                        <Star size={10} className="fill-amber-400 text-amber-400" />
+                      <span className="flex items-center gap-0.5 text-[10px] text-zinc-400">
+                        <Star size={9} className="fill-amber-400 text-amber-400" />
                         {ap.rating.toFixed(1)}
                       </span>
                     )}
