@@ -63,7 +63,7 @@ export default function BeforeAfterSlider({
       }}
     >
       {/* After (full) */}
-      <img src={afterSrc} alt={afterLabel} className="block w-full" draggable={false} />
+      <img src={afterSrc} alt={afterLabel} className="block w-full" draggable={false} loading="lazy" />
       <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-zinc-900/70 text-white text-xs font-medium backdrop-blur-sm">
         {afterLabel}
       </span>
@@ -79,6 +79,7 @@ export default function BeforeAfterSlider({
           className="block h-full w-auto max-w-none"
           style={{ width: containerRef.current?.offsetWidth || "100%" }}
           draggable={false}
+          loading="lazy"
         />
         <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/80 text-zinc-900 text-xs font-medium backdrop-blur-sm">
           {beforeLabel}

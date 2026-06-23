@@ -6,6 +6,7 @@ import { SessionProvider, useSession, signIn } from "next-auth/react";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
+import ShareButton from "@/components/ShareButton";
 import { ArrowLeft, Download, Wand2 } from "lucide-react";
 
 interface DesignData {
@@ -93,7 +94,10 @@ function Viewer({
               Download
             </a>
           ) : approved ? (
-            <LikeButton designId={design.id} initialCount={design.like_count || 0} />
+            <div className="flex items-center gap-2">
+              <ShareButton designId={design.id} variant="ghost" />
+              <LikeButton designId={design.id} initialCount={design.like_count || 0} />
+            </div>
           ) : (
             <span className="w-16" />
           )}

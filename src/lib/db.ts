@@ -129,6 +129,35 @@ export async function getGalleryDesigns(opts: {
   return rows;
 }
 
+// Lightweight gallery cards — excludes the heavy base64 image columns.
+// Cards build image URLs from the id via /api/image/[id]/[before|after].
+export async function getGalleryCards(opts: {
+  mode?: string;
+  sort?: string;
+  limit?: number;
+}) {
+  const { mode, sort, limit = 60 } = opts;
+  const orderBy =
+    sort === "newest"
+      ? "published_at DESC NULLS LAST"
+      : "like_count DESC, published_at DESC NULLS LAST";
+  const cols = `id, mode, event_config, room_analysis, selected_items, products, like_count, published_at`;
+  if (mode === "space" || mode === "event") {
+    const { rows } = await sql.query(
+      `SELECT ${cols} FROM designs WHERE gallery_status = 'approved' AND mode = $1
+       ORDER BY ${orderBy} LIMIT $2`,
+      [mode, limit]
+    );
+    return rows;
+  }
+  const { rows } = await sql.query(
+    `SELECT ${cols} FROM designs WHERE gallery_status = 'approved'
+     ORDER BY ${orderBy} LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
+
 export async function getApprovedDesignIds() {
   const { rows } = await sql`
     SELECT id, published_at FROM designs WHERE gallery_status = 'approved'
