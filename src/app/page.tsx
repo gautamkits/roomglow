@@ -98,11 +98,19 @@ export default async function Home({
               RoomGlow
             </span>
           </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
+
+          {/* Hero search bar (Flipkart-style) */}
+          <div className="flex-1 max-w-xl hidden sm:block">
+            <Suspense fallback={null}>
+              <GallerySearch size="lg" />
+            </Suspense>
+          </div>
+
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {session?.user && (
               <Link
                 href="/profile"
-                className="hidden sm:inline text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+                className="hidden md:inline text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
               >
                 My designs
               </Link>
@@ -112,9 +120,17 @@ export default async function Home({
               className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white font-medium transition-colors"
             >
               <Sparkles size={14} />
-              Design your own
+              <span className="hidden sm:inline">Design your own</span>
+              <span className="sm:hidden">Design</span>
             </Link>
           </div>
+        </div>
+
+        {/* Mobile search row */}
+        <div className="sm:hidden border-t border-zinc-100 dark:border-zinc-800 px-5 py-2.5 max-w-6xl mx-auto">
+          <Suspense fallback={null}>
+            <GallerySearch size="lg" />
+          </Suspense>
         </div>
       </header>
 
@@ -162,11 +178,6 @@ export default async function Home({
                 {s.label}
               </Link>
             ))}
-            <div className="sm:ml-auto w-full sm:w-auto">
-              <Suspense fallback={null}>
-                <GallerySearch />
-              </Suspense>
-            </div>
           </div>
 
           {/* Room facets (when Rooms or All) */}

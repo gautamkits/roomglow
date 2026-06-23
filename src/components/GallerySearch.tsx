@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 
-export default function GallerySearch() {
+export default function GallerySearch({ size = "sm" }: { size?: "sm" | "lg" }) {
   const router = useRouter();
   const params = useSearchParams();
   const [value, setValue] = useState(params.get("q") || "");
@@ -28,17 +28,20 @@ export default function GallerySearch() {
     timer.current = setTimeout(() => push(v), 350);
   };
 
+  const lg = size === "lg";
   return (
-    <div className="relative w-full sm:max-w-xs">
+    <div className={`relative w-full ${lg ? "" : "sm:max-w-xs"}`}>
       <Search
-        size={16}
-        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
+        size={lg ? 18 : 16}
+        className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none"
       />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search designs, rooms, items…"
-        className="w-full pl-9 pr-8 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+        className={`w-full rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 focus:ring-2 focus:ring-orange-700/20 transition-colors ${
+          lg ? "pl-10 pr-9 py-2.5 text-[15px]" : "pl-9 pr-8 py-2 text-sm"
+        }`}
       />
       {value && (
         <button
