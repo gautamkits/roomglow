@@ -44,9 +44,12 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [colorScheme, setColorScheme] = useState<string | null>(null);
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
+  const [gender, setGender] = useState<string | null>(null);
 
   const event = EVENTS.find((e) => e.id === eventId);
   const eventReady = mode === "space" || (!!event && !!subTheme && !!colorScheme);
+  // Gender is meaningful for child/baby-centric events, not anniversaries
+  const showGender = !!event && event.id !== "anniversary";
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -57,6 +60,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
       colorScheme,
       honoree: honoree.trim() || undefined,
       eventDate: eventDate || undefined,
+      gender: showGender && gender ? gender : undefined,
     };
   };
 
@@ -100,6 +104,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                   setEventId(e.id);
                   setSubTheme(null);
                   setColorScheme(null);
+                  setGender(null);
                 }}
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
                   eventId === e.id
@@ -145,6 +150,23 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                   ))}
                 </div>
               </div>
+              {showGender && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                    For a (optional)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["Boy", "Girl", "Either / neutral"].map((g) => (
+                      <Chip
+                        key={g}
+                        label={g}
+                        selected={gender === g}
+                        onClick={() => setGender(gender === g ? null : g)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               <input
                 type="text"
                 value={honoree}

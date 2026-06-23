@@ -346,7 +346,16 @@ MUST PRESERVE (do NOT change any of these):
 ${addLine}
 ${productList}
 
-Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.`,
+Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
+      eventContext
+        ? `
+
+CRITICAL TEXT RULE:
+- Do NOT add, render, or reproduce ANY printed words, letters, banners, or signage that name a DIFFERENT occasion than the event described above.
+- If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — leave the banner/backdrop blank or show only generic decorative patterns.
+- Any visible signage must match the event described above, or contain no readable text at all. Never invent gibberish text.`
+        : ""
+    }`,
   });
 
   // Step 1: Generate the redesigned room image

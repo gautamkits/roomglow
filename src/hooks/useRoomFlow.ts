@@ -15,7 +15,11 @@ import type {
 function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
   const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
-  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${honoree}`;
+  const gender =
+    cfg.gender && cfg.gender !== "Either / neutral"
+      ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
+      : "";
+  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
 }
 
 export function useRoomFlow() {

@@ -66,6 +66,7 @@ export interface EventConfig {
   colorScheme: string;
   honoree?: string;
   eventDate?: string;
+  gender?: string;
 }
 
 export type FlowStep =
