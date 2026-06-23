@@ -9,6 +9,9 @@ interface BeforeAfterSliderProps {
   beforeLabel?: string;
   afterLabel?: string;
   rounded?: boolean;
+  /** Tailwind aspect class (e.g. "aspect-[4/3]"). When set, images crop to a
+   *  fixed ratio for uniform, compact cards instead of natural height. */
+  aspect?: string;
 }
 
 export default function BeforeAfterSlider({
@@ -17,6 +20,7 @@ export default function BeforeAfterSlider({
   beforeLabel = "Before",
   afterLabel = "After",
   rounded = true,
+  aspect,
 }: BeforeAfterSliderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(50);
@@ -52,7 +56,7 @@ export default function BeforeAfterSlider({
       ref={containerRef}
       className={`relative w-full select-none overflow-hidden ${
         rounded ? "rounded-2xl" : ""
-      } border border-zinc-200 dark:border-zinc-800 shadow-lg cursor-ew-resize`}
+      } ${aspect || ""} border border-zinc-200 dark:border-zinc-800 shadow-lg cursor-ew-resize`}
       onMouseDown={(e) => {
         dragging.current = true;
         setFromClientX(e.clientX);
@@ -63,7 +67,13 @@ export default function BeforeAfterSlider({
       }}
     >
       {/* After (full) */}
-      <img src={afterSrc} alt={afterLabel} className="block w-full" draggable={false} loading="lazy" />
+      <img
+        src={afterSrc}
+        alt={afterLabel}
+        className={aspect ? "absolute inset-0 w-full h-full object-cover" : "block w-full"}
+        draggable={false}
+        loading="lazy"
+      />
       <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-zinc-900/70 text-white text-xs font-medium backdrop-blur-sm">
         {afterLabel}
       </span>
@@ -76,7 +86,11 @@ export default function BeforeAfterSlider({
         <img
           src={beforeSrc}
           alt={beforeLabel}
-          className="block h-full w-auto max-w-none"
+          className={
+            aspect
+              ? "h-full max-w-none object-cover"
+              : "block h-full w-auto max-w-none"
+          }
           style={{ width: containerRef.current?.offsetWidth || "100%" }}
           draggable={false}
           loading="lazy"

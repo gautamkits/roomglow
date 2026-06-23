@@ -275,6 +275,7 @@ export default async function Home({
                   afterSrc={`/api/image/${d.id}/after`}
                   beforeLabel="Before"
                   afterLabel="RoomGlow"
+                  aspect="aspect-[4/3]"
                 />
                 <span className="sr-only">{designAltText(d)}</span>
                 <div className="flex items-center justify-between gap-2 mt-3">
