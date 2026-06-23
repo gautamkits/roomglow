@@ -60,7 +60,7 @@ export default function ProductSelection({
               <p className="font-medium text-sm text-zinc-900 dark:text-zinc-100">
                 {product.label}
               </p>
-              <p className="text-xs text-zinc-500 mt-1 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-zinc-500 mt-1 leading-relaxed">
                 {product.description}
               </p>
             </button>

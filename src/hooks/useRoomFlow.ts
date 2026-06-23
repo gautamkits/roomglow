@@ -35,6 +35,7 @@ export function useRoomFlow() {
   const [designId, setDesignId] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [maxBudget, setMaxBudget] = useState<number | undefined>(undefined);
+  const [selectedItems, setSelectedItems] = useState<SuggestedProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
 
@@ -105,6 +106,7 @@ export function useRoomFlow() {
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
       if (!roomAnalysis || !image) return;
+      setSelectedItems(selected);
       setStep("generating");
       setError(null);
 
@@ -273,6 +275,7 @@ export function useRoomFlow() {
     setDesignId(null);
     setIsUnlocked(false);
     setMaxBudget(undefined);
+    setSelectedItems([]);
     setError(null);
     setStatusMessage("");
   }, []);
@@ -282,6 +285,7 @@ export function useRoomFlow() {
     mode,
     eventConfig,
     maxBudget,
+    selectedItems,
     image,
     generatedImage,
     roomAnalysis,

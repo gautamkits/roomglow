@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ExternalLink, Eye, EyeOff, Star, ShoppingBag } from "lucide-react";
 import type { Hotspot, ProductResult } from "@/lib/types";
 import ProductCard from "./ProductCard";
@@ -62,6 +62,39 @@ export default function ImageWithHotspots({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Spread overlapping markers apart so the numbers don't collide.
+  const spread = useMemo(() => {
+    const MIN = 9; // minimum gap between markers (in % units)
+    const pts = hotspots.map((h) => ({ x: h.x, y: h.y }));
+    for (let iter = 0; iter < 12; iter++) {
+      for (let i = 0; i < pts.length; i++) {
+        for (let j = i + 1; j < pts.length; j++) {
+          let dx = pts[j].x - pts[i].x;
+          let dy = pts[j].y - pts[i].y;
+          let dist = Math.hypot(dx, dy);
+          if (dist === 0) {
+            dx = (Math.random() - 0.5) * 0.1;
+            dy = (Math.random() - 0.5) * 0.1;
+            dist = Math.hypot(dx, dy) || 0.01;
+          }
+          if (dist < MIN) {
+            const push = (MIN - dist) / 2;
+            const ux = dx / dist;
+            const uy = dy / dist;
+            pts[i].x -= ux * push;
+            pts[i].y -= uy * push;
+            pts[j].x += ux * push;
+            pts[j].y += uy * push;
+          }
+        }
+      }
+    }
+    return pts.map((p) => ({
+      x: Math.max(4, Math.min(96, p.x)),
+      y: Math.max(5, Math.min(95, p.y)),
+    }));
+  }, [hotspots]);
+
   const visibleProducts = products.filter((_, i) => !hiddenProducts.has(i));
   const matched = visibleProducts.filter((p) => p.amazonProduct);
   const total = matched.reduce(
@@ -86,10 +119,11 @@ export default function ImageWithHotspots({
           const product = products[hotspot.productIndex];
           if (!product) return null;
 
+          const pos = spread[index] ?? { x: hotspot.x, y: hotspot.y };
           const isHidden = hiddenProducts.has(hotspot.productIndex);
           const isActive = activeHotspot === index;
-          const isRight = hotspot.x > 55;
-          const isBottom = hotspot.y > 55;
+          const isRight = pos.x > 55;
+          const isBottom = pos.y > 55;
           const title =
             product.amazonProduct?.title || product.recommendation.category;
 
@@ -98,8 +132,8 @@ export default function ImageWithHotspots({
               key={index}
               className="absolute"
               style={{
-                left: `${hotspot.x}%`,
-                top: `${hotspot.y}%`,
+                left: `${pos.x}%`,
+                top: `${pos.y}%`,
                 transform: "translate(-50%, -50%)",
               }}
               onMouseEnter={() => !isHidden && openDelayed(index)}

@@ -37,6 +37,7 @@ function HomeContent() {
     designId,
     isUnlocked,
     maxBudget,
+    selectedItems,
     error,
     statusMessage,
     handleImageSelected,
@@ -311,10 +312,39 @@ function HomeContent() {
             </div>
 
             {designNarrative && isUnlocked && (
-              <div className="mb-5 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl animate-fade-up">
+              <div className="mb-4 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl animate-fade-up">
                 <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
                   {designNarrative}
                 </p>
+              </div>
+            )}
+
+            {isUnlocked && (selectedItems.length > 0 || maxBudget) && (
+              <div className="mb-5 animate-fade-up">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+                  Based on your choices
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {maxBudget && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium">
+                      Budget: up to ₹{maxBudget.toLocaleString("en-IN")}
+                    </span>
+                  )}
+                  {eventConfig?.subTheme && (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs">
+                      {eventConfig.subTheme}
+                    </span>
+                  )}
+                  {selectedItems.map((item) => (
+                    <span
+                      key={item.id}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs"
+                    >
+                      <span>{item.icon}</span>
+                      {item.label}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
