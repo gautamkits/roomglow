@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import Footer from "./Footer";
 import BeforeAfterSlider from "./BeforeAfterSlider";
+import GalleryPreview from "./GalleryPreview";
 import { EVENTS } from "@/lib/events";
 
 const EVENT_HOOKS: Record<string, string> = {
@@ -146,6 +147,9 @@ export default function Landing() {
           </div>
         </div>
       </section>
+
+      {/* ─── GALLERY (main attraction) ─── */}
+      <GalleryPreview />
 
       {/* ─── HOW IT WORKS ─── */}
       <section className="max-w-5xl mx-auto px-5 py-16 w-full">
