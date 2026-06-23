@@ -9,6 +9,7 @@ interface ImageWithHotspotsProps {
   imageSrc: string;
   hotspots: Hotspot[];
   products: ProductResult[];
+  hidePrices?: boolean;
 }
 
 function parsePrice(s?: string): number {
@@ -24,6 +25,7 @@ export default function ImageWithHotspots({
   imageSrc,
   hotspots,
   products,
+  hidePrices = false,
 }: ImageWithHotspotsProps) {
   const [activeHotspot, setActiveHotspot] = useState<number | null>(null);
   const [hiddenProducts, setHiddenProducts] = useState<Set<number>>(new Set());
@@ -200,6 +202,7 @@ export default function ImageWithHotspots({
               <ProductCard
                 variant="sheet"
                 product={product}
+                hidePrices={hidePrices}
                 onClose={() => setActiveHotspot(null)}
                 onHide={() => {
                   toggleProduct(hotspot.productIndex);
@@ -226,12 +229,14 @@ export default function ImageWithHotspots({
         </div>
 
         {/* Cost summary */}
-        <div className="px-4 py-3 bg-orange-50/60 dark:bg-orange-950/20 border-b border-zinc-100 dark:border-zinc-800 flex items-baseline justify-between">
-          <span className="text-xs text-zinc-500">Estimated total</span>
-          <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            {inr(total)}
-          </span>
-        </div>
+        {!hidePrices && (
+          <div className="px-4 py-3 bg-orange-50/60 dark:bg-orange-950/20 border-b border-zinc-100 dark:border-zinc-800 flex items-baseline justify-between">
+            <span className="text-xs text-zinc-500">Estimated total</span>
+            <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              {inr(total)}
+            </span>
+          </div>
+        )}
 
         {/* Product list */}
         <ul className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-[460px] overflow-y-auto">
@@ -262,7 +267,7 @@ export default function ImageWithHotspots({
                     {ap?.title || product.recommendation.category}
                   </p>
                   <div className="flex items-center gap-2 mt-0.5">
-                    {ap && (
+                    {ap && !hidePrices && (
                       <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
                         {ap.price}
                       </span>
@@ -283,7 +288,7 @@ export default function ImageWithHotspots({
                       rel="noopener noreferrer"
                       className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-medium rounded-md transition-colors"
                     >
-                      Buy
+                      {hidePrices ? "View" : "Buy"}
                       <ExternalLink size={11} />
                     </a>
                   )}

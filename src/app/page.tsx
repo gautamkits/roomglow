@@ -8,6 +8,7 @@ import {
   User,
   Sparkles,
   Download,
+  Share2,
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { useUserLibrary } from "@/lib/useUserLibrary";
@@ -51,6 +52,7 @@ function HomeContent() {
   );
 
   const [showBefore, setShowBefore] = useState(false);
+  const [shareState, setShareState] = useState<"idle" | "sending" | "done">("idle");
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
   const isLoading =
@@ -75,6 +77,12 @@ function HomeContent() {
             </span>
           </button>
           <div className="flex items-center gap-3">
+            <a
+              href="/explore"
+              className="hidden sm:inline text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+            >
+              Explore
+            </a>
             {step !== "mode-select" && step !== "upload" && (
               <button
                 onClick={reset}
@@ -395,6 +403,39 @@ function HomeContent() {
                 My designs
               </button>
             </div>
+
+            {isUnlocked && designId && (
+              <div className="flex flex-col items-center mt-4">
+                {shareState === "done" ? (
+                  <p className="text-sm text-zinc-500">
+                    ✓ Submitted — we&apos;ll review it for the public gallery.
+                  </p>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setShareState("sending");
+                      try {
+                        const res = await fetch("/api/gallery/submit", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ designId }),
+                        });
+                        setShareState(res.ok ? "done" : "idle");
+                      } catch {
+                        setShareState("idle");
+                      }
+                    }}
+                    disabled={shareState === "sending"}
+                    className="flex items-center gap-2 text-sm text-zinc-500 hover:text-orange-700 transition-colors disabled:opacity-50"
+                  >
+                    <Share2 size={15} />
+                    {shareState === "sending"
+                      ? "Submitting..."
+                      : "Share to public gallery"}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )}
           </>

@@ -8,6 +8,7 @@ interface ProductCardProps {
   onClose: () => void;
   onHide?: () => void;
   variant?: "popup" | "sheet";
+  hidePrices?: boolean;
 }
 
 export default function ProductCard({
@@ -15,6 +16,7 @@ export default function ProductCard({
   onClose,
   onHide,
   variant = "popup",
+  hidePrices = false,
 }: ProductCardProps) {
   const { recommendation, amazonProduct } = product;
 
@@ -57,11 +59,13 @@ export default function ProductCard({
               {amazonProduct.title}
             </h3>
             <div className="flex items-center gap-2 mb-1.5 mt-1">
-              <p className={`font-semibold text-zinc-900 dark:text-zinc-50 ${
-                isSheet ? "text-base" : "text-sm"
-              }`}>
-                {amazonProduct.price}
-              </p>
+              {!hidePrices && (
+                <p className={`font-semibold text-zinc-900 dark:text-zinc-50 ${
+                  isSheet ? "text-base" : "text-sm"
+                }`}>
+                  {amazonProduct.price}
+                </p>
+              )}
               {amazonProduct.rating > 0 && (
                 <span className="flex items-center gap-0.5 text-[11px] text-zinc-500">
                   <Star size={11} className="fill-amber-400 text-amber-400" />
@@ -81,7 +85,7 @@ export default function ProductCard({
                   isSheet ? "px-5 py-2.5" : "w-full py-2 px-3"
                 }`}
               >
-                Buy on Amazon
+                {hidePrices ? "View on Amazon" : "Buy on Amazon"}
                 <ExternalLink size={13} />
               </a>
               {onHide && isSheet && (

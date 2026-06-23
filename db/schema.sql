@@ -20,8 +20,25 @@ CREATE TABLE IF NOT EXISTS designs (
   original_image_url TEXT NOT NULL,
   generated_image_url TEXT NOT NULL,
   is_unlocked BOOLEAN DEFAULT false,
+  gallery_status TEXT DEFAULT 'none',
+  like_count INTEGER DEFAULT 0,
+  published_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS design_likes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  design_id UUID REFERENCES designs(id),
+  fingerprint TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(design_id, fingerprint)
+);
+
+-- Idempotent column adds for existing designs table
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS gallery_status TEXT DEFAULT 'none';
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_designs_gallery ON designs (gallery_status, like_count DESC, published_at DESC);
 
 CREATE TABLE IF NOT EXISTS payments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
