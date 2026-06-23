@@ -49,11 +49,13 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
-  const [budgetOn, setBudgetOn] = useState(false);
   const [maxBudget, setMaxBudget] = useState(5000);
+  const [budgetSet, setBudgetSet] = useState(false);
 
   const event = EVENTS.find((e) => e.id === eventId);
-  const eventReady = mode === "space" || (!!event && !!subTheme && !!colorScheme);
+  const eventConfigReady =
+    mode === "space" || (!!event && !!subTheme && !!colorScheme);
+  const eventReady = eventConfigReady && budgetSet;
   // Gender is meaningful for child/baby-centric events, not anniversaries
   const showGender = !!event && event.id !== "anniversary";
 
@@ -71,12 +73,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   };
 
   const handleImage = (base64: string) => {
-    onImageSelected(
-      base64,
-      mode,
-      buildConfig(),
-      budgetOn ? maxBudget : undefined
-    );
+    onImageSelected(base64, mode, buildConfig(), maxBudget);
   };
 
   return (
@@ -200,42 +197,42 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </div>
       )}
 
-      {/* Max budget */}
+      {/* Max budget — required */}
       <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-baseline justify-between mb-1.5">
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Max budget
+            {!budgetSet && <span className="text-orange-700"> *</span>}
           </span>
-          <label className="flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={budgetOn}
-              onChange={(e) => setBudgetOn(e.target.checked)}
-              className="accent-orange-700"
-            />
-            Set a limit
-          </label>
-        </div>
-        {budgetOn && (
-          <div className="mt-3 animate-fade-up">
-            <div className="flex items-baseline justify-between mb-1.5">
-              <span className="text-xs text-zinc-400">Keep the design under</span>
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            {budgetSet ? (
+              <>
                 ₹{maxBudget.toLocaleString("en-IN")}
                 {maxBudget >= BUDGET_MAX && "+"}
+              </>
+            ) : (
+              <span className="text-zinc-400 font-normal text-xs">
+                Slide to set
               </span>
-            </div>
-            <input
-              type="range"
-              min={BUDGET_MIN}
-              max={BUDGET_MAX}
-              step={500}
-              value={maxBudget}
-              onChange={(e) => setMaxBudget(Number(e.target.value))}
-              className="w-full accent-orange-700"
-            />
-          </div>
-        )}
+            )}
+          </span>
+        </div>
+        <input
+          type="range"
+          min={BUDGET_MIN}
+          max={BUDGET_MAX}
+          step={500}
+          value={maxBudget}
+          onChange={(e) => {
+            setMaxBudget(Number(e.target.value));
+            setBudgetSet(true);
+          }}
+          className="w-full accent-orange-700"
+        />
+        <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
+          <span>₹{BUDGET_MIN.toLocaleString("en-IN")}</span>
+          <span>₹{BUDGET_MAX.toLocaleString("en-IN")}+</span>
+        </div>
       </div>
 
       {/* Photo tips */}
@@ -254,7 +251,9 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         ) : (
           <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
             <p className="text-sm text-zinc-500">
-              Pick an occasion, theme &amp; colors to upload your photo
+              {!eventConfigReady
+                ? "Pick an occasion, theme & colors, then set your budget to upload"
+                : "Set your max budget to upload your photo"}
             </p>
           </div>
         )}
