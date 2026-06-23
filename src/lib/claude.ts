@@ -81,13 +81,13 @@ Think like a professional party stylist:
 3. Tie each item to a zone in the space
 
 For each product provide:
-- category: specific decoration type, e.g. 'jungle theme paper backdrop'
-- searchQuery: SHORT Amazon India party-supplies search query (3-5 words max, e.g. 'jungle birthday backdrop', 'blue foil balloons set'). Keep it generic enough to find results.
-- placement: which zone in the space, e.g. 'on the wall behind the cake table'
+- category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
+- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
+- placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
-Also write a clear 2-3 sentence designVision describing the party styling — color palette, theme, and mood.`;
+Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
