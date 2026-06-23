@@ -24,10 +24,12 @@ function Viewer({
   designId,
   approved,
   initial,
+  items = [],
 }: {
   designId: string;
   approved: boolean;
   initial: DesignData | null;
+  items?: string[];
 }) {
   const router = useRouter();
   const { status } = useSession();
@@ -116,6 +118,24 @@ function Viewer({
           </div>
         )}
 
+        {approved && items.length > 0 && (
+          <div className="mb-5">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+              Featured in this design
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {items.map((it) => (
+                <span
+                  key={it}
+                  className="px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs"
+                >
+                  {it}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="relative">
           <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none"}>
             <ImageWithHotspots
@@ -164,6 +184,7 @@ export default function DesignViewer(props: {
   designId: string;
   approved: boolean;
   initial: DesignData | null;
+  items?: string[];
 }) {
   return (
     <SessionProvider>

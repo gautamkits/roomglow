@@ -1,6 +1,12 @@
 import type { Metadata } from "next";
 import { getDesign } from "@/lib/db";
-import { designTitle, designAltText } from "@/lib/admin";
+import {
+  designTitle,
+  designAltText,
+  designDescription,
+  designKeywords,
+  designItems,
+} from "@/lib/admin";
 import DesignViewer from "./DesignViewer";
 
 const BASE = process.env.NEXTAUTH_URL || "https://roomglow-one.vercel.app";
@@ -14,16 +20,17 @@ export async function generateMetadata({
   const d = await getDesign(designId);
   if (!d) return { title: "Design — RoomGlow" };
 
-  const title = `${designTitle(d)} | RoomGlow`;
-  const description =
-    (d.design_narrative as string)?.slice(0, 155) ||
-    "An AI-generated room design with shoppable products, made with RoomGlow.";
+  const items = designItems(d);
+  const itemSuffix = items.length ? ` with ${items.slice(0, 3).join(", ")}` : "";
+  const title = `${designTitle(d)}${itemSuffix} | RoomGlow`;
+  const description = designDescription(d);
   const ogImage = `${BASE}/api/og/${designId}`;
   const isPublic = d.gallery_status === "approved";
 
   return {
     title,
     description,
+    keywords: designKeywords(d),
     alternates: { canonical: `${BASE}/design/${designId}` },
     robots: isPublic ? undefined : { index: false },
     openGraph: {
@@ -59,7 +66,8 @@ export default async function DesignPage({
       "@context": "https://schema.org",
       "@type": "CreativeWork",
       name: designTitle(d),
-      description: d.design_narrative || undefined,
+      description: designDescription(d),
+      keywords: designKeywords(d).join(", "),
       image: `${BASE}/api/og/${designId}`,
       url: `${BASE}/design/${designId}`,
       about: {
@@ -86,13 +94,23 @@ export default async function DesignPage({
           dangerouslySetInnerHTML={{ __html: jsonLd }}
         />
       )}
-      {/* SSR alt-rich heading for crawlers (hidden visually; viewer renders its own) */}
+      {/* SSR crawlable content for approved (public) designs */}
       {d && approved && (
-        <h1 className="sr-only">{designAltText(d)}</h1>
+        <div className="sr-only">
+          <h1>{designAltText(d)}</h1>
+          {d.design_narrative && <p>{d.design_narrative}</p>}
+          <h2>Featured in this design</h2>
+          <ul>
+            {designItems(d).map((it) => (
+              <li key={it}>{it}</li>
+            ))}
+          </ul>
+        </div>
       )}
       <DesignViewer
         designId={designId}
         approved={approved}
+        items={d ? designItems(d) : []}
         initial={
           d
             ? {

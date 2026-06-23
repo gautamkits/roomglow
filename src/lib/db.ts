@@ -41,9 +41,10 @@ export async function saveDesign(params: {
   generatedImageUrl: string;
   userId?: string | null;
   isUnlocked?: boolean;
+  selectedItems?: unknown;
 }) {
   const { rows } = await sql`
-    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, user_id, is_unlocked)
+    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, user_id, is_unlocked, selected_items)
     VALUES (
       ${params.mode},
       ${JSON.stringify(params.eventConfig)},
@@ -54,7 +55,8 @@ export async function saveDesign(params: {
       ${params.originalImageUrl},
       ${params.generatedImageUrl},
       ${params.userId ?? null},
-      ${params.isUnlocked ?? false}
+      ${params.isUnlocked ?? false},
+      ${JSON.stringify(params.selectedItems ?? null)}
     )
     RETURNING id
   `;

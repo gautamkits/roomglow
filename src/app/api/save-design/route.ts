@@ -10,7 +10,7 @@ function toDataUrl(input: string, mime: string): string {
 
 export async function POST(request: Request) {
   try {
-    const { mode, eventConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage } =
+    const { mode, eventConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems } =
       await request.json();
 
     if (!products || !originalImage || !generatedImage) {
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       generatedImageUrl: toDataUrl(generatedImage, "image/png"),
       userId,
       isUnlocked,
+      selectedItems: selectedItems || null,
     });
 
     // If a signed-in user creates an event design with a date, capture it

@@ -234,6 +234,7 @@ export function useRoomFlow() {
               designNarrative: narrative || "",
               originalImage: image,
               generatedImage: genImg,
+              selectedItems: selected.map((p) => p.label),
             },
             "Failed to save your design."
           );

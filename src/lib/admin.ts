@@ -7,36 +7,79 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return allow.includes(email.toLowerCase());
 }
 
-/** Build descriptive alt text / titles for SEO from a design row. */
-export function designAltText(d: {
+type DesignLike = {
   mode?: string;
   room_analysis?: Record<string, unknown> | string | null;
   event_config?: Record<string, unknown> | string | null;
   products?: unknown;
-}): string {
-  const ra = parseJsonish(d.room_analysis) as Record<string, string> | null;
-  const ec = parseJsonish(d.event_config) as Record<string, string> | null;
+  selected_items?: unknown;
+};
+
+/** Clean human labels of the items in a design — prefers the user's selected
+ *  item labels (e.g. "Abstract Wall Art"), falls back to product categories. */
+export function designItems(d: DesignLike): string[] {
+  const sel = parseJsonish(d.selected_items) as string[] | null;
+  if (Array.isArray(sel) && sel.length) {
+    return [...new Set(sel.map((s) => String(s).trim()).filter(Boolean))];
+  }
   const prods = (parseJsonish(d.products) as Array<Record<string, unknown>>) || [];
   const names = prods
     .map((p) => {
       const rec = p.recommendation as Record<string, string> | undefined;
-      return rec?.category;
+      const ap = p.amazonProduct as Record<string, string> | undefined;
+      return rec?.category || ap?.title;
     })
-    .filter(Boolean)
-    .slice(0, 3) as string[];
+    .filter(Boolean) as string[];
+  return [...new Set(names.map((n) => n.trim()))];
+}
+
+/** Build descriptive alt text for SEO from a design row. */
+export function designAltText(d: DesignLike): string {
+  const ra = parseJsonish(d.room_analysis) as Record<string, string> | null;
+  const ec = parseJsonish(d.event_config) as Record<string, string> | null;
+  const names = designItems(d).slice(0, 6);
 
   if (d.mode === "event" && ec) {
     const base = `AI ${ec.subTheme || ""} ${ec.eventLabel || "event"} decoration`.trim();
     return names.length
-      ? `${base} with ${names.join(", ")} — RoomGlow`
-      : `${base} — RoomGlow`;
+      ? `${base} featuring ${names.join(", ")} — designed with RoomGlow`
+      : `${base} — designed with RoomGlow`;
   }
   const style = ra?.currentStyle ? `${ra.currentStyle} ` : "";
   const room = ra?.roomType || "room";
   const base = `AI interior design of a ${style}${room}`.trim();
   return names.length
-    ? `${base} with ${names.join(", ")} — RoomGlow`
-    : `${base} — RoomGlow`;
+    ? `${base} featuring ${names.join(", ")} — designed with RoomGlow`
+    : `${base} — designed with RoomGlow`;
+}
+
+/** SEO meta description: room/style/event + the actual items in the design. */
+export function designDescription(d: DesignLike & { design_narrative?: string }): string {
+  const items = designItems(d);
+  const itemsPhrase = items.length
+    ? ` Includes ${items.slice(0, 8).join(", ")}.`
+    : "";
+  const narrative = (d.design_narrative || "").trim();
+  const lead = narrative
+    ? narrative
+    : `${designTitle(d)} — an AI-generated design you can shop, made from one photo with RoomGlow.`;
+  return `${lead}${itemsPhrase}`.slice(0, 300);
+}
+
+/** SEO keywords from room/style/event + items. */
+export function designKeywords(d: DesignLike): string[] {
+  const ra = parseJsonish(d.room_analysis) as Record<string, string> | null;
+  const ec = parseJsonish(d.event_config) as Record<string, string> | null;
+  const kws = new Set<string>(["AI interior design", "room makeover", "shop the look"]);
+  if (d.mode === "event" && ec) {
+    if (ec.eventLabel) kws.add(`${ec.eventLabel} decoration`);
+    if (ec.subTheme) kws.add(`${ec.subTheme} ${ec.eventLabel || "party"} theme`);
+  } else {
+    if (ra?.roomType) kws.add(`${ra.roomType} design`);
+    if (ra?.currentStyle) kws.add(`${ra.currentStyle} ${ra?.roomType || "room"}`);
+  }
+  for (const it of designItems(d)) kws.add(it.toLowerCase());
+  return [...kws];
 }
 
 export function designTitle(d: {
