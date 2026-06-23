@@ -158,7 +158,8 @@ const curationSchema = {
 export async function curateProducts(
   roomImageBase64: string,
   designVision: string,
-  categories: CategoryCandidates[]
+  categories: CategoryCandidates[],
+  budgetInstruction?: string
 ): Promise<string> {
   const candidateDescriptions = categories
     .map((cat, catIdx) => {
@@ -210,7 +211,7 @@ Your job: Pick EXACTLY ONE product from each category that creates the most cohe
 - Style consistency (all products should feel like they belong together)
 - Visual appeal and quality based on the product images
 - How well each product fits its intended placement in THIS specific room
-
+${budgetInstruction ? `\n${budgetInstruction}\n` : ""}
 For each category, return the chosen optionIndex and a short reason. Also write a 2-3 sentence designNarrative describing how the products work together to transform the room.`,
   });
 

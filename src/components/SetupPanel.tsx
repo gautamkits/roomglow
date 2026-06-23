@@ -10,9 +10,13 @@ interface SetupPanelProps {
   onImageSelected: (
     base64: string,
     mode: AppMode,
-    eventConfig: EventConfig | null
+    eventConfig: EventConfig | null,
+    maxBudget?: number
   ) => void;
 }
+
+const BUDGET_MIN = 1000;
+const BUDGET_MAX = 25000;
 
 function Chip({
   label,
@@ -45,6 +49,8 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
+  const [budgetOn, setBudgetOn] = useState(false);
+  const [maxBudget, setMaxBudget] = useState(5000);
 
   const event = EVENTS.find((e) => e.id === eventId);
   const eventReady = mode === "space" || (!!event && !!subTheme && !!colorScheme);
@@ -65,7 +71,12 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   };
 
   const handleImage = (base64: string) => {
-    onImageSelected(base64, mode, buildConfig());
+    onImageSelected(
+      base64,
+      mode,
+      buildConfig(),
+      budgetOn ? maxBudget : undefined
+    );
   };
 
   return (
@@ -188,6 +199,44 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           )}
         </div>
       )}
+
+      {/* Max budget */}
+      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Max budget
+          </span>
+          <label className="flex items-center gap-1.5 text-xs text-zinc-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={budgetOn}
+              onChange={(e) => setBudgetOn(e.target.checked)}
+              className="accent-orange-700"
+            />
+            Set a limit
+          </label>
+        </div>
+        {budgetOn && (
+          <div className="mt-3 animate-fade-up">
+            <div className="flex items-baseline justify-between mb-1.5">
+              <span className="text-xs text-zinc-400">Keep the design under</span>
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                ₹{maxBudget.toLocaleString("en-IN")}
+                {maxBudget >= BUDGET_MAX && "+"}
+              </span>
+            </div>
+            <input
+              type="range"
+              min={BUDGET_MIN}
+              max={BUDGET_MAX}
+              step={500}
+              value={maxBudget}
+              onChange={(e) => setMaxBudget(Number(e.target.value))}
+              className="w-full accent-orange-700"
+            />
+          </div>
+        )}
+      </div>
 
       {/* Photo tips */}
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-stone-100 dark:bg-zinc-800/50">

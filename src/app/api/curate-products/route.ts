@@ -3,18 +3,25 @@ import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
 
 export async function POST(request: Request) {
   try {
-    const { originalImage, designVision, categories } = (await request.json()) as {
-      originalImage: string;
-      designVision: string;
-      categories: CategoryCandidates[];
-    };
+    const { originalImage, designVision, categories, budgetInstruction } =
+      (await request.json()) as {
+        originalImage: string;
+        designVision: string;
+        categories: CategoryCandidates[];
+        budgetInstruction?: string;
+      };
 
     if (!originalImage || !categories?.length) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
-    const curationJson = await curateProducts(base64, designVision, categories);
+    const curationJson = await curateProducts(
+      base64,
+      designVision,
+      categories,
+      budgetInstruction
+    );
     const curation = JSON.parse(curationJson);
 
     // Build final product list from AI selections (guard against bad indices)

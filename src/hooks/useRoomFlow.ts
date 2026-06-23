@@ -34,6 +34,7 @@ export function useRoomFlow() {
   const [designNarrative, setDesignNarrative] = useState<string>("");
   const [designId, setDesignId] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [maxBudget, setMaxBudget] = useState<number | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
 
@@ -49,11 +50,17 @@ export function useRoomFlow() {
   }, []);
 
   const handleImageSelected = useCallback(
-    async (base64: string, selectedMode?: AppMode, selectedEventConfig?: EventConfig | null) => {
+    async (
+      base64: string,
+      selectedMode?: AppMode,
+      selectedEventConfig?: EventConfig | null,
+      selectedMaxBudget?: number
+    ) => {
       const activeMode = selectedMode || mode;
       const activeEventConfig = selectedEventConfig !== undefined ? selectedEventConfig : eventConfig;
       if (selectedMode) setMode(activeMode);
       if (selectedEventConfig !== undefined) setEventConfig(activeEventConfig);
+      setMaxBudget(selectedMaxBudget);
 
       setImage(base64);
       setStep("analyzing");
@@ -173,6 +180,9 @@ export function useRoomFlow() {
               designVision:
                 designVision || "Create a cohesive, stylish design",
               categories,
+              budgetInstruction: maxBudget
+                ? `BUDGET CONSTRAINT: Keep the COMBINED total of all chosen products at or under ₹${maxBudget.toLocaleString("en-IN")}. Prefer cheaper suitable options to stay within budget while keeping the design cohesive. Only exceed the cap for a category if it has no cheaper viable option.`
+                : undefined,
             },
             "We couldn't finalize the product selection. Please try again."
           );
@@ -243,7 +253,7 @@ export function useRoomFlow() {
         setStep("product-selection");
       }
     },
-    [roomAnalysis, image, mode, eventConfig]
+    [roomAnalysis, image, mode, eventConfig, maxBudget]
   );
 
   const handleUnlocked = useCallback(() => {
@@ -262,6 +272,7 @@ export function useRoomFlow() {
     setDesignNarrative("");
     setDesignId(null);
     setIsUnlocked(false);
+    setMaxBudget(undefined);
     setError(null);
     setStatusMessage("");
   }, []);
@@ -270,6 +281,7 @@ export function useRoomFlow() {
     step,
     mode,
     eventConfig,
+    maxBudget,
     image,
     generatedImage,
     roomAnalysis,

@@ -36,6 +36,7 @@ function HomeContent() {
     designNarrative,
     designId,
     isUnlocked,
+    maxBudget,
     error,
     statusMessage,
     handleImageSelected,
@@ -253,10 +254,17 @@ function HomeContent() {
           <div className="py-8">
             <div className="mb-5 animate-fade-up flex flex-wrap items-end justify-between gap-4">
               <div className="min-w-0">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium mb-2">
-                  <Sparkles size={12} />
-                  {mode === "event" ? "Event design" : "Interior design"}
-                </span>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium">
+                    <Sparkles size={12} />
+                    {mode === "event" ? "Event design" : "Interior design"}
+                  </span>
+                  {maxBudget && (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium">
+                      Budget: up to ₹{maxBudget.toLocaleString("en-IN")}
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                   {mode === "event" && eventConfig
                     ? `Your ${eventConfig.eventLabel} setup`
