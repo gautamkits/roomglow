@@ -97,6 +97,40 @@ export function designTitle(d: {
   return `${style}${room} makeover`.replace(/^\w/, (c) => c.toUpperCase());
 }
 
+export function designRoomType(d: DesignLike): string | null {
+  const ra = parseJsonish(d.room_analysis) as Record<string, string> | null;
+  return ra?.roomType ? ra.roomType.toLowerCase() : null;
+}
+
+export function designEventType(d: DesignLike): string | null {
+  const ec = parseJsonish(d.event_config) as Record<string, string> | null;
+  return ec?.eventLabel || null;
+}
+
+/** True if the design matches a free-text query across title, items, room, style, theme. */
+export function matchesQuery(d: DesignLike & { design_narrative?: string }, q: string): boolean {
+  if (!q) return true;
+  const ra = parseJsonish(d.room_analysis) as Record<string, string> | null;
+  const ec = parseJsonish(d.event_config) as Record<string, string> | null;
+  const hay = [
+    designTitle(d),
+    ...designItems(d),
+    ra?.roomType,
+    ra?.currentStyle,
+    ec?.eventLabel,
+    ec?.subTheme,
+    d.design_narrative,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((term) => hay.includes(term));
+}
+
 function parseJsonish(v: unknown) {
   if (!v) return null;
   if (typeof v === "string") {
