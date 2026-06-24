@@ -27,22 +27,24 @@ export async function POST(request: Request) {
     const originalBuf = toBuffer(originalImage);
     const generatedBuf = toBuffer(generatedImage);
 
-    // Upload masters to public Blob (object storage); store URLs + blur in DB.
-    const [originalBlob, generatedBlob, originalBlur, generatedBlur] =
-      await Promise.all([
-        put(`designs/${ts}-original.jpg`, originalBuf, {
-          access: "public",
-          contentType: "image/jpeg",
-          addRandomSuffix: true,
-        }),
-        put(`designs/${ts}-generated.png`, generatedBuf, {
-          access: "public",
-          contentType: "image/png",
-          addRandomSuffix: true,
-        }),
-        makeBlurDataUrl(originalBuf),
-        makeBlurDataUrl(generatedBuf),
-      ]);
+    // Upload masters to public Blob; generate blur placeholders (non-fatal).
+    const [originalBlob, generatedBlob] = await Promise.all([
+      put(`designs/${ts}-original.jpg`, originalBuf, {
+        access: "public",
+        contentType: "image/jpeg",
+        addRandomSuffix: true,
+      }),
+      put(`designs/${ts}-generated.png`, generatedBuf, {
+        access: "public",
+        contentType: "image/png",
+        addRandomSuffix: true,
+      }),
+    ]);
+
+    const [originalBlur, generatedBlur] = await Promise.all([
+      makeBlurDataUrl(originalBuf).catch(() => null),
+      makeBlurDataUrl(generatedBuf).catch(() => null),
+    ]);
 
     const designId = await saveDesign({
       mode: mode || "space",

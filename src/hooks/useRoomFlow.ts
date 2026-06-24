@@ -240,8 +240,9 @@ export function useRoomFlow() {
           );
           setDesignId(saveRes.designId);
           setIsUnlocked(!!saveRes.isUnlocked);
-        } catch {
+        } catch (saveErr) {
           // Non-fatal — still show the result, just unsaved/locked
+          console.error("[save-design] Failed to save design:", saveErr);
           setDesignId(null);
           setIsUnlocked(false);
         }
