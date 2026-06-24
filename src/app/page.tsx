@@ -11,6 +11,7 @@ import {
   designEventType,
   matchesQuery,
 } from "@/lib/admin";
+import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import GallerySearch from "@/components/GallerySearch";
@@ -25,15 +26,18 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-type Search = { type?: string; sort?: string; room?: string; event?: string; q?: string };
+type Search = { type?: string; sort?: string; room?: string; event?: string; q?: string; page?: string };
+
+const PAGE_SIZE = 24;
 
 export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { type, sort = "top", room, event, q = "" } = await searchParams;
+  const { type, sort = "top", room, event, q = "", page: pageParam } = await searchParams;
   const mode = type === "space" || type === "event" ? type : undefined;
+  const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
 
   // Fetch all approved (lightweight) so facets reflect the whole gallery; filter in JS.
   const [allCards, session] = await Promise.all([
@@ -67,6 +71,10 @@ export default async function Home({
     if (q && !matchesQuery(d, q)) return false;
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(designs.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageDesigns = designs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const tabs = [
     { label: "All", type: "" },
@@ -267,48 +275,82 @@ export default async function Home({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {designs.map((d) => (
+            {pageDesigns.map((d) => (
               <article
                 key={d.id}
                 className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all"
               >
-                <Link href={`/design/${d.id}`} className="group block">
-                  <div className="aspect-[4/3] relative overflow-hidden bg-stone-100 dark:bg-zinc-800">
-                    <img
-                      src={`/api/image/${d.id}/after`}
-                      alt={designAltText(d)}
-                      loading="lazy"
-                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-                    />
-                    <span
-                      className={`absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${
-                        d.mode === "event"
-                          ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
-                          : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
-                      }`}
-                    >
-                      {d.mode === "event" ? (
-                        <PartyPopper size={10} />
-                      ) : (
-                        <Sofa size={10} />
-                      )}
-                      {d.mode === "event"
-                        ? d.event_config?.eventLabel || "Event"
-                        : "Space"}
-                    </span>
-                  </div>
-                  <div className="px-3 pt-2.5">
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1">
-                      {designTitle(d)}
-                    </p>
-                  </div>
-                </Link>
+                <div className="relative">
+                  <BeforeAfterSlider
+                    beforeSrc={d.original_image_url}
+                    afterSrc={d.generated_image_url}
+                    blurBefore={d.original_blur}
+                    blurAfter={d.generated_blur}
+                    aspect="aspect-[4/3]"
+                    rounded={false}
+                    showLabels={false}
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                  />
+                  <span
+                    className={`absolute top-2 left-2 z-10 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm pointer-events-none ${
+                      d.mode === "event"
+                        ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                        : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
+                    }`}
+                  >
+                    {d.mode === "event" ? <PartyPopper size={10} /> : <Sofa size={10} />}
+                    {d.mode === "event"
+                      ? d.event_config?.eventLabel || "Event"
+                      : "Space"}
+                  </span>
+                  <span className="sr-only">{designAltText(d)}</span>
+                </div>
+                <div className="px-3 pt-2.5">
+                  <Link
+                    href={`/design/${d.id}`}
+                    className="text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:text-orange-700 transition-colors line-clamp-1 block"
+                  >
+                    {designTitle(d)}
+                  </Link>
+                </div>
                 <div className="flex items-center justify-between px-3 pb-2.5 pt-1.5">
                   <LikeButton designId={d.id} initialCount={d.like_count || 0} />
                   <ShareButton designId={d.id} variant="ghost" />
                 </div>
               </article>
             ))}
+          </div>
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-center gap-3 mt-10">
+            {safePage > 1 ? (
+              <Link
+                href={qs({ type: mode, room, event, sort: sort !== "top" ? sort : undefined, q: q || undefined, page: String(safePage - 1) })}
+                className="px-4 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+              >
+                Previous
+              </Link>
+            ) : (
+              <span className="px-4 py-2 rounded-lg text-sm border border-zinc-100 dark:border-zinc-900 text-zinc-300 dark:text-zinc-700">
+                Previous
+              </span>
+            )}
+            <span className="text-sm text-zinc-500">
+              Page {safePage} of {totalPages}
+            </span>
+            {safePage < totalPages ? (
+              <Link
+                href={qs({ type: mode, room, event, sort: sort !== "top" ? sort : undefined, q: q || undefined, page: String(safePage + 1) })}
+                className="px-4 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300"
+              >
+                Next
+              </Link>
+            ) : (
+              <span className="px-4 py-2 rounded-lg text-sm border border-zinc-100 dark:border-zinc-900 text-zinc-300 dark:text-zinc-700">
+                Next
+              </span>
+            )}
           </div>
         )}
       </main>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Sofa, PartyPopper } from "lucide-react";
 import type { SavedDesign } from "@/lib/useUserLibrary";
 
@@ -22,10 +23,15 @@ export default function DesignGrid({ designs, limit }: DesignGridProps) {
           className="group rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all text-left"
         >
           <div className="aspect-[4/3] relative overflow-hidden bg-stone-100 dark:bg-zinc-800">
-            <img
+            <Image
               src={d.generated_image_url}
               alt=""
-              className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+              fill
+              sizes="(max-width: 640px) 50vw, 33vw"
+              className="object-cover group-hover:scale-[1.03] transition-transform duration-300"
+              {...(d.generated_blur
+                ? { placeholder: "blur" as const, blurDataURL: d.generated_blur }
+                : {})}
             />
             <span
               className={`absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${

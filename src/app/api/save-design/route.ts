@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { saveDesign, saveEventDate } from "@/lib/db";
+import { makeBlurDataUrl } from "@/lib/images";
 
-// Ensure a base64 string is a usable data URL for <img src>
-function toDataUrl(input: string, mime: string): string {
-  if (input.startsWith("data:")) return input;
-  return `data:${mime};base64,${input}`;
+export const runtime = "nodejs";
+
+function toBuffer(input: string): Buffer {
+  return Buffer.from(input.replace(/^data:image\/\w+;base64,/, ""), "base64");
 }
 
 export async function POST(request: Request) {
@@ -21,8 +23,27 @@ export async function POST(request: Request) {
     const userId = session?.user?.id ?? null;
     const isUnlocked = !!userId;
 
-    // Store images as data URLs directly in Postgres. (Migrate to a public
-    // Vercel Blob store later for CDN delivery + smaller DB footprint.)
+    const ts = Date.now();
+    const originalBuf = toBuffer(originalImage);
+    const generatedBuf = toBuffer(generatedImage);
+
+    // Upload masters to public Blob (object storage); store URLs + blur in DB.
+    const [originalBlob, generatedBlob, originalBlur, generatedBlur] =
+      await Promise.all([
+        put(`designs/${ts}-original.jpg`, originalBuf, {
+          access: "public",
+          contentType: "image/jpeg",
+          addRandomSuffix: true,
+        }),
+        put(`designs/${ts}-generated.png`, generatedBuf, {
+          access: "public",
+          contentType: "image/png",
+          addRandomSuffix: true,
+        }),
+        makeBlurDataUrl(originalBuf),
+        makeBlurDataUrl(generatedBuf),
+      ]);
+
     const designId = await saveDesign({
       mode: mode || "space",
       eventConfig: eventConfig || null,
@@ -30,14 +51,15 @@ export async function POST(request: Request) {
       products,
       hotspots,
       designNarrative: designNarrative || "",
-      originalImageUrl: toDataUrl(originalImage, "image/jpeg"),
-      generatedImageUrl: toDataUrl(generatedImage, "image/png"),
+      originalImageUrl: originalBlob.url,
+      generatedImageUrl: generatedBlob.url,
+      originalBlur,
+      generatedBlur,
       userId,
       isUnlocked,
       selectedItems: selectedItems || null,
     });
 
-    // If a signed-in user creates an event design with a date, capture it
     if (userId && mode === "event" && eventConfig?.eventDate) {
       await saveEventDate({
         userId,

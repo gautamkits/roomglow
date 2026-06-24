@@ -39,6 +39,8 @@ ALTER TABLE designs ADD COLUMN IF NOT EXISTS gallery_status TEXT DEFAULT 'none';
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS like_count INTEGER DEFAULT 0;
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS selected_items JSONB;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS original_blur TEXT;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS generated_blur TEXT;
 CREATE INDEX IF NOT EXISTS idx_designs_gallery ON designs (gallery_status, like_count DESC, published_at DESC);
 
 CREATE TABLE IF NOT EXISTS payments (

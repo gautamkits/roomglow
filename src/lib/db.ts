@@ -42,9 +42,11 @@ export async function saveDesign(params: {
   userId?: string | null;
   isUnlocked?: boolean;
   selectedItems?: unknown;
+  originalBlur?: string | null;
+  generatedBlur?: string | null;
 }) {
   const { rows } = await sql`
-    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, user_id, is_unlocked, selected_items)
+    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, user_id, is_unlocked, selected_items, original_blur, generated_blur)
     VALUES (
       ${params.mode},
       ${JSON.stringify(params.eventConfig)},
@@ -56,7 +58,9 @@ export async function saveDesign(params: {
       ${params.generatedImageUrl},
       ${params.userId ?? null},
       ${params.isUnlocked ?? false},
-      ${JSON.stringify(params.selectedItems ?? null)}
+      ${JSON.stringify(params.selectedItems ?? null)},
+      ${params.originalBlur ?? null},
+      ${params.generatedBlur ?? null}
     )
     RETURNING id
   `;
@@ -130,7 +134,7 @@ export async function getGalleryDesigns(opts: {
 }
 
 // Lightweight gallery cards — excludes the heavy base64 image columns.
-// Cards build image URLs from the id via /api/image/[id]/[before|after].
+// Returns Blob image URLs + blur placeholders; rendered via next/image.
 export async function getGalleryCards(opts: {
   mode?: string;
   sort?: string;
@@ -141,7 +145,7 @@ export async function getGalleryCards(opts: {
     sort === "newest"
       ? "published_at DESC NULLS LAST"
       : "like_count DESC, published_at DESC NULLS LAST";
-  const cols = `id, mode, event_config, room_analysis, selected_items, products, like_count, published_at`;
+  const cols = `id, mode, event_config, room_analysis, selected_items, products, like_count, published_at, original_image_url, generated_image_url, original_blur, generated_blur`;
   if (mode === "space" || mode === "event") {
     const { rows } = await sql.query(
       `SELECT ${cols} FROM designs WHERE gallery_status = 'approved' AND mode = $1
@@ -200,7 +204,7 @@ export async function unlockDesign(designId: string, userId: string) {
 
 export async function getUserDesigns(userId: string) {
   const { rows } = await sql`
-    SELECT id, mode, event_config, design_narrative, generated_image_url, is_unlocked, created_at
+    SELECT id, mode, event_config, design_narrative, generated_image_url, generated_blur, is_unlocked, created_at
     FROM designs WHERE user_id = ${userId}
     ORDER BY created_at DESC
   `;

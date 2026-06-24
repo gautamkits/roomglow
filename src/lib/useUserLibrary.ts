@@ -8,6 +8,7 @@ export interface SavedDesign {
   event_config: Record<string, string> | null;
   design_narrative: string;
   generated_image_url: string;
+  generated_blur?: string | null;
   is_unlocked: boolean;
   created_at: string;
 }

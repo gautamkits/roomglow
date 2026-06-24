@@ -1,4 +1,14 @@
 import { getDesign } from "@/lib/db";
+import sharp from "sharp";
+
+/** Tiny blur-up placeholder (data URL) for next/image placeholder="blur". */
+export async function makeBlurDataUrl(buffer: Buffer): Promise<string> {
+  const out = await sharp(buffer)
+    .resize(16, 16, { fit: "inside" })
+    .webp({ quality: 40 })
+    .toBuffer();
+  return `data:image/webp;base64,${out.toString("base64")}`;
+}
 
 function decodeDataUrl(dataUrl: string): Buffer | null {
   const m = dataUrl?.match(/^data:image\/\w+;base64,([A-Za-z0-9+/=]+)$/);
