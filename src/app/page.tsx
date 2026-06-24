@@ -118,11 +118,11 @@ export default async function Home({
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
         <div className="mb-5">
           <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Designs made from a single photo
+            See your room redesigned — then buy the look
           </h1>
           <p className="text-zinc-500 mt-1">
-            Drag any card to reveal the transformation. Tap to shop the look —
-            or design your own room, free.
+            Snap one photo. Noosho restyles your space and finds every piece to
+            shop. Free to try.
           </p>
         </div>
 
