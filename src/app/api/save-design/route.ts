@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { saveDesign, saveEventDate } from "@/lib/db";
 import { makeBlurDataUrl } from "@/lib/images";
+import { sendDesignReadyEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -76,6 +77,24 @@ export async function POST(request: Request) {
         eventLabel: eventConfig.honoree || eventConfig.eventLabel,
         eventDate: eventConfig.eventDate,
         honoree: eventConfig.honoree,
+      });
+    }
+
+    // Email the signed-in user their design + shopping list (post-response,
+    // never blocks or fails the save).
+    const email = session?.user?.email;
+    if (email) {
+      after(async () => {
+        await sendDesignReadyEmail({
+          to: email,
+          name: session?.user?.name ?? undefined,
+          designId,
+          mode: mode || "space",
+          eventConfig: eventConfig || null,
+          designNarrative: designNarrative || "",
+          generatedImageUrl: generatedBlob.url,
+          products,
+        });
       });
     }
 
