@@ -6,6 +6,11 @@ import { makeBlurDataUrl } from "@/lib/images";
 
 export const runtime = "nodejs";
 
+// The Blob store is connected with a "newblob_" prefix in production, so the
+// SDK's default BLOB_READ_WRITE_TOKEN lookup misses it. Resolve either name.
+const blobToken =
+  process.env.BLOB_READ_WRITE_TOKEN || process.env.newblob_READ_WRITE_TOKEN;
+
 function toBuffer(input: string): Buffer {
   return Buffer.from(input.replace(/^data:image\/\w+;base64,/, ""), "base64");
 }
@@ -33,11 +38,13 @@ export async function POST(request: Request) {
         access: "public",
         contentType: "image/jpeg",
         addRandomSuffix: true,
+        token: blobToken,
       }),
       put(`designs/${ts}-generated.png`, generatedBuf, {
         access: "public",
         contentType: "image/png",
         addRandomSuffix: true,
+        token: blobToken,
       }),
     ]);
 
