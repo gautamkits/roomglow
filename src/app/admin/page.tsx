@@ -3,7 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, ArrowLeft } from "lucide-react";
+import { Check, X } from "lucide-react";
+import SiteHeader from "@/components/SiteHeader";
 
 interface PendingDesign {
   id: string;
@@ -14,7 +15,7 @@ interface PendingDesign {
 }
 
 function AdminContent() {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [designs, setDesigns] = useState<PendingDesign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,13 +68,19 @@ function AdminContent() {
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-5 py-3.5 flex items-center justify-between max-w-5xl mx-auto">
-        <button onClick={() => router.push("/")} className="flex items-center gap-2 text-zinc-500 text-sm">
-          <ArrowLeft size={18} /> Home
-        </button>
-        <span className="font-semibold text-zinc-900 dark:text-zinc-50">Gallery review</span>
-        <span className="text-sm text-zinc-400">{designs.length} pending</span>
-      </header>
+      <SiteHeader
+        user={session?.user}
+        isAdmin={session?.user?.isAdmin}
+        showDesignCta={false}
+        center={
+          <div className="text-center text-sm">
+            <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+              Gallery review
+            </span>
+            <span className="text-zinc-400"> · {designs.length} pending</span>
+          </div>
+        }
+      />
 
       <main className="max-w-5xl mx-auto px-5 py-8">
         {designs.length === 0 ? (

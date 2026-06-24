@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { createUser, findUserByGoogleId } from "@/lib/db";
+import { isAdminEmail } from "@/lib/admin";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -35,6 +36,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (token.userId) {
         session.user.id = token.userId as string;
       }
+      session.user.isAdmin = isAdminEmail(session.user.email);
       return session;
     },
   },

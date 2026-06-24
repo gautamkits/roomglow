@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Wand2, ArrowRight, Sparkles, Sofa, PartyPopper } from "lucide-react";
+import { Wand2, ArrowRight, Sofa, PartyPopper } from "lucide-react";
 import { auth } from "@/auth";
 import { getGalleryCards } from "@/lib/db";
 import {
@@ -10,7 +10,9 @@ import {
   designRoomType,
   designEventType,
   matchesQuery,
+  isAdminEmail,
 } from "@/lib/admin";
+import SiteHeader from "@/components/SiteHeader";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
@@ -95,51 +97,23 @@ export default async function Home({
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950 flex flex-col">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <span className="w-6 h-6 rounded-md bg-orange-700 flex items-center justify-center">
-              <Wand2 size={14} className="text-white" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              RoomGlow
-            </span>
-          </Link>
-
-          {/* Hero search bar (Flipkart-style) */}
-          <div className="flex-1 max-w-xl hidden sm:block">
+      <SiteHeader
+        user={session?.user}
+        isAdmin={isAdminEmail(session?.user?.email)}
+        center={
+          <div className="max-w-xl hidden sm:block">
             <Suspense fallback={null}>
               <GallerySearch size="lg" />
             </Suspense>
           </div>
-
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {session?.user && (
-              <Link
-                href="/profile"
-                className="hidden md:inline text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
-              >
-                My designs
-              </Link>
-            )}
-            <Link
-              href="/create"
-              className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white font-medium transition-colors"
-            >
-              <Sparkles size={14} />
-              <span className="hidden sm:inline">Design your own</span>
-              <span className="sm:hidden">Design</span>
-            </Link>
-          </div>
-        </div>
-
-        {/* Mobile search row */}
-        <div className="sm:hidden border-t border-zinc-100 dark:border-zinc-800 px-5 py-2.5 max-w-6xl mx-auto">
-          <Suspense fallback={null}>
-            <GallerySearch size="lg" />
-          </Suspense>
-        </div>
-      </header>
+        }
+      />
+      {/* Mobile search row */}
+      <div className="sm:hidden border-b border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-950 px-5 py-2.5">
+        <Suspense fallback={null}>
+          <GallerySearch size="lg" />
+        </Suspense>
+      </div>
 
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
         <div className="mb-5">

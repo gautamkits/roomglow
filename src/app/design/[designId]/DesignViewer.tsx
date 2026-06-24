@@ -6,6 +6,7 @@ import { SessionProvider, useSession, signIn } from "next-auth/react";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
+import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
 import { ArrowLeft, Download, Wand2, Sparkles } from "lucide-react";
 
@@ -35,7 +36,7 @@ function Viewer({
   items?: string[];
 }) {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [design] = useState<DesignData | null>(initial);
   const [isUnlocked, setIsUnlocked] = useState(
     approved || initial?.is_unlocked || false
@@ -110,23 +111,25 @@ function Viewer({
           <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {modeLabel}
           </span>
-          {isUnlocked && !approved ? (
-            <a
-              href={design.generated_image_url}
-              download
-              className="flex items-center gap-1.5 text-sm text-orange-700 hover:text-orange-800 transition-colors"
-            >
-              <Download size={16} />
-              Download
-            </a>
-          ) : approved ? (
-            <div className="flex items-center gap-2">
-              <ShareButton designId={design.id} variant="ghost" />
-              <LikeButton designId={design.id} initialCount={design.like_count || 0} />
-            </div>
-          ) : (
-            <span className="w-16" />
-          )}
+          <div className="flex items-center gap-2">
+            {isUnlocked && !approved && (
+              <a
+                href={design.generated_image_url}
+                download
+                className="hidden sm:flex items-center gap-1.5 text-sm text-orange-700 hover:text-orange-800 transition-colors"
+              >
+                <Download size={16} />
+                Download
+              </a>
+            )}
+            {approved && (
+              <>
+                <ShareButton designId={design.id} variant="ghost" />
+                <LikeButton designId={design.id} initialCount={design.like_count || 0} />
+              </>
+            )}
+            <UserMenu user={session?.user} isAdmin={session?.user?.isAdmin} />
+          </div>
         </div>
       </header>
 

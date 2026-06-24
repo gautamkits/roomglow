@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import { SessionProvider, useSession, signIn, signOut } from "next-auth/react";
+import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Sparkles, ArrowLeft, Plus } from "lucide-react";
+import { Sparkles, Plus } from "lucide-react";
+import SiteHeader from "@/components/SiteHeader";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
@@ -30,26 +31,7 @@ function ProfileContent() {
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-5 py-3.5 flex items-center justify-between">
-          <button
-            onClick={() => router.push("/")}
-            className="flex items-center gap-2 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-          >
-            <ArrowLeft size={18} />
-            <span className="text-sm">Home</span>
-          </button>
-          <span className="font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            RoomGlow
-          </span>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-          >
-            Sign out
-          </button>
-        </div>
-      </header>
+      <SiteHeader user={session?.user} isAdmin={session?.user?.isAdmin} />
 
       <main className="max-w-5xl mx-auto px-5 py-8">
         {session?.user && (

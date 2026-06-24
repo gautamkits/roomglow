@@ -1,8 +1,9 @@
-import Link from "next/link";
-import { ArrowLeft, Wand2 } from "lucide-react";
+import { auth } from "@/auth";
+import { isAdminEmail } from "@/lib/admin";
+import SiteHeader from "./SiteHeader";
 import Footer from "./Footer";
 
-export default function LegalLayout({
+export default async function LegalLayout({
   title,
   updated,
   children,
@@ -11,27 +12,13 @@ export default function LegalLayout({
   updated?: string;
   children: React.ReactNode;
 }) {
+  const session = await auth();
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950 flex flex-col">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-5 py-3.5 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-orange-700 flex items-center justify-center">
-              <Wand2 size={14} className="text-white" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              RoomGlow
-            </span>
-          </Link>
-          <Link
-            href="/"
-            className="flex items-center gap-1.5 text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            Home
-          </Link>
-        </div>
-      </header>
+      <SiteHeader
+        user={session?.user}
+        isAdmin={isAdminEmail(session?.user?.email)}
+      />
 
       <main className="flex-1 max-w-2xl mx-auto px-5 py-12 w-full">
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">

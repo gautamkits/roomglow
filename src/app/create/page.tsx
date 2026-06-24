@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { SessionProvider, useSession, signIn, signOut } from "next-auth/react";
+import { SessionProvider, useSession } from "next-auth/react";
 import {
   Wand2,
   RotateCcw,
@@ -17,6 +17,7 @@ import ProductSelection from "@/components/ProductSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import Landing from "@/components/Landing";
+import SiteHeader from "@/components/SiteHeader";
 import ShareButton from "@/components/ShareButton";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
@@ -63,67 +64,22 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-5 py-3.5 flex items-center justify-between">
-          <button
-            onClick={reset}
-            className="flex items-center gap-2"
-            aria-label="RoomGlow home"
-          >
-            <span className="w-6 h-6 rounded-md bg-orange-700 flex items-center justify-center">
-              <Wand2 size={14} className="text-white" />
-            </span>
-            <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              RoomGlow
-            </span>
-          </button>
-          <div className="flex items-center gap-3">
-            <a
-              href="/"
-              className="hidden sm:inline text-sm text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors"
+      <SiteHeader
+        user={session?.user}
+        isAdmin={session?.user?.isAdmin}
+        showDesignCta={false}
+        rightExtra={
+          step !== "mode-select" && step !== "upload" ? (
+            <button
+              onClick={reset}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
             >
-              Gallery
-            </a>
-            {step !== "mode-select" && step !== "upload" && (
-              <button
-                onClick={reset}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-              >
-                <RotateCcw size={14} />
-                Start over
-              </button>
-            )}
-            {session ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => (window.location.href = "/profile")}
-                  className="w-8 h-8 rounded-full overflow-hidden border border-zinc-200 dark:border-zinc-700"
-                >
-                  {session.user?.image ? (
-                    <img src={session.user.image} alt="" className="w-full h-full" />
-                  ) : (
-                    <User size={16} className="m-auto text-zinc-400" />
-                  )}
-                </button>
-                <button
-                  onClick={() => signOut()}
-                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  Sign out
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => signIn("google")}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg bg-orange-700 hover:bg-orange-800 text-white font-medium transition-colors"
-              >
-                <User size={14} />
-                Sign in
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+              <RotateCcw size={14} />
+              Start over
+            </button>
+          ) : undefined
+        }
+      />
 
       <main
         className={
