@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import type { Metadata } from "next";
-import { Wand2, ArrowRight, Sparkles } from "lucide-react";
+import { Wand2, ArrowRight, Sparkles, Sofa, PartyPopper } from "lucide-react";
 import { auth } from "@/auth";
 import { getGalleryCards } from "@/lib/db";
 import {
@@ -11,7 +11,6 @@ import {
   designEventType,
   matchesQuery,
 } from "@/lib/admin";
-import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import GallerySearch from "@/components/GallerySearch";
@@ -267,28 +266,46 @@ export default async function Home({
             </Link>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {designs.map((d) => (
-              <article key={d.id} className="group">
-                <BeforeAfterSlider
-                  beforeSrc={`/api/image/${d.id}/before`}
-                  afterSrc={`/api/image/${d.id}/after`}
-                  beforeLabel="Before"
-                  afterLabel="RoomGlow"
-                  aspect="aspect-[4/3]"
-                />
-                <span className="sr-only">{designAltText(d)}</span>
-                <div className="flex items-center justify-between gap-2 mt-3">
-                  <Link
-                    href={`/design/${d.id}`}
-                    className="text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:text-orange-700 transition-colors line-clamp-1 flex-1 min-w-0"
-                  >
-                    {designTitle(d)}
-                  </Link>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <ShareButton designId={d.id} variant="ghost" />
-                    <LikeButton designId={d.id} initialCount={d.like_count || 0} />
+              <article
+                key={d.id}
+                className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all"
+              >
+                <Link href={`/design/${d.id}`} className="group block">
+                  <div className="aspect-[4/3] relative overflow-hidden bg-stone-100 dark:bg-zinc-800">
+                    <img
+                      src={`/api/image/${d.id}/after`}
+                      alt={designAltText(d)}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+                    />
+                    <span
+                      className={`absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${
+                        d.mode === "event"
+                          ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                          : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
+                      }`}
+                    >
+                      {d.mode === "event" ? (
+                        <PartyPopper size={10} />
+                      ) : (
+                        <Sofa size={10} />
+                      )}
+                      {d.mode === "event"
+                        ? d.event_config?.eventLabel || "Event"
+                        : "Space"}
+                    </span>
                   </div>
+                  <div className="px-3 pt-2.5">
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1">
+                      {designTitle(d)}
+                    </p>
+                  </div>
+                </Link>
+                <div className="flex items-center justify-between px-3 pb-2.5 pt-1.5">
+                  <LikeButton designId={d.id} initialCount={d.like_count || 0} />
+                  <ShareButton designId={d.id} variant="ghost" />
                 </div>
               </article>
             ))}

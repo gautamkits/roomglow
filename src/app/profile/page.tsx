@@ -5,7 +5,6 @@ import { SessionProvider, useSession, signIn, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Sparkles, ArrowLeft, Plus } from "lucide-react";
 import { useUserLibrary } from "@/lib/useUserLibrary";
-import StatsRow from "@/components/dashboard/StatsRow";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -74,10 +73,6 @@ function ProfileContent() {
             </div>
           </div>
         )}
-
-        <div className="mb-10">
-          <StatsRow designs={designs} eventDates={eventDates} />
-        </div>
 
         {eventDates.length > 0 && (
           <div className="mb-10">

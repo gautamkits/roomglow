@@ -7,7 +7,7 @@ import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
-import { ArrowLeft, Download, Wand2 } from "lucide-react";
+import { ArrowLeft, Download, Wand2, Sparkles } from "lucide-react";
 
 interface DesignData {
   id: string;
@@ -24,11 +24,13 @@ interface DesignData {
 function Viewer({
   designId,
   approved,
+  galleryStatus = "none",
   initial,
   items = [],
 }: {
   designId: string;
   approved: boolean;
+  galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];
 }) {
@@ -38,6 +40,30 @@ function Viewer({
   const [isUnlocked, setIsUnlocked] = useState(
     approved || initial?.is_unlocked || false
   );
+  const [publishState, setPublishState] = useState<
+    "idle" | "sending" | "pending"
+  >(galleryStatus === "pending" ? "pending" : "idle");
+
+  const submitToGallery = async () => {
+    setPublishState("sending");
+    try {
+      const res = await fetch("/api/gallery/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designId }),
+      });
+      setPublishState(res.ok ? "pending" : "idle");
+    } catch {
+      setPublishState("idle");
+    }
+  };
+
+  // Owner can submit their own (non-public) unlocked design to the gallery
+  const canPublish =
+    !approved &&
+    status === "authenticated" &&
+    isUnlocked &&
+    galleryStatus !== "approved";
 
   // Owner claim/unlock only for non-approved (private) designs
   useEffect(() => {
@@ -160,6 +186,30 @@ function Viewer({
           )}
         </div>
 
+        {canPublish && (
+          <div className="mt-6 flex flex-col items-center gap-1.5">
+            {publishState === "pending" ? (
+              <p className="text-sm text-zinc-500">
+                ✓ Submitted — we&apos;ll review it for the public gallery.
+              </p>
+            ) : (
+              <>
+                <button
+                  onClick={submitToGallery}
+                  disabled={publishState === "sending"}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium text-sm hover:border-orange-700 hover:text-orange-700 transition-colors disabled:opacity-50"
+                >
+                  <Sparkles size={15} />
+                  {publishState === "sending" ? "Submitting…" : "Add to public gallery"}
+                </button>
+                <p className="text-xs text-zinc-400">
+                  Share your design with others (reviewed before it goes live).
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
         {approved && (
           <div className="mt-10 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center">
             <div className="w-11 h-11 rounded-xl bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center mx-auto mb-3">
@@ -187,6 +237,7 @@ function Viewer({
 export default function DesignViewer(props: {
   designId: string;
   approved: boolean;
+  galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];
 }) {

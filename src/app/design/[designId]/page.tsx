@@ -110,6 +110,7 @@ export default async function DesignPage({
       <DesignViewer
         designId={designId}
         approved={approved}
+        galleryStatus={d?.gallery_status || "none"}
         items={d ? designItems(d) : []}
         initial={
           d
