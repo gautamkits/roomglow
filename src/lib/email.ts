@@ -183,10 +183,16 @@ export async function sendDesignReadyEmail(
     : "Your room redesign is ready ✨";
 
   try {
+    // Accept the token with or without the "Zoho-enczapikey " prefix —
+    // ZeptoMail's copy button is inconsistent about including it.
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+
     const res = await fetch(ZEPTOMAIL_API_URL, {
       method: "POST",
       headers: {
-        Authorization: `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`,
+        Authorization: authHeader,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
