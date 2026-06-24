@@ -21,8 +21,8 @@ export default function ShareButton({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "My RoomGlow design",
-          text: "Check out this room transformation made with RoomGlow",
+          title: "My Noosho design",
+          text: "Check out this room transformation made with Noosho",
           url: pageUrl,
         });
         return;
@@ -62,7 +62,7 @@ export default function ShareButton({
           <div className="absolute right-0 mt-2 z-50 w-52 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-lg p-1.5">
             <a
               href={gifUrl}
-              download={`roomglow-${designId.slice(0, 8)}.gif`}
+              download={`noosho-${designId.slice(0, 8)}.gif`}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               <Download size={15} className="text-orange-700" />

@@ -139,7 +139,7 @@ export default function Landing() {
               beforeSrc="/samples/patio-before.jpg"
               afterSrc="/samples/patio-after.png"
               beforeLabel="Before"
-              afterLabel="RoomGlow"
+              afterLabel="Noosho"
             />
             <p className="text-center text-xs text-zinc-400 mt-3">
               ← Drag to see a real transformation

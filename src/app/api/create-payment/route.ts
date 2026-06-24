@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
     const { longUrl } = await createPaymentRequest({
       amount,
-      purpose: `RoomGlow Design - ${designId.slice(0, 8)}`,
+      purpose: `Noosho Design - ${designId.slice(0, 8)}`,
       buyerName: session.user.name || "User",
       email: session.user.email || "",
       redirectUrl: `${baseUrl}/api/payment-callback?paymentId=${paymentId}&designId=${designId}`,

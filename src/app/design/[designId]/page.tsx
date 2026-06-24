@@ -8,8 +8,7 @@ import {
   designItems,
 } from "@/lib/admin";
 import DesignViewer from "./DesignViewer";
-
-const BASE = process.env.NEXTAUTH_URL || "https://roomglow-one.vercel.app";
+import { SITE_URL as BASE } from "@/lib/site";
 
 export async function generateMetadata({
   params,
@@ -18,11 +17,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { designId } = await params;
   const d = await getDesign(designId);
-  if (!d) return { title: "Design — RoomGlow" };
+  if (!d) return { title: "Design — Noosho" };
 
   const items = designItems(d);
   const itemSuffix = items.length ? ` with ${items.slice(0, 3).join(", ")}` : "";
-  const title = `${designTitle(d)}${itemSuffix} | RoomGlow`;
+  const title = `${designTitle(d)}${itemSuffix} | Noosho`;
   const description = designDescription(d);
   const ogImage = `${BASE}/api/og/${designId}`;
   const isPublic = d.gallery_status === "approved";

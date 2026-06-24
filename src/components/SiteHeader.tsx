@@ -31,7 +31,7 @@ export default function SiteHeader({
             <Wand2 size={14} className="text-white" />
           </span>
           <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            RoomGlow
+            Noosho
           </span>
         </Link>
 

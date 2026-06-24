@@ -1,6 +1,6 @@
 import LegalLayout from "@/components/LegalLayout";
 
-export const metadata = { title: "Contact — RoomGlow" };
+export const metadata = { title: "Contact — Noosho" };
 
 export default function ContactPage() {
   return (
@@ -12,7 +12,7 @@ export default function ContactPage() {
       <h2>Email</h2>
       <p>
         General & support:{" "}
-        <a href="mailto:hello@roomglow.app">hello@roomglow.app</a>
+        <a href="mailto:hello@noosho.com">hello@noosho.com</a>
       </p>
       <h2>Response time</h2>
       <p>

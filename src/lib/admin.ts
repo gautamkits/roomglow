@@ -42,15 +42,15 @@ export function designAltText(d: DesignLike): string {
   if (d.mode === "event" && ec) {
     const base = `AI ${ec.subTheme || ""} ${ec.eventLabel || "event"} decoration`.trim();
     return names.length
-      ? `${base} featuring ${names.join(", ")} — designed with RoomGlow`
-      : `${base} — designed with RoomGlow`;
+      ? `${base} featuring ${names.join(", ")} — designed with Noosho`
+      : `${base} — designed with Noosho`;
   }
   const style = ra?.currentStyle ? `${ra.currentStyle} ` : "";
   const room = ra?.roomType || "room";
   const base = `AI interior design of a ${style}${room}`.trim();
   return names.length
-    ? `${base} featuring ${names.join(", ")} — designed with RoomGlow`
-    : `${base} — designed with RoomGlow`;
+    ? `${base} featuring ${names.join(", ")} — designed with Noosho`
+    : `${base} — designed with Noosho`;
 }
 
 /** SEO meta description: room/style/event + the actual items in the design. */
@@ -62,7 +62,7 @@ export function designDescription(d: DesignLike & { design_narrative?: string })
   const narrative = (d.design_narrative || "").trim();
   const lead = narrative
     ? narrative
-    : `${designTitle(d)} — an AI-generated design you can shop, made from one photo with RoomGlow.`;
+    : `${designTitle(d)} — an AI-generated design you can shop, made from one photo with Noosho.`;
   return `${lead}${itemsPhrase}`.slice(0, 300);
 }
 

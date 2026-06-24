@@ -19,7 +19,7 @@ export default function Footer() {
               <Wand2 size={14} className="text-white" />
             </span>
             <span className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              RoomGlow
+              Noosho
             </span>
           </div>
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
@@ -35,7 +35,7 @@ export default function Footer() {
           </nav>
         </div>
         <p className="text-xs text-zinc-400 mt-8">
-          © {new Date().getFullYear()} RoomGlow. AI-generated designs are
+          © {new Date().getFullYear()} Noosho. AI-generated designs are
           suggestions for inspiration. Product prices and availability are set
           by Amazon. As an Amazon Associate we earn from qualifying purchases.
         </p>

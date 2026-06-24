@@ -20,7 +20,7 @@ import GallerySearch from "@/components/GallerySearch";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "RoomGlow — AI room & event designs from one photo",
+  title: "Noosho — AI room & event designs from one photo",
   description:
     "Browse real AI-generated interior and event designs, each shoppable from a single photo. Find inspiration, then design your own — free.",
   alternates: { canonical: "/" },

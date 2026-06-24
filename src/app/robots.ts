@@ -1,6 +1,5 @@
 import type { MetadataRoute } from "next";
-
-const BASE = process.env.NEXTAUTH_URL || "https://roomglow-one.vercel.app";
+import { SITE_URL as BASE } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {

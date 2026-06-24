@@ -57,7 +57,7 @@ export default function GalleryPreview() {
               beforeSrc={d.original_image_url}
               afterSrc={d.generated_image_url}
               beforeLabel="Before"
-              afterLabel="RoomGlow"
+              afterLabel="Noosho"
             />
             <div className="flex items-center justify-between gap-3 mt-3">
               <Link

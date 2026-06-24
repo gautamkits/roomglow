@@ -222,7 +222,7 @@ function Viewer({
               Want this for your own space?
             </h3>
             <p className="text-sm text-zinc-500 mb-4">
-              Upload a photo and RoomGlow designs it for you — free to start.
+              Upload a photo and Noosho designs it for you — free to start.
             </p>
             <button
               onClick={() => signIn("google", { callbackUrl: "/" })}

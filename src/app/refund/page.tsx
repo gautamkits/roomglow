@@ -1,12 +1,12 @@
 import LegalLayout from "@/components/LegalLayout";
 
-export const metadata = { title: "Refund Policy — RoomGlow" };
+export const metadata = { title: "Refund Policy — Noosho" };
 
 export default function RefundPage() {
   return (
     <LegalLayout title="Refund Policy" updated="June 2026">
       <p>
-        RoomGlow is currently free to use — you can generate designs and view
+        Noosho is currently free to use — you can generate designs and view
         results at no charge. If and when paid design unlocks or credits are
         introduced, the following applies.
       </p>
@@ -20,7 +20,7 @@ export default function RefundPage() {
       <p>
         If a generation fails, you were charged in error, or the result did not
         deliver, email{" "}
-        <a href="mailto:hello@roomglow.app">hello@roomglow.app</a> within 7 days
+        <a href="mailto:hello@noosho.com">hello@noosho.com</a> within 7 days
         with your account email and we&apos;ll refund or re-credit you.
       </p>
       <h2>Product purchases</h2>

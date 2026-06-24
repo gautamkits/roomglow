@@ -1,17 +1,17 @@
 import LegalLayout from "@/components/LegalLayout";
 
-export const metadata = { title: "Terms & Conditions — RoomGlow" };
+export const metadata = { title: "Terms & Conditions — Noosho" };
 
 export default function TermsPage() {
   return (
     <LegalLayout title="Terms & Conditions" updated="June 2026">
       <p>
-        These terms govern your use of RoomGlow. By using the service you agree
+        These terms govern your use of Noosho. By using the service you agree
         to them.
       </p>
       <h2>The service</h2>
       <p>
-        RoomGlow generates AI design suggestions and matches them to products
+        Noosho generates AI design suggestions and matches them to products
         available on Amazon. Generated images are illustrative previews, not
         guarantees of exact real-world results.
       </p>
@@ -35,7 +35,7 @@ export default function TermsPage() {
       </p>
       <h2>Contact</h2>
       <p>
-        Questions? <a href="mailto:hello@roomglow.app">hello@roomglow.app</a>
+        Questions? <a href="mailto:hello@noosho.com">hello@noosho.com</a>
       </p>
     </LegalLayout>
   );

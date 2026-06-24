@@ -1,12 +1,12 @@
 import LegalLayout from "@/components/LegalLayout";
 
-export const metadata = { title: "About — RoomGlow" };
+export const metadata = { title: "About — Noosho" };
 
 export default function AboutPage() {
   return (
-    <LegalLayout title="About RoomGlow">
+    <LegalLayout title="About Noosho">
       <p>
-        RoomGlow turns a single room photo into a designer-quality space — and
+        Noosho turns a single room photo into a designer-quality space — and
         shows you the exact products to recreate it. We believe great interior
         and event design shouldn&apos;t require a professional budget or hours of
         scrolling through catalogues.
@@ -27,7 +27,7 @@ export default function AboutPage() {
       <h2>Get in touch</h2>
       <p>
         Questions or feedback? Reach us any time at{" "}
-        <a href="mailto:hello@roomglow.app">hello@roomglow.app</a>.
+        <a href="mailto:hello@noosho.com">hello@noosho.com</a>.
       </p>
     </LegalLayout>
   );

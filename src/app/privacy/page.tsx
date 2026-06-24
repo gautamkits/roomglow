@@ -1,13 +1,13 @@
 import LegalLayout from "@/components/LegalLayout";
 
-export const metadata = { title: "Privacy Policy — RoomGlow" };
+export const metadata = { title: "Privacy Policy — Noosho" };
 
 export default function PrivacyPage() {
   return (
     <LegalLayout title="Privacy Policy" updated="June 2026">
       <p>
         This policy explains what we collect, why, and your choices. By using
-        RoomGlow you agree to the practices described here.
+        Noosho you agree to the practices described here.
       </p>
       <h2>What we collect</h2>
       <p>
@@ -31,7 +31,7 @@ export default function PrivacyPage() {
       <h2>Your choices</h2>
       <p>
         You can delete a saved design at any time, or email{" "}
-        <a href="mailto:hello@roomglow.app">hello@roomglow.app</a> to request
+        <a href="mailto:hello@noosho.com">hello@noosho.com</a> to request
         deletion of your account and data.
       </p>
       <h2>Security</h2>

@@ -266,7 +266,7 @@ function HomeContent() {
                 {isUnlocked && generatedImage && (
                   <a
                     href={generatedImage}
-                    download={`roomglow-${mode}-design.png`}
+                    download={`noosho-${mode}-design.png`}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
                   >
                     <Download size={15} />

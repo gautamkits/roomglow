@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getApprovedDesignIds } from "@/lib/db";
-
-const BASE = process.env.NEXTAUTH_URL || "https://roomglow-one.vercel.app";
+import { SITE_URL as BASE } from "@/lib/site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes = ["", "/explore", "/about", "/contact", "/privacy", "/terms", "/refund"].map(

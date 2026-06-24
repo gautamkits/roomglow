@@ -8,14 +8,14 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "RoomGlow - AI Interior Design",
+  title: "Noosho - AI Interior Design",
   description:
     "Upload a photo of your room and get AI-powered product recommendations to transform your space",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "RoomGlow",
+    title: "Noosho",
   },
 };
 
