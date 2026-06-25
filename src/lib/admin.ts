@@ -107,6 +107,39 @@ export function designEventType(d: DesignLike): string | null {
   return ec?.eventLabel || null;
 }
 
+// Synonym groups so related words match — e.g. searching "patio" surfaces a
+// "balcony" design, "couch" finds a "sofa". Matching is bidirectional within
+// each group.
+const SYNONYM_GROUPS: string[][] = [
+  ["patio", "balcony", "terrace", "deck", "veranda", "verandah", "porch", "outdoor", "garden"],
+  ["living room", "living", "lounge", "drawing room", "sitting room", "family room"],
+  ["bedroom", "master bedroom", "guest room"],
+  ["kids", "children", "child", "nursery", "kids room"],
+  ["kitchen", "kitchenette"],
+  ["dining", "dining room"],
+  ["bathroom", "washroom", "restroom", "toilet"],
+  ["office", "study", "workspace", "home office", "desk"],
+  ["birthday", "bday"],
+  ["baby shower", "babyshower"],
+  ["sofa", "couch", "sectional", "settee"],
+  ["rug", "carpet", "area rug"],
+  ["lamp", "light", "lighting", "lamps", "sconce"],
+  ["art", "wall art", "painting", "artwork", "canvas", "poster"],
+  ["plant", "planter", "greenery", "indoor plant", "foliage"],
+  ["curtain", "curtains", "drapes", "blinds"],
+];
+
+/** Expand a search term to itself plus any synonyms in its group(s). */
+function expandTerm(term: string): string[] {
+  const out = new Set<string>([term]);
+  for (const group of SYNONYM_GROUPS) {
+    if (group.some((g) => g === term || g.split(" ").includes(term))) {
+      group.forEach((g) => out.add(g));
+    }
+  }
+  return [...out];
+}
+
 /** True if the design matches a free-text query across title, items, room, style, theme. */
 export function matchesQuery(d: DesignLike & { design_narrative?: string }, q: string): boolean {
   if (!q) return true;
@@ -124,11 +157,12 @@ export function matchesQuery(d: DesignLike & { design_narrative?: string }, q: s
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+  // Each query word must match (itself or a synonym) somewhere in the haystack.
   return q
     .toLowerCase()
     .split(/\s+/)
     .filter(Boolean)
-    .every((term) => hay.includes(term));
+    .every((term) => expandTerm(term).some((v) => hay.includes(v)));
 }
 
 function parseJsonish(v: unknown) {
