@@ -3,8 +3,8 @@
   "short_name": "Noosho",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4F46E5",
+  "background_color": "#faf6f0",
+  "theme_color": "#bd6a43",
   "icons": [
     {
       "src": "/icons/icon-192.png",
