@@ -7,7 +7,15 @@ import { designTitle, designDescription, designItems } from "@/lib/admin";
 import {
   generateRevealVideo,
   isRevealVideoSupported,
+  type RevealAspect,
 } from "@/lib/revealVideo";
+
+const ASPECTS: { id: RevealAspect; label: string }[] = [
+  { id: "original", label: "Original" },
+  { id: "1:1", label: "1:1" },
+  { id: "4:5", label: "4:5" },
+  { id: "9:16", label: "9:16" },
+];
 
 export interface RevealDesign {
   id: string;
@@ -32,6 +40,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [aspect, setAspect] = useState<RevealAspect>("original");
 
   const supported = isRevealVideoSupported();
   const title = designTitle(design);
@@ -57,13 +66,17 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
         {
           beforeUrl: `/api/image/${design.id}/before?inline=1`,
           afterUrl: `/api/image/${design.id}/after?inline=1`,
+          aspect,
         },
         (f) => setPct(Math.round(f * 100))
       );
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `noosho-${slugify(title) || design.id.slice(0, 8)}.mp4`;
+      a.download = `noosho-${slugify(title) || design.id.slice(0, 8)}-${aspect.replace(
+        ":",
+        "x"
+      )}.mp4`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -88,14 +101,37 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   return (
     <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800 pt-3">
       {supported ? (
-        <button
-          onClick={exportVideo}
-          disabled={busy}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
-        >
-          <Film size={15} />
-          {busy ? `Rendering… ${pct}%` : "Export reveal (9:16 MP4)"}
-        </button>
+        <>
+          <div className="flex items-center gap-1 mb-2 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
+            {ASPECTS.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setAspect(a.id)}
+                disabled={busy}
+                className={`flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                  aspect === a.id
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                }`}
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={exportVideo}
+            disabled={busy}
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
+          >
+            <Film size={15} />
+            {busy ? `Rendering… ${pct}%` : "Export reveal MP4"}
+          </button>
+          <p className="mt-1.5 text-[11px] text-zinc-400">
+            {aspect === "original"
+              ? "Matches the photo — no bands, nothing cropped."
+              : "Fills the frame — no bands; edges may be trimmed."}
+          </p>
+        </>
       ) : (
         <div className="text-xs text-zinc-500">
           <p className="mb-1.5">Open in Chrome or Edge to export the MP4.</p>
