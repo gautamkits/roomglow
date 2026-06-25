@@ -9,7 +9,7 @@ function decodeDataUrl(dataUrl: string) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ designId: string; variant: string }> }
 ) {
   const { designId, variant } = await params;
@@ -20,6 +20,21 @@ export async function GET(
     variant === "before"
       ? design.original_image_url
       : design.generated_image_url;
+
+  // ?inline=1 streams the bytes from this same origin (instead of a 302 to the
+  // cross-origin Blob URL) so the image can be drawn to a canvas without
+  // tainting it — required for the in-browser reveal-video export.
+  const inline = new URL(request.url).searchParams.get("inline");
+  if (url?.startsWith("http") && inline) {
+    const upstream = await fetch(url);
+    if (!upstream.ok) return new Response("Upstream error", { status: 502 });
+    return new Response(upstream.body, {
+      headers: {
+        "Content-Type": upstream.headers.get("content-type") || "image/jpeg",
+        "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
+      },
+    });
+  }
 
   if (url?.startsWith("http")) return Response.redirect(url, 302);
 
