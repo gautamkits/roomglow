@@ -262,7 +262,8 @@ export async function generateDesignImage(
     colorSuggestion: string;
     imageUrl?: string;
   }[],
-  eventContext?: string
+  eventContext?: string,
+  styleHint?: string
 ): Promise<{
   generatedImage: string;
   hotspots: Array<{
@@ -348,6 +349,10 @@ ${addLine}
 ${productList}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
+      styleHint
+        ? `\n\nSTYLE DIRECTION: Apply a ${styleHint} interior design aesthetic — adjust the overall mood, lighting tone, and arrangement to reflect this style while still adding the exact listed products.`
+        : ""
+    }${
       eventContext
         ? `
 

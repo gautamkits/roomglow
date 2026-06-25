@@ -3,7 +3,7 @@ import { generateDesignImage } from "@/lib/gemini";
 
 export async function POST(request: Request) {
   try {
-    const { originalImage, products, eventContext } = await request.json();
+    const { originalImage, products, eventContext, styleHint } = await request.json();
     if (!originalImage || !products?.length) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
@@ -12,7 +12,8 @@ export async function POST(request: Request) {
     const { generatedImage, hotspots } = await generateDesignImage(
       base64,
       products,
-      eventContext
+      eventContext,
+      styleHint || undefined
     );
 
     return NextResponse.json({ generatedImage, hotspots });

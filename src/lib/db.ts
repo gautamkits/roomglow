@@ -231,6 +231,85 @@ export async function getUserEventDates(userId: string) {
   return rows;
 }
 
+/** Returns upcoming events (within daysAhead days) with the user's email/name for reminder emails. */
+export async function getUpcomingEventReminders(daysAhead: number) {
+  const { rows } = await sql`
+    SELECT
+      ed.id, ed.event_type, ed.event_label, ed.event_date, ed.honoree,
+      u.email, u.name
+    FROM event_dates ed
+    JOIN users u ON u.id = ed.user_id
+    WHERE ed.event_date >= CURRENT_DATE
+      AND ed.event_date <= CURRENT_DATE + (${daysAhead} || ' days')::interval
+    ORDER BY ed.event_date ASC
+  `;
+  return rows as {
+    id: string;
+    event_type: string;
+    event_label: string;
+    event_date: string;
+    honoree: string | null;
+    email: string;
+    name: string | null;
+  }[];
+}
+
+/** Analytics: aggregate stats for the admin dashboard. */
+export async function getAnalyticsStats() {
+  const [totals, funnel, revenue, roomTypes, signups] = await Promise.all([
+    sql`
+      SELECT
+        COUNT(*) AS total_designs,
+        COUNT(*) FILTER (WHERE mode = 'space') AS space_designs,
+        COUNT(*) FILTER (WHERE mode = 'event') AS event_designs,
+        COUNT(*) FILTER (WHERE is_unlocked = true) AS unlocked_designs,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS designs_7d,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS designs_30d
+      FROM designs
+    `,
+    sql`
+      SELECT
+        COUNT(*) FILTER (WHERE gallery_status = 'pending') AS pending,
+        COUNT(*) FILTER (WHERE gallery_status = 'approved') AS approved,
+        COUNT(*) FILTER (WHERE gallery_status = 'rejected') AS rejected,
+        COALESCE(SUM(like_count), 0) AS total_likes
+      FROM designs
+    `,
+    sql`
+      SELECT
+        COALESCE(SUM(amount_paise) FILTER (WHERE status = 'completed'), 0) AS total_paise,
+        COUNT(*) FILTER (WHERE status = 'completed') AS paid_count,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days' AND status = 'completed') AS paid_30d
+      FROM payments
+    `,
+    sql`
+      SELECT
+        room_analysis->>'roomType' AS room_type,
+        COUNT(*) AS cnt
+      FROM designs
+      WHERE room_analysis->>'roomType' IS NOT NULL
+      GROUP BY room_type
+      ORDER BY cnt DESC
+      LIMIT 8
+    `,
+    sql`
+      SELECT
+        COUNT(*) AS total_users,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS users_7d,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS users_30d
+      FROM users
+    `,
+  ]);
+
+  return {
+    totals: totals.rows[0],
+    funnel: funnel.rows[0],
+    revenue: revenue.rows[0],
+    roomTypes: roomTypes.rows,
+    signups: signups.rows[0],
+  };
+}
+
 export async function createPayment(userId: string, designId: string, amountPaise: number) {
   const { rows } = await sql`
     INSERT INTO payments (user_id, design_id, amount_paise)

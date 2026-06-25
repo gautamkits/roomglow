@@ -260,6 +260,50 @@ export function useRoomFlow() {
     [roomAnalysis, image, mode, eventConfig, maxBudget]
   );
 
+  const handleRegenerate = useCallback(
+    async (styleHint: string) => {
+      if (!image || !products.length) return;
+      setStep("generating");
+      setError(null);
+      setStatusMessage(`Applying ${styleHint} style...`);
+
+      const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
+
+      try {
+        const res = await fetch("/api/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            originalImage: image,
+            eventContext,
+            styleHint,
+            products: products.map((p: ProductResult) => ({
+              category: p.recommendation.category,
+              placement: p.recommendation.placement,
+              title: p.amazonProduct?.title || p.recommendation.category,
+              colorSuggestion: p.recommendation.colorSuggestion,
+              imageUrl: p.amazonProduct?.imageUrl || "",
+            })),
+          }),
+        });
+        if (!res.ok) throw new Error("Generation failed");
+        const design = await res.json();
+        const genImg = design.generatedImage
+          ? `data:image/png;base64,${design.generatedImage}`
+          : generatedImage;
+        setGeneratedImage(genImg);
+        setHotspots(design.hotspots || []);
+        setStep("results");
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "Regeneration failed. Please try again."
+        );
+        setStep("results");
+      }
+    },
+    [image, products, mode, eventConfig, generatedImage]
+  );
+
   const handleUnlocked = useCallback(() => {
     setIsUnlocked(true);
   }, []);
@@ -302,6 +346,7 @@ export function useRoomFlow() {
     submitEventConfig,
     handleImageSelected,
     handleProductSelection,
+    handleRegenerate,
     handleUnlocked,
     reset,
   };

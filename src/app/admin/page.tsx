@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
+import { Check, X, BarChart2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -96,6 +96,15 @@ function AdminContent() {
         user={session?.user}
         isAdmin={session?.user?.isAdmin}
         showDesignCta={false}
+        rightExtra={
+          <button
+            onClick={() => router.push("/admin/analytics")}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+          >
+            <BarChart2 size={14} />
+            Analytics
+          </button>
+        }
         center={
           <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
             <button

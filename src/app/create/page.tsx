@@ -9,6 +9,7 @@ import {
   Sparkles,
   Download,
   Share2,
+  RefreshCw,
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { useUserLibrary } from "@/lib/useUserLibrary";
@@ -45,6 +46,7 @@ function HomeContent() {
     statusMessage,
     handleImageSelected,
     handleProductSelection,
+    handleRegenerate,
     handleUnlocked,
     reset,
   } = useRoomFlow();
@@ -345,7 +347,29 @@ function HomeContent() {
               )}
             </div>
 
-            <div className="flex items-center justify-center gap-3 mt-8 animate-fade-up-delay-2">
+            {isUnlocked && mode === "space" && (
+              <div className="mt-8 animate-fade-up-delay-2">
+                <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
+                  Try a different style
+                </p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {["Modern", "Bohemian", "Minimalist", "Industrial", "Scandinavian"].map(
+                    (style) => (
+                      <button
+                        key={style}
+                        onClick={() => handleRegenerate(style)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm hover:border-orange-700 hover:text-orange-700 dark:hover:border-orange-600 dark:hover:text-orange-400 transition-colors"
+                      >
+                        <RefreshCw size={12} />
+                        {style}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">
               <button
                 onClick={reset}
                 className="flex items-center gap-2 px-5 py-2.5 bg-orange-700 hover:bg-orange-800 text-white font-medium text-sm rounded-lg transition-colors"

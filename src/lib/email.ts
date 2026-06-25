@@ -228,6 +228,128 @@ export function buildDesignReadyHtml(data: DesignReadyEmailData): string {
 </html>`;
 }
 
+export interface EventReminderEmailData {
+  to: string;
+  name?: string;
+  eventLabel: string;
+  eventDate: string; // ISO date string e.g. "2026-07-10"
+  honoree?: string | null;
+  daysUntil: number;
+}
+
+export function buildEventReminderHtml(data: EventReminderEmailData): string {
+  const firstName = data.name ? esc(data.name.split(" ")[0]) : "there";
+  const dateFormatted = new Date(data.eventDate).toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Kolkata",
+  });
+  const honoreeText = data.honoree ? ` for ${esc(data.honoree)}` : "";
+  const urgency =
+    data.daysUntil === 0
+      ? "It's today!"
+      : data.daysUntil === 1
+      ? "It's tomorrow!"
+      : `It's in ${data.daysUntil} days.`;
+  const createUrl = `${SITE_URL}/create`;
+  const year = new Date().getFullYear();
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="color-scheme" content="light" /></head>
+<body style="margin:0;padding:0;background:${LINEN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">Your ${esc(data.eventLabel)}${honoreeText} is coming up — design the space before it's too late.</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid ${BORDER};">
+
+        <tr><td style="background:${INK};padding:18px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td valign="middle"><img src="${esc(LOGO_URL)}" width="34" height="34" alt="Noosho" style="display:block;width:34px;height:34px;border-radius:9px;" /></td>
+            <td valign="middle" style="padding-left:10px;"><span style="font-size:21px;font-weight:700;letter-spacing:-0.02em;color:${LINEN};">noosho</span></td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:28px 28px 0;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.10em;color:${CLAY_CTA};margin:0 0 8px;">UPCOMING EVENT REMINDER</div>
+          <h1 style="font-size:25px;font-weight:700;color:${TEXT};margin:0 0 8px;letter-spacing:-0.02em;line-height:1.25;">
+            Your ${esc(data.eventLabel)}${honoreeText} is almost here
+          </h1>
+          <p style="font-size:15px;color:${MUTED};margin:0 0 20px;line-height:1.6;">Hi ${firstName}, ${urgency} ${dateFormatted}.</p>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 24px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};border-radius:14px;border:1px solid ${BORDER};">
+            <tr><td style="padding:22px 24px;">
+              <div style="font-size:32px;margin-bottom:10px;">🎉</div>
+              <div style="font-size:17px;font-weight:700;color:${TEXT};margin:0 0 6px;">Ready to set the scene?</div>
+              <div style="font-size:14px;color:${MUTED};line-height:1.6;margin:0 0 18px;">
+                Upload a photo of the venue and Noosho will design the decorations — then line up the exact products to shop.
+              </div>
+              <a href="${esc(createUrl)}" style="display:inline-block;background:${CLAY_CTA};color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:11px;">Design the space →</a>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:8px 28px 28px;">
+          <p style="font-size:11px;line-height:1.6;color:${FAINT};margin:0;border-top:1px solid ${BORDER};padding-top:14px;">
+            © ${year} Noosho. You&rsquo;re receiving this because you saved an upcoming event on Noosho.
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendEventReminderEmail(
+  data: EventReminderEmailData
+): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN) return { ok: false };
+  if (!data.to) return { ok: false };
+
+  const honoreeText = data.honoree ? ` for ${data.honoree}` : "";
+  const subject =
+    data.daysUntil <= 1
+      ? `Your ${data.eventLabel}${honoreeText} is ${data.daysUntil === 0 ? "today" : "tomorrow"}! 🎉`
+      : `${data.daysUntil} days until your ${data.eventLabel}${honoreeText} 🎉`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
+        subject,
+        htmlbody: buildEventReminderHtml(data),
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Reminder send failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email] Reminder send threw:", err);
+    return { ok: false };
+  }
+}
+
 /**
  * Send the "your design is ready" email via Zoho ZeptoMail.
  * Never throws — returns { ok } and logs failures so callers (save-design)
