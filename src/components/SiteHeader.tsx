@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Wand2, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import UserMenu from "./UserMenu";
+import Logo from "./Logo";
 
 interface MenuUser {
   name?: string | null;
@@ -26,13 +27,8 @@ export default function SiteHeader({
   return (
     <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="w-6 h-6 rounded-md bg-orange-700 flex items-center justify-center">
-            <Wand2 size={14} className="text-white" />
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Noosho
-          </span>
+        <Link href="/" className="shrink-0">
+          <Logo />
         </Link>
 
         {center ? <div className="flex-1 min-w-0">{center}</div> : <div className="flex-1" />}

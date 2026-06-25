@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Wand2 } from "lucide-react";
+import Logo from "./Logo";
 
 const LINKS = [
   { label: "About", href: "/about" },
@@ -14,14 +14,7 @@ export default function Footer() {
     <footer className="border-t border-zinc-200 dark:border-zinc-800 mt-20">
       <div className="max-w-5xl mx-auto px-5 py-10">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-2">
-            <span className="w-6 h-6 rounded-md bg-orange-700 flex items-center justify-center">
-              <Wand2 size={14} className="text-white" />
-            </span>
-            <span className="text-base font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-              Noosho
-            </span>
-          </div>
+          <Logo markSize={20} wordmarkClassName="text-base" />
           <nav className="flex flex-wrap gap-x-6 gap-y-2">
             {LINKS.map((l) => (
               <Link
