@@ -48,7 +48,6 @@ export default function PaywallOverlay({
   itemCount = 0,
   narrative,
   items = [],
-  imageUrl,
 }: PaywallOverlayProps) {
   const { data: session, status } = useSession();
   const { locale, paymentEnabled } = useLocale();
@@ -231,58 +230,66 @@ export default function PaywallOverlay({
 
   return (
     <div className="absolute inset-0 z-40">
-      {/* Dimming backdrop over the blurred design */}
-      <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/60 to-white/30 dark:from-zinc-950/90 dark:via-zinc-950/60 dark:to-zinc-950/30" />
+      {/* Frosted layer over the whole blurred design — it glows through */}
+      <div className="absolute inset-0 bg-white/70 dark:bg-zinc-950/75 backdrop-blur-xl" />
 
-      {/* Mobile: viewport-fixed centering. Desktop: confined to the image area. */}
-      <div className="fixed sm:absolute inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-        <div className="absolute inset-0 bg-zinc-900/40 sm:bg-transparent" />
-
-        {/* Card */}
-        <div className="relative pointer-events-auto w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl border border-zinc-200/80 dark:border-zinc-800 overflow-hidden">
-          {/* ── Sharp peek of the real design (image already on client; CSS-blur only) ── */}
-          {imageUrl && (
-            <div className="relative h-28 w-full overflow-hidden">
-              <img src={imageUrl} alt="" className="w-full h-full object-cover object-center" />
-              <div className="absolute inset-0 bg-gradient-to-t from-white dark:from-zinc-900 via-white/10 dark:via-zinc-900/10 to-transparent" />
-              <span className="absolute top-2.5 left-3 inline-flex items-center gap-1 text-[11px] font-medium text-white bg-zinc-900/55 backdrop-blur-sm px-2 py-0.5 rounded-full">
-                <Lock size={10} /> Preview
-              </span>
-            </div>
-          )}
-
-          <div className="p-5 sm:p-6">
-            {/* Headline */}
-            <h3 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
+      {/* Full-area content — no inner card, no scrollbar */}
+      <div className="absolute inset-0 flex justify-center items-start sm:items-center overflow-y-auto px-5 py-7 sm:px-10 sm:py-10">
+        <div className="w-full max-w-3xl grid gap-y-6 gap-x-12 sm:grid-cols-2 sm:items-center">
+          {/* ── Left: the dream ── */}
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-orange-800 dark:text-orange-300 bg-orange-50/90 dark:bg-orange-950/50 px-2.5 py-1 rounded-full mb-3">
+              <Lock size={11} /> {isEvent ? "Event design locked" : "Design locked"}
+            </span>
+            <h3 className="text-2xl sm:text-[1.75rem] font-semibold tracking-tight leading-tight text-zinc-900 dark:text-zinc-50">
               {isEvent ? "Unlock your event design" : "Unlock your full design"}
             </h3>
-            <p className="text-sm text-zinc-500 mt-1">
+            <p className="text-sm text-zinc-600 dark:text-zinc-300 mt-2">
               Not just a picture — the exact pieces to make it real.
             </p>
 
-            {/* The vision */}
             {narrative && (
-              <div className="mt-3.5 border-l-2 border-orange-700 pl-3">
-                <p className="text-[13px] italic text-zinc-600 dark:text-zinc-400 leading-relaxed line-clamp-2 sm:line-clamp-3">
+              <div className="mt-4 border-l-2 border-orange-700 pl-3.5">
+                <p className="text-[13px] italic text-zinc-600 dark:text-zinc-400 leading-relaxed line-clamp-3 sm:line-clamp-5">
                   {narrative}
                 </p>
               </div>
             )}
 
-            {/* Detailed value stack */}
-            <ul className="mt-4 space-y-3">
+            {items.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {items.slice(0, 6).map((it) => (
+                  <span
+                    key={it}
+                    className="px-2.5 py-1 rounded-full bg-white/70 dark:bg-zinc-800/70 text-zinc-700 dark:text-zinc-300 text-[11px]"
+                  >
+                    {it}
+                  </span>
+                ))}
+                {items.length > 6 && (
+                  <span className="px-2.5 py-1 rounded-full bg-white/70 dark:bg-zinc-800/70 text-zinc-500 text-[11px]">
+                    +{items.length - 6} more
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ── Right: value + offer ── */}
+          <div>
+            <ul className="space-y-3 mb-5">
               {benefits.map((b) => {
                 const Icon = b.icon;
                 return (
                   <li key={b.label} className="flex items-start gap-3">
-                    <span className="mt-0.5 w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/40 flex items-center justify-center shrink-0">
-                      <Icon size={15} className="text-orange-700" />
+                    <span className="mt-0.5 w-8 h-8 rounded-lg bg-orange-50/90 dark:bg-orange-950/50 flex items-center justify-center shrink-0">
+                      <Icon size={16} className="text-orange-700" />
                     </span>
                     <div className="min-w-0">
-                      <p className="text-[13.5px] font-medium text-zinc-900 dark:text-zinc-100 leading-tight">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 leading-tight">
                         {b.label}
                       </p>
-                      <p className="text-xs text-zinc-500 leading-snug mt-0.5">
+                      <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-snug mt-0.5">
                         {b.detail}
                       </p>
                     </div>
@@ -291,40 +298,16 @@ export default function PaywallOverlay({
               })}
             </ul>
 
-            {/* Named pieces */}
-            {items.length > 0 && (
-              <div className="mt-4">
-                <div className="flex flex-wrap gap-1.5">
-                  {items.slice(0, 5).map((it) => (
-                    <span
-                      key={it}
-                      className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px]"
-                    >
-                      {it}
-                    </span>
-                  ))}
-                  {items.length > 5 && (
-                    <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-[11px]">
-                      +{items.length - 5} more
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Divider */}
-            <div className="my-5 h-px bg-zinc-100 dark:bg-zinc-800" />
-
             {!isSignedIn ? (
               <>
                 <button
                   onClick={handleSignIn}
-                  className="w-full py-3 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-colors flex items-center justify-center gap-2"
+                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-orange-700 hover:bg-orange-800 transition-colors flex items-center justify-center gap-2 shadow-sm"
                 >
                   <LogIn size={16} />
                   Sign in with Google to continue
                 </button>
-                <p className="text-center text-xs text-zinc-400 mt-3">
+                <p className="text-center text-xs text-zinc-500 mt-3">
                   {paymentEnabled
                     ? `Then unlock for ${pricing?.saleLabel || fallbackPrice} — one-time`
                     : "Free · Saved to your profile"}
@@ -377,12 +360,12 @@ export default function PaywallOverlay({
                         onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                         onKeyDown={(e) => e.key === "Enter" && applyCoupon()}
                         placeholder="Coupon code"
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors uppercase"
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors uppercase"
                       />
                       <button
                         onClick={applyCoupon}
                         disabled={applying || !couponInput.trim()}
-                        className="px-4 py-2 rounded-lg text-sm font-medium border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 transition-colors disabled:opacity-50"
+                        className="px-4 py-2 rounded-lg text-sm font-medium bg-white/80 dark:bg-zinc-800/80 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 transition-colors disabled:opacity-50"
                       >
                         {applying ? "…" : "Apply"}
                       </button>
@@ -404,7 +387,7 @@ export default function PaywallOverlay({
                 <button
                   onClick={handlePay}
                   disabled={paying}
-                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-orange-700 hover:bg-orange-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
+                  className="w-full py-3.5 rounded-xl font-semibold text-white bg-orange-700 hover:bg-orange-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 shadow-md"
                 >
                   <Lock size={16} />
                   {paying ? "Opening checkout…" : `Unlock for ${currentPrice}`}
@@ -413,7 +396,7 @@ export default function PaywallOverlay({
                 {error && <p className="text-xs text-red-600 mt-2 text-center">{error}</p>}
 
                 {/* Trust signals */}
-                <div className="flex items-center justify-center gap-3 mt-3 text-[11px] text-zinc-400">
+                <div className="flex items-center justify-center gap-3 mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
                   <span className="flex items-center gap-1">
                     <ShieldCheck size={13} /> Secure via Stripe
                   </span>
