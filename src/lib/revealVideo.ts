@@ -6,7 +6,9 @@ const FPS = 30;
 const HOLD_BEFORE = 24; // ~0.8s
 const WIPE = 90; // ~3.0s
 const HOLD_AFTER = 42; // ~1.4s
-const TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
+const REVEAL_TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
+const PRODUCT_SEG = 45; // ~1.5s per shoppable product card
+const PRODUCT_END_HOLD = 15; // ~0.5s extra hold on the final card (loop-friendly)
 const MAX_SIDE = 1920; // clamp so we stay within H.264 level limits
 
 export function isRevealVideoSupported(): boolean {
@@ -219,15 +221,155 @@ function renderFrame(
   drawWatermark(ctx, W, H);
 }
 
+/** Word-wrap text to a max width, capped to maxLines (last line ellipsized). */
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (let i = 0; i < words.length; i++) {
+    const test = line ? `${line} ${words[i]}` : words[i];
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = words[i];
+      if (lines.length === maxLines) break; // no room for more lines
+    } else {
+      line = test;
+    }
+  }
+  if (lines.length < maxLines) {
+    lines.push(line);
+    return lines;
+  }
+  // Ran out of lines — ellipsize whatever didn't fit onto the last line.
+  let last = lines[maxLines - 1];
+  if (line && line !== last) last = `${last} ${line}`;
+  while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) {
+    last = last.slice(0, -1).trimEnd();
+  }
+  lines[maxLines - 1] = `${last}…`;
+  return lines.slice(0, maxLines);
+}
+
+/** Draw a shoppable product card over the (dimmed) after design. t: 0→1 fade-in. */
+function renderProductCard(
+  ctx: CanvasRenderingContext2D,
+  after: HTMLImageElement,
+  prodImg: HTMLImageElement | null,
+  title: string,
+  price: string,
+  W: number,
+  H: number,
+  t: number
+) {
+  ctx.clearRect(0, 0, W, H);
+  drawCover(ctx, after, W, H);
+
+  // Dim the background so the card pops.
+  ctx.fillStyle = "rgba(20,16,12,0.55)";
+  ctx.fillRect(0, 0, W, H);
+
+  const ease = smoothstep(t);
+  const slide = (1 - ease) * H * 0.06;
+  ctx.save();
+  ctx.globalAlpha = ease;
+  ctx.translate(0, slide);
+
+  // Card geometry — scale to the frame's smaller dimension.
+  const s = Math.min(W, H);
+  const cardW = Math.min(W * 0.84, s * 1.15);
+  const pad = s * 0.045;
+  const thumb = s * 0.26;
+  const cardH = thumb + pad * 2;
+  const cx = (W - cardW) / 2;
+  const cy = H * 0.5 - cardH / 2;
+
+  // Card background.
+  roundRect(ctx, cx, cy, cardW, cardH, s * 0.04);
+  ctx.fillStyle = "#ffffff";
+  ctx.fill();
+
+  // Product thumbnail (contain-fit on white tile).
+  const tileX = cx + pad;
+  const tileY = cy + pad;
+  roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.025);
+  ctx.save();
+  ctx.clip();
+  ctx.fillStyle = "#f5f1ea";
+  ctx.fillRect(tileX, tileY, thumb, thumb);
+  if (prodImg) {
+    const scale = Math.min(thumb / prodImg.width, thumb / prodImg.height);
+    const w = prodImg.width * scale;
+    const h = prodImg.height * scale;
+    ctx.drawImage(prodImg, tileX + (thumb - w) / 2, tileY + (thumb - h) / 2, w, h);
+  }
+  ctx.restore();
+
+  // Text column.
+  const textX = tileX + thumb + pad * 0.8;
+  const textW = cx + cardW - pad - textX;
+  let ty = tileY + s * 0.03;
+
+  const titleSize = Math.round(s * 0.038);
+  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+  ctx.fillStyle = "#1c1917";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  const titleLines = wrapText(ctx, title, textW, 2);
+  for (const l of titleLines) {
+    ctx.fillText(l, textX, ty);
+    ty += titleSize * 1.25;
+  }
+
+  // Price.
+  ty += s * 0.012;
+  const priceSize = Math.round(s * 0.05);
+  ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
+  ctx.fillStyle = "#a04525";
+  ctx.fillText(price, textX, ty);
+
+  // "Shop the look" pill anchored bottom-left of the text column.
+  const pillSize = Math.round(s * 0.026);
+  ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
+  const pillText = "Shop the look · noosho.com";
+  const pillTextW = ctx.measureText(pillText).width;
+  const pillPadX = s * 0.022;
+  const pillH = pillSize + s * 0.022;
+  const pillW = pillTextW + pillPadX * 2;
+  const pillX = textX;
+  const pillY = cy + cardH - pad - pillH;
+  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  ctx.fillStyle = "#a04525";
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  ctx.textBaseline = "middle";
+  ctx.fillText(pillText, pillX + pillPadX, pillY + pillH / 2 + 1);
+
+  ctx.restore();
+
+  drawWatermark(ctx, W, H);
+}
+
+export interface RevealProduct {
+  imageUrl: string; // same-origin (proxied) URL
+  title: string;
+  price: string;
+}
+
 export interface RevealVideoInput {
   beforeUrl: string;
   afterUrl: string;
   aspect?: RevealAspect;
+  products?: RevealProduct[];
 }
 
 /** Render the before→after wipe as an H.264 MP4 in the chosen aspect, in-browser. */
 export async function generateRevealVideo(
-  { beforeUrl, afterUrl, aspect = "original" }: RevealVideoInput,
+  { beforeUrl, afterUrl, aspect = "original", products = [] }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
@@ -238,6 +380,24 @@ export async function generateRevealVideo(
     loadImage(beforeUrl),
     loadImage(afterUrl),
   ]);
+
+  // Load product card images (same-origin/proxied). Drop any that fail so a
+  // single broken image never breaks the export.
+  const cards = (
+    await Promise.all(
+      products.slice(0, 2).map(async (p) => {
+        try {
+          const img = await loadImage(p.imageUrl);
+          return { img, title: p.title, price: p.price };
+        } catch {
+          return null;
+        }
+      })
+    )
+  ).filter((c): c is { img: HTMLImageElement; title: string; price: string } => !!c);
+
+  const TOTAL =
+    REVEAL_TOTAL + cards.length * PRODUCT_SEG + (cards.length ? PRODUCT_END_HOLD : 0);
 
   const { w: W, h: H } = outputSize(aspect, after.width, after.height);
 
@@ -270,14 +430,25 @@ export async function generateRevealVideo(
 
   const frameDur = 1_000_000 / FPS; // microseconds
   for (let i = 0; i < TOTAL; i++) {
-    let revealX = 1;
-    if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
-      revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
-    } else if (i >= HOLD_BEFORE + WIPE) {
-      revealX = 0;
+    if (i < REVEAL_TOTAL) {
+      // ── Reveal phase: hold before → wipe → hold after ──
+      let revealX = 1;
+      if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
+        revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
+      } else if (i >= HOLD_BEFORE + WIPE) {
+        revealX = 0;
+      }
+      renderFrame(ctx, before, after, W, H, revealX);
+    } else {
+      // ── Product card phase ──
+      const into = i - REVEAL_TOTAL;
+      let idx = Math.floor(into / PRODUCT_SEG);
+      if (idx > cards.length - 1) idx = cards.length - 1; // end-hold on last card
+      const local = into - idx * PRODUCT_SEG;
+      const card = cards[idx];
+      const t = Math.min(1, local / 12); // ~0.4s fade/slide-in
+      renderProductCard(ctx, after, card.img, card.title, card.price, W, H, t);
     }
-
-    renderFrame(ctx, before, after, W, H, revealX);
 
     const frame = new VideoFrame(canvas, {
       timestamp: Math.round(i * frameDur),

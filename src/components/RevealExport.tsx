@@ -8,6 +8,7 @@ import {
   generateRevealVideo,
   isRevealVideoSupported,
   type RevealAspect,
+  type RevealProduct,
 } from "@/lib/revealVideo";
 
 const ASPECTS: { id: RevealAspect; label: string }[] = [
@@ -16,6 +17,38 @@ const ASPECTS: { id: RevealAspect; label: string }[] = [
   { id: "4:5", label: "4:5" },
   { id: "9:16", label: "9:16" },
 ];
+
+interface ParsedProduct {
+  amazonProduct?: { title?: string; price?: string; imageUrl?: string } | null;
+  recommendation?: { category?: string } | null;
+}
+
+/** Top buyable products (image + price) from a design, as proxied card data. */
+function buyableProducts(design: RevealDesign): RevealProduct[] {
+  let prods: ParsedProduct[] = [];
+  const raw = design.products;
+  if (typeof raw === "string") {
+    try {
+      prods = JSON.parse(raw);
+    } catch {
+      prods = [];
+    }
+  } else if (Array.isArray(raw)) {
+    prods = raw as ParsedProduct[];
+  }
+  return prods
+    .map((p) => p.amazonProduct)
+    .filter(
+      (ap): ap is { title: string; price: string; imageUrl: string } =>
+        !!ap && !!ap.imageUrl && !!ap.price
+    )
+    .slice(0, 2)
+    .map((ap) => ({
+      imageUrl: `/api/proxy-image?url=${encodeURIComponent(ap.imageUrl)}`,
+      title: ap.title || "Featured product",
+      price: ap.price,
+    }));
+}
 
 export interface RevealDesign {
   id: string;
@@ -42,6 +75,10 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [copied, setCopied] = useState(false);
   const [aspect, setAspect] = useState<RevealAspect>("original");
 
+  const allProducts = buyableProducts(design);
+  // Default to 1 shop card (clamped to what's available) to keep exports fast.
+  const [cardCount, setCardCount] = useState(Math.min(1, allProducts.length));
+
   const supported = isRevealVideoSupported();
   const title = designTitle(design);
   const description = designDescription(design);
@@ -67,6 +104,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
           beforeUrl: `/api/image/${design.id}/before?inline=1`,
           afterUrl: `/api/image/${design.id}/after?inline=1`,
           aspect,
+          products: allProducts.slice(0, cardCount),
         },
         (f) => setPct(Math.round(f * 100))
       );
@@ -118,6 +156,27 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               </button>
             ))}
           </div>
+          {allProducts.length > 0 && (
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] text-zinc-400 shrink-0">Shop cards</span>
+              <div className="flex items-center gap-1 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
+                {Array.from({ length: allProducts.length + 1 }, (_, n) => (
+                  <button
+                    key={n}
+                    onClick={() => setCardCount(n)}
+                    disabled={busy}
+                    className={`flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                      cardCount === n
+                        ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                        : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+                    }`}
+                  >
+                    {n === 0 ? "None" : n}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <button
             onClick={exportVideo}
             disabled={busy}
