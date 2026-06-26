@@ -108,8 +108,8 @@ export default function PaywallOverlay({
     });
   };
 
-  const applyCoupon = async () => {
-    const code = couponInput.trim();
+  const applyCoupon = async (codeArg?: string) => {
+    const code = (codeArg ?? couponInput).trim();
     if (!code) return;
     setApplying(true);
     setCouponError(null);
@@ -137,6 +137,19 @@ export default function PaywallOverlay({
       setApplying(false);
     }
   };
+
+  // Auto-apply a coupon passed via the email link (?coupon=DESIGN20).
+  const autoCoupon = useRef(false);
+  useEffect(() => {
+    if (!paymentEnabled || autoCoupon.current) return;
+    const code = new URLSearchParams(window.location.search).get("coupon");
+    if (!code) return;
+    autoCoupon.current = true;
+    setCouponInput(code.toUpperCase());
+    setShowCoupon(true);
+    applyCoupon(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentEnabled]);
 
   const removeCoupon = () => {
     setApplied(null);
@@ -363,7 +376,7 @@ export default function PaywallOverlay({
                         className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors uppercase"
                       />
                       <button
-                        onClick={applyCoupon}
+                        onClick={() => applyCoupon()}
                         disabled={applying || !couponInput.trim()}
                         className="px-4 py-2 rounded-lg text-sm font-medium bg-white/80 dark:bg-zinc-800/80 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:border-zinc-400 transition-colors disabled:opacity-50"
                       >

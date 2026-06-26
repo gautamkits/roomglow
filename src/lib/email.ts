@@ -376,19 +376,42 @@ const ABANDON_COPY: Record<1 | 2 | 3, { eyebrow: string; subject: string; title:
     body: "Unlock to reveal the full-resolution redesign, the before & after, and live buy links for every piece in the room.",
   },
   3: {
-    eyebrow: "LAST CHANCE",
-    subject: "Last chance to unlock your design",
-    title: "This is your final reminder",
-    body: "Your design is still here, but this is the last nudge we'll send. Unlock now to see the full look and shop every piece before it slips off your list.",
+    eyebrow: "LAST CHANCE · 20% OFF",
+    subject: "Last chance — here's 20% off your design",
+    title: "Your final reminder — and a discount",
+    body: "This is the last nudge we'll send. To make it easy, here's 20% off — unlock now to see the full look and shop every piece before it slips off your list.",
   },
 };
+
+// Final (day-4) reminder carries a last-chance discount code. The matching
+// coupon must exist in the admin coupon manager for it to actually apply.
+const FINAL_COUPON_CODE = process.env.ABANDON_FINAL_COUPON || "DESIGN20";
+const FINAL_COUPON_PCT = 20;
 
 export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): string {
   const c = ABANDON_COPY[data.stage];
   const greeting = data.name ? `Hi ${esc(data.name.split(" ")[0])},` : "Hi there,";
-  const designUrl = `${SITE_URL}/design/${data.designId}`;
+  const isFinal = data.stage === 3;
+  // Final email pre-applies the discount via the link so it's auto-filled.
+  const designUrl = isFinal
+    ? `${SITE_URL}/design/${data.designId}?coupon=${FINAL_COUPON_CODE}`
+    : `${SITE_URL}/design/${data.designId}`;
   const priceLabel = formatAmount(data.amount, data.currency);
+  const discountedLabel = formatAmount(
+    Math.round(data.amount * (1 - FINAL_COUPON_PCT / 100)),
+    data.currency
+  );
   const year = new Date().getFullYear();
+
+  const couponBanner = isFinal
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+         <tr><td align="center" style="background:${LINEN};border:1px dashed ${CLAY};border-radius:12px;padding:16px 18px;">
+           <div style="font-size:13px;color:${MUTED};margin:0 0 4px;">Your last-chance offer — ${FINAL_COUPON_PCT}% off</div>
+           <div style="font-size:22px;font-weight:800;letter-spacing:0.04em;color:${CLAY_CTA};">${esc(FINAL_COUPON_CODE)}</div>
+           <div style="font-size:12px;color:${FAINT};margin-top:4px;">Applied automatically when you tap below</div>
+         </td></tr>
+       </table>`
+    : "";
 
   const narrative = data.designNarrative
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
@@ -430,8 +453,13 @@ export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): st
 
         <tr><td style="padding:22px 28px 4px;">
           ${narrative}
+          ${couponBanner}
           <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:11px;background:${CLAY_CTA};">
-            <a href="${esc(designUrl)}" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:11px;">Unlock for ${esc(priceLabel)} →</a>
+            <a href="${esc(designUrl)}" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:11px;">${
+              isFinal
+                ? `Unlock for ${esc(discountedLabel)} (was ${esc(priceLabel)}) →`
+                : `Unlock for ${esc(priceLabel)} →`
+            }</a>
           </td></tr></table>
           <p style="font-size:12px;color:${FAINT};margin:12px 0 0;">Secure checkout via Stripe · One-time payment</p>
         </td></tr>
