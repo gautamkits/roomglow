@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { stripe, STRIPE_PRICES } from "@/lib/stripe";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
-import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, getDesign } from "@/lib/db";
+import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, getDesign, recordCheckoutIntent } from "@/lib/db";
 import { evaluateCoupon, type CouponRow } from "@/lib/coupons";
 import { sendDesignReadyEmail } from "@/lib/email";
 import type { EventConfig, ProductResult } from "@/lib/types";
@@ -92,6 +92,19 @@ export async function POST(request: Request) {
       cancel_url: `${SITE_URL}/create`,
       customer_email: session.user.email ?? undefined,
     });
+
+    // Record the intent so the abandoned-checkout funnel can follow up if they
+    // don't complete payment. Non-fatal — never block checkout on this.
+    if (session.user.email) {
+      await recordCheckoutIntent({
+        userId: session.user.id,
+        designId,
+        email: session.user.email,
+        name: session.user.name ?? null,
+        amount,
+        currency,
+      }).catch((e) => console.error("[checkout] recordCheckoutIntent failed:", e));
+    }
 
     return NextResponse.json({ url: checkout.url });
   } catch (err) {

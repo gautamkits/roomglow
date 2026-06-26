@@ -360,6 +360,23 @@ async function ensureBillingSchema() {
       created_at TIMESTAMPTZ DEFAULT now()
     )
   `;
+  // Abandoned-checkout funnel: one row per user+design that started Stripe
+  // checkout. last_reminder_stage tracks which reminder (1=day1, 2=day3,
+  // 3=final/day4) has been sent. Reminders stop once the design is unlocked.
+  await sql`
+    CREATE TABLE IF NOT EXISTS checkout_intents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      design_id UUID,
+      email TEXT NOT NULL,
+      name TEXT,
+      amount INTEGER,
+      currency TEXT,
+      last_reminder_stage INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(user_id, design_id)
+    )
+  `;
   // Seed defaults from the current hardcoded prices (no-op once set).
   await sql`INSERT INTO pricing (locale, actual_amount, sale_amount, currency)
             VALUES ('IN', 9900, 9900, 'inr') ON CONFLICT (locale) DO NOTHING`;
@@ -454,4 +471,60 @@ export async function getCouponByCode(code: string) {
 
 export async function incrementCouponUse(code: string) {
   await sql`UPDATE coupons SET used_count = used_count + 1 WHERE code = ${code.toUpperCase()}`;
+}
+
+// ─── Abandoned-checkout funnel ───
+export async function recordCheckoutIntent(p: {
+  userId: string;
+  designId: string;
+  email: string;
+  name?: string | null;
+  amount: number;
+  currency: string;
+}) {
+  await ensureBillingSchema();
+  await sql`
+    INSERT INTO checkout_intents (user_id, design_id, email, name, amount, currency)
+    VALUES (${p.userId}, ${p.designId}, ${p.email}, ${p.name || null}, ${p.amount}, ${p.currency})
+    ON CONFLICT (user_id, design_id) DO UPDATE SET
+      email = EXCLUDED.email,
+      name = EXCLUDED.name,
+      amount = EXCLUDED.amount,
+      currency = EXCLUDED.currency,
+      last_reminder_stage = 0,
+      created_at = now()
+  `;
+}
+
+// Intents that are still unpaid and haven't finished the 3-stage funnel.
+export async function getDueCheckoutReminders() {
+  await ensureBillingSchema();
+  const { rows } = await sql`
+    SELECT
+      ci.id, ci.design_id, ci.email, ci.name, ci.amount, ci.currency,
+      ci.last_reminder_stage,
+      EXTRACT(EPOCH FROM (now() - ci.created_at)) / 86400 AS days_since,
+      d.mode, d.generated_image_url, d.design_narrative
+    FROM checkout_intents ci
+    JOIN designs d ON d.id = ci.design_id
+    WHERE ci.last_reminder_stage < 3
+      AND d.is_unlocked = false
+  `;
+  return rows as {
+    id: string;
+    design_id: string;
+    email: string;
+    name: string | null;
+    amount: number;
+    currency: string;
+    last_reminder_stage: number;
+    days_since: number;
+    mode: string;
+    generated_image_url: string;
+    design_narrative: string | null;
+  }[];
+}
+
+export async function markCheckoutReminderSent(id: string, stage: number) {
+  await sql`UPDATE checkout_intents SET last_reminder_stage = ${stage} WHERE id = ${id}`;
 }

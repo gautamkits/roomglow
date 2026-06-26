@@ -1,5 +1,6 @@
 import type { AppMode, EventConfig, ProductResult } from "@/lib/types";
 import { SITE_URL } from "@/lib/site";
+import { formatAmount } from "@/lib/locale";
 
 // ─── Config ───
 const ZEPTOMAIL_API_URL =
@@ -346,6 +347,140 @@ export async function sendEventReminderEmail(
     return { ok: true };
   } catch (err) {
     console.error("[email] Reminder send threw:", err);
+    return { ok: false };
+  }
+}
+
+export interface AbandonedCheckoutEmailData {
+  to: string;
+  name?: string;
+  designId: string;
+  generatedImageUrl: string;
+  designNarrative?: string | null;
+  amount: number; // smallest currency unit
+  currency: string;
+  stage: 1 | 2 | 3; // 1=day1, 2=day3, 3=final/day4
+}
+
+const ABANDON_COPY: Record<1 | 2 | 3, { eyebrow: string; subject: string; title: string; body: string }> = {
+  1: {
+    eyebrow: "YOUR DESIGN IS WAITING",
+    subject: "Your design is still waiting ✨",
+    title: "You're one step from the full look",
+    body: "You started unlocking your design but didn't finish. It's saved and ready — unlock it to see the full room and shop every piece.",
+  },
+  2: {
+    eyebrow: "DON'T LOSE YOUR DESIGN",
+    subject: "Still want your room redesign? 🛋️",
+    title: "Your design — and shopping list — are ready",
+    body: "Unlock to reveal the full-resolution redesign, the before & after, and live buy links for every piece in the room.",
+  },
+  3: {
+    eyebrow: "LAST CHANCE",
+    subject: "Last chance to unlock your design",
+    title: "This is your final reminder",
+    body: "Your design is still here, but this is the last nudge we'll send. Unlock now to see the full look and shop every piece before it slips off your list.",
+  },
+};
+
+export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): string {
+  const c = ABANDON_COPY[data.stage];
+  const greeting = data.name ? `Hi ${esc(data.name.split(" ")[0])},` : "Hi there,";
+  const designUrl = `${SITE_URL}/design/${data.designId}`;
+  const priceLabel = formatAmount(data.amount, data.currency);
+  const year = new Date().getFullYear();
+
+  const narrative = data.designNarrative
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;">
+         <tr><td style="border-left:3px solid ${CLAY};padding:2px 0 2px 14px;">
+           <p style="font-size:15px;line-height:1.6;color:${MUTED};margin:0;font-style:italic;">${esc(
+             data.designNarrative
+           )}</p>
+         </td></tr>
+       </table>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="color-scheme" content="light" /></head>
+<body style="margin:0;padding:0;background:${LINEN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.body)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid ${BORDER};">
+
+        <tr><td style="background:${INK};padding:18px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td valign="middle"><img src="${esc(LOGO_URL)}" width="34" height="34" alt="Noosho" style="display:block;width:34px;height:34px;border-radius:9px;" /></td>
+            <td valign="middle" style="padding-left:10px;"><span style="font-size:21px;font-weight:700;letter-spacing:-0.02em;color:${LINEN};">noosho</span></td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:26px 28px 0;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.10em;color:${CLAY_CTA};margin:0 0 8px;">${c.eyebrow}</div>
+          <h1 style="font-size:24px;font-weight:700;color:${TEXT};margin:0 0 8px;letter-spacing:-0.02em;line-height:1.25;">${esc(c.title)}</h1>
+          <p style="font-size:15px;color:${MUTED};margin:0 0 18px;line-height:1.6;">${greeting} ${esc(c.body)}</p>
+        </td></tr>
+
+        <tr><td style="padding:0 28px;">
+          <div style="position:relative;border-radius:14px;overflow:hidden;border:1px solid ${BORDER};">
+            <img src="${esc(data.generatedImageUrl)}" alt="Your design preview" width="544" style="display:block;width:100%;height:auto;filter:blur(7px);transform:scale(1.05);" />
+          </div>
+        </td></tr>
+
+        <tr><td style="padding:22px 28px 4px;">
+          ${narrative}
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:11px;background:${CLAY_CTA};">
+            <a href="${esc(designUrl)}" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:11px;">Unlock for ${esc(priceLabel)} →</a>
+          </td></tr></table>
+          <p style="font-size:12px;color:${FAINT};margin:12px 0 0;">Secure checkout via Stripe · One-time payment</p>
+        </td></tr>
+
+        <tr><td style="padding:26px 28px 28px;">
+          <p style="font-size:11px;line-height:1.6;color:${FAINT};margin:0;border-top:1px solid ${BORDER};padding-top:14px;">
+            © ${year} Noosho. ${AFFILIATE_DISCLOSURE}<br />
+            You're receiving this because you started unlocking a design on Noosho.
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendAbandonedCheckoutEmail(
+  data: AbandonedCheckoutEmailData
+): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+  const subject = ABANDON_COPY[data.stage].subject;
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
+        subject,
+        htmlbody: buildAbandonedCheckoutHtml(data),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Abandoned send failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error("[email] Abandoned send threw:", err);
     return { ok: false };
   }
 }
