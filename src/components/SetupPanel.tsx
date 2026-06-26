@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sofa, PartyPopper, Calendar } from "lucide-react";
-import { EVENTS } from "@/lib/events";
+import { getEvent, getEvents } from "@/lib/events";
 import type { AppMode, EventConfig } from "@/lib/types";
 import { useLocale } from "@/lib/useLocale";
 import ImageUpload from "./ImageUpload";
@@ -40,7 +40,8 @@ function Chip({
 }
 
 export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
-  const { budgetMin, budgetMax, budgetStep, formatBudget } = useLocale();
+  const { locale, budgetMin, budgetMax, budgetStep, formatBudget } = useLocale();
+  const events = getEvents(locale);
   const [mode, setMode] = useState<AppMode>("space");
   const [eventId, setEventId] = useState<string | null>(null);
   const [subTheme, setSubTheme] = useState<string | null>(null);
@@ -51,12 +52,12 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
   const [budgetSet, setBudgetSet] = useState(false);
 
-  const event = EVENTS.find((e) => e.id === eventId);
+  const event = eventId ? getEvent(eventId) : undefined;
   const eventConfigReady =
     mode === "space" || (!!event && !!subTheme && !!colorScheme);
   const eventReady = eventConfigReady && budgetSet;
-  // Gender is meaningful for child/baby-centric events, not anniversaries
-  const showGender = !!event && event.id !== "anniversary";
+  // Gender picker only for child-centric events (birthday, baby shower, …)
+  const showGender = !!event?.gendered;
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -104,7 +105,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
       {mode === "event" && (
         <div className="space-y-3 animate-fade-up">
           <div className="flex flex-wrap gap-1.5">
-            {EVENTS.map((e) => (
+            {events.map((e) => (
               <button
                 key={e.id}
                 onClick={() => {
