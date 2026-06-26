@@ -48,6 +48,8 @@ function HomeContent() {
     handleImageSelected,
     handleProductSelection,
     handleRegenerate,
+    restylesLeft,
+    maxRestyles,
     handleUnlocked,
     reset,
   } = useRoomFlow();
@@ -346,6 +348,7 @@ function HomeContent() {
                   itemCount={products.length}
                   narrative={designNarrative}
                   items={selectedItems.map((s) => s.label)}
+                  imageUrl={generatedImage || image || undefined}
                   onUnlocked={handleUnlocked}
                 />
               )}
@@ -355,6 +358,11 @@ function HomeContent() {
               <div className="mt-8 animate-fade-up-delay-2">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
                   Try a different style
+                  {restylesLeft < maxRestyles && (
+                    <span className="ml-1 normal-case tracking-normal text-zinc-400">
+                      · {restylesLeft} of {maxRestyles} left
+                    </span>
+                  )}
                 </p>
                 <div className="flex flex-wrap justify-center gap-2">
                   {["Modern", "Bohemian", "Minimalist", "Industrial", "Scandinavian"].map(
@@ -362,7 +370,8 @@ function HomeContent() {
                       <button
                         key={style}
                         onClick={() => handleRegenerate(style)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm hover:border-orange-700 hover:text-orange-700 dark:hover:border-orange-600 dark:hover:text-orange-400 transition-colors"
+                        disabled={restylesLeft === 0}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm hover:border-orange-700 hover:text-orange-700 dark:hover:border-orange-600 dark:hover:text-orange-400 transition-colors disabled:opacity-40 disabled:hover:border-zinc-200 disabled:hover:text-zinc-700 disabled:cursor-not-allowed"
                       >
                         <RefreshCw size={12} />
                         {style}
@@ -370,6 +379,11 @@ function HomeContent() {
                     )
                   )}
                 </div>
+                {restylesLeft === 0 && (
+                  <p className="text-center text-xs text-zinc-400 mt-2">
+                    You&apos;ve used all {maxRestyles} restyles for this design.
+                  </p>
+                )}
               </div>
             )}
 

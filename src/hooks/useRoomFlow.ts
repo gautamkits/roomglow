@@ -12,6 +12,9 @@ import type {
   Hotspot,
 } from "@/lib/types";
 
+// Soft cap on free restyles per design — each restyle is a paid image generation.
+const MAX_RESTYLES = 5;
+
 function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
   const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
@@ -38,6 +41,7 @@ export function useRoomFlow() {
   const [selectedItems, setSelectedItems] = useState<SuggestedProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
+  const [restyleCount, setRestyleCount] = useState(0);
 
   const selectMode = useCallback((m: AppMode) => {
     setMode(m);
@@ -263,6 +267,12 @@ export function useRoomFlow() {
   const handleRegenerate = useCallback(
     async (styleHint: string) => {
       if (!image || !products.length) return;
+      if (restyleCount >= MAX_RESTYLES) {
+        setError(
+          `You've used all ${MAX_RESTYLES} restyles for this design. Start a new design to keep exploring.`
+        );
+        return;
+      }
       setStep("generating");
       setError(null);
       setStatusMessage(`Applying ${styleHint} style...`);
@@ -293,6 +303,7 @@ export function useRoomFlow() {
           : generatedImage;
         setGeneratedImage(genImg);
         setHotspots(design.hotspots || []);
+        setRestyleCount((c) => c + 1);
         setStep("results");
       } catch (e) {
         setError(
@@ -301,7 +312,7 @@ export function useRoomFlow() {
         setStep("results");
       }
     },
-    [image, products, mode, eventConfig, generatedImage]
+    [image, products, mode, eventConfig, generatedImage, restyleCount]
   );
 
   const handleUnlocked = useCallback(() => {
@@ -324,6 +335,7 @@ export function useRoomFlow() {
     setSelectedItems([]);
     setError(null);
     setStatusMessage("");
+    setRestyleCount(0);
   }, []);
 
   return {
@@ -347,6 +359,8 @@ export function useRoomFlow() {
     handleImageSelected,
     handleProductSelection,
     handleRegenerate,
+    restylesLeft: Math.max(0, MAX_RESTYLES - restyleCount),
+    maxRestyles: MAX_RESTYLES,
     handleUnlocked,
     reset,
   };

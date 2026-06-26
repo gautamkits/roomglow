@@ -77,7 +77,8 @@ function Viewer({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ designId }),
         });
-        if (res.ok) setIsUnlocked(true);
+        const data = await res.json().catch(() => ({}));
+        if (data.unlocked === true) setIsUnlocked(true);
       } catch {}
     })();
   }, [approved, design, isUnlocked, status, designId]);
@@ -186,6 +187,7 @@ function Viewer({
               itemCount={design.products?.length ?? 0}
               narrative={design.design_narrative}
               items={items}
+              imageUrl={design.generated_image_url}
               onUnlocked={() => setIsUnlocked(true)}
             />
           )}

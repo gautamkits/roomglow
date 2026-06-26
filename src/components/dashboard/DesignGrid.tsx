@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Sofa, PartyPopper } from "lucide-react";
+import { Sofa, PartyPopper, Lock } from "lucide-react";
 import type { SavedDesign } from "@/lib/useUserLibrary";
 
 interface DesignGridProps {
@@ -28,11 +28,23 @@ export default function DesignGrid({ designs, limit }: DesignGridProps) {
               alt=""
               fill
               sizes="(max-width: 640px) 50vw, 33vw"
-              className="object-cover group-hover:scale-[1.03] transition-transform duration-300"
+              className={`object-cover transition-transform duration-300 ${
+                d.is_unlocked
+                  ? "group-hover:scale-[1.03]"
+                  : "blur-xl scale-110 select-none pointer-events-none"
+              }`}
               {...(d.generated_blur
                 ? { placeholder: "blur" as const, blurDataURL: d.generated_blur }
                 : {})}
             />
+            {!d.is_unlocked && (
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/15">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-white bg-zinc-900/70 backdrop-blur-sm px-3 py-1.5 rounded-full">
+                  <Lock size={12} />
+                  Unlock
+                </span>
+              </div>
+            )}
             <span
               className={`absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${
                 d.mode === "event"
