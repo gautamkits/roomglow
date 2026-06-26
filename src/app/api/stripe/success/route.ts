@@ -1,8 +1,23 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { stripe } from "@/lib/stripe";
 import { unlockDesign, getDesign, saveEventDate, incrementCouponUse } from "@/lib/db";
+import { sendDesignReadyEmail } from "@/lib/email";
+import type { EventConfig, ProductResult } from "@/lib/types";
 
 const SITE_URL = process.env.NEXTAUTH_URL || "https://noosho.com";
+
+function parseJsonish<T>(v: unknown): T | null {
+  if (!v) return null;
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return v as T;
+}
 
 // Stripe redirects here after payment. We verify the session synchronously,
 // unlock the design, then redirect the user to the design page.
@@ -30,21 +45,39 @@ export async function GET(request: Request) {
       const usedCoupon = session.metadata?.couponCode;
       if (usedCoupon) await incrementCouponUse(usedCoupon).catch(() => {});
 
-      // Save event date for reminders if applicable
       const design = await getDesign(designId);
-      if (design?.mode === "event" && design.event_config) {
-        const cfg =
-          typeof design.event_config === "string"
-            ? JSON.parse(design.event_config)
-            : design.event_config;
-        if (cfg.eventDate) {
-          await saveEventDate({
-            userId,
-            eventType: cfg.eventType,
-            eventLabel: cfg.honoree || cfg.eventLabel,
-            eventDate: cfg.eventDate,
-            honoree: cfg.honoree,
-          }).catch(() => {});
+      const cfg = parseJsonish<Record<string, string>>(design?.event_config);
+
+      // Save event date for reminders if applicable
+      if (design?.mode === "event" && cfg?.eventDate) {
+        await saveEventDate({
+          userId,
+          eventType: cfg.eventType,
+          eventLabel: cfg.honoree || cfg.eventLabel,
+          eventDate: cfg.eventDate,
+          honoree: cfg.honoree,
+        }).catch(() => {});
+      }
+
+      // Now that they've paid, deliver the design + shopping list by email.
+      if (design) {
+        const authSession = await auth().catch(() => null);
+        const to =
+          authSession?.user?.email ||
+          session.customer_details?.email ||
+          session.customer_email ||
+          undefined;
+        if (to) {
+          await sendDesignReadyEmail({
+            to,
+            name: authSession?.user?.name ?? undefined,
+            designId,
+            mode: design.mode === "event" ? "event" : "space",
+            eventConfig: (cfg as unknown as EventConfig) ?? null,
+            designNarrative: design.design_narrative || "",
+            generatedImageUrl: design.generated_image_url,
+            products: parseJsonish<ProductResult[]>(design.products) ?? [],
+          }).catch((e) => console.error("[stripe/success] email failed:", e));
         }
       }
     }

@@ -344,6 +344,8 @@ function HomeContent() {
                   designId={designId}
                   mode={mode}
                   itemCount={products.length}
+                  narrative={designNarrative}
+                  items={selectedItems.map((s) => s.label)}
                   onUnlocked={handleUnlocked}
                 />
               )}

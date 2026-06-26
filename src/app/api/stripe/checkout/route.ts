@@ -3,8 +3,10 @@ import { auth } from "@/auth";
 import { stripe, STRIPE_PRICES } from "@/lib/stripe";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
-import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign } from "@/lib/db";
+import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, getDesign } from "@/lib/db";
 import { evaluateCoupon, type CouponRow } from "@/lib/coupons";
+import { sendDesignReadyEmail } from "@/lib/email";
+import type { EventConfig, ProductResult } from "@/lib/types";
 
 const SITE_URL = process.env.NEXTAUTH_URL || "https://noosho.com";
 
@@ -43,10 +45,30 @@ export async function POST(request: Request) {
       }
     }
 
-    // Free after discount → unlock directly, no Stripe.
+    // Free after discount (100%-off coupon) → unlock directly, no Stripe, and
+    // deliver the design email since they now own it.
     if (amount <= 0) {
       await unlockDesign(designId, session.user.id);
       if (appliedCode) await incrementCouponUse(appliedCode).catch(() => {});
+
+      const design = await getDesign(designId);
+      if (design && session.user.email) {
+        const cfg =
+          typeof design.event_config === "string"
+            ? JSON.parse(design.event_config)
+            : design.event_config;
+        await sendDesignReadyEmail({
+          to: session.user.email,
+          name: session.user.name ?? undefined,
+          designId,
+          mode: design.mode === "event" ? "event" : "space",
+          eventConfig: (cfg as EventConfig) ?? null,
+          designNarrative: design.design_narrative || "",
+          generatedImageUrl: design.generated_image_url,
+          products: (design.products as ProductResult[]) ?? [],
+        }).catch((e) => console.error("[checkout] free-unlock email failed:", e));
+      }
+
       return NextResponse.json({ free: true });
     }
 

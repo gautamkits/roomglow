@@ -86,9 +86,11 @@ export async function POST(request: Request) {
     }
 
     // Email the signed-in user their design + shopping list (post-response,
-    // never blocks or fails the save).
+    // never blocks or fails the save). Only when the design is actually unlocked
+    // (free markets / India) — locked US designs are emailed after payment, so
+    // we never hand over the shopping list before they pay.
     const email = session?.user?.email;
-    if (email) {
+    if (email && isUnlocked) {
       after(async () => {
         await sendDesignReadyEmail({
           to: email,

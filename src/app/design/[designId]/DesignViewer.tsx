@@ -184,6 +184,8 @@ function Viewer({
               designId={design.id}
               mode={design.mode as "space" | "event"}
               itemCount={design.products?.length ?? 0}
+              narrative={design.design_narrative}
+              items={items}
               onUnlocked={() => setIsUnlocked(true)}
             />
           )}

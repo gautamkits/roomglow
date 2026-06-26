@@ -10,6 +10,8 @@ interface PaywallOverlayProps {
   mode: "space" | "event";
   onUnlocked: () => void;
   itemCount?: number;
+  narrative?: string;
+  items?: string[];
 }
 
 interface Pricing {
@@ -29,6 +31,8 @@ export default function PaywallOverlay({
   mode,
   onUnlocked,
   itemCount = 0,
+  narrative,
+  items = [],
 }: PaywallOverlayProps) {
   const { data: session, status } = useSession();
   const { locale, paymentEnabled } = useLocale();
@@ -169,22 +173,23 @@ export default function PaywallOverlay({
     );
   }
 
+  // Lead with the USP — every piece is shoppable with real prices & links.
   const shopLine =
     itemCount > 0
-      ? `Shoppable links to all ${itemCount} ${itemCount === 1 ? "piece" : "pieces"}`
-      : "Shoppable links to every piece";
+      ? `Every piece shoppable — all ${itemCount} with real prices & buy links`
+      : "Every piece shoppable — real prices & buy links";
 
   const benefits =
     mode === "event"
       ? [
-          "Full decoration plan in high resolution",
           shopLine,
+          "Full decoration plan in high resolution",
           "Before & after comparison",
           "Download & save to your profile",
         ]
       : [
-          "Full-resolution redesigned room",
           shopLine,
+          "Full-resolution redesigned room",
           "Before & after comparison slider",
           "Try unlimited style variations",
         ];
@@ -196,9 +201,9 @@ export default function PaywallOverlay({
     <div className="absolute inset-0 flex items-center justify-center z-40">
       <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/70 to-white/40 dark:from-zinc-950/95 dark:via-zinc-950/70 dark:to-zinc-950/40" />
 
-      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6 w-[360px] max-w-[calc(100vw-2rem)]">
+      <div className="relative bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6 w-[360px] max-w-[calc(100vw-2rem)] max-h-[85vh] overflow-y-auto">
         {/* Header */}
-        <div className="text-center mb-5">
+        <div className="text-center mb-4">
           <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center mx-auto mb-3">
             <Sparkles size={22} className="text-orange-700" />
           </div>
@@ -206,10 +211,42 @@ export default function PaywallOverlay({
             Unlock your full design
           </h3>
           <p className="text-sm text-zinc-500 mt-1">
-            Your {mode === "event" ? "decoration plan" : "redesign"} is ready —
-            here&apos;s everything you get.
+            {`Your ${mode === "event" ? "decoration plan" : "redesign"} is ready — here's everything you get.`}
           </p>
         </div>
+
+        {/* The vision — builds desire before unlock */}
+        {narrative && (
+          <div className="mb-4 border-l-2 border-orange-700 pl-3 py-0.5">
+            <p className="text-[13px] italic text-zinc-600 dark:text-zinc-400 leading-relaxed line-clamp-4">
+              {narrative}
+            </p>
+          </div>
+        )}
+
+        {/* Named pieces — concrete proof of what they get */}
+        {items.length > 0 && (
+          <div className="mb-4">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+              In this design
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {items.slice(0, 6).map((it) => (
+                <span
+                  key={it}
+                  className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[11px]"
+                >
+                  {it}
+                </span>
+              ))}
+              {items.length > 6 && (
+                <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-[11px]">
+                  +{items.length - 6} more
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* What you get */}
         <ul className="space-y-2.5 mb-5">
