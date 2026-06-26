@@ -528,3 +528,25 @@ export async function getDueCheckoutReminders() {
 export async function markCheckoutReminderSent(id: string, stage: number) {
   await sql`UPDATE checkout_intents SET last_reminder_stage = ${stage} WHERE id = ${id}`;
 }
+
+// ─── Restyle lineage (save-as-new) ───
+let restyleColumnReady = false;
+async function ensureRestyleColumn() {
+  if (restyleColumnReady) return;
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS restyled_from UUID`;
+  restyleColumnReady = true;
+}
+
+/** Number of restyles already created from a given root design. */
+export async function countRestyles(rootId: string): Promise<number> {
+  await ensureRestyleColumn();
+  const { rows } = await sql`
+    SELECT COUNT(*)::int AS n FROM designs WHERE restyled_from = ${rootId}
+  `;
+  return rows[0]?.n ?? 0;
+}
+
+export async function setRestyledFrom(designId: string, rootId: string) {
+  await ensureRestyleColumn();
+  await sql`UPDATE designs SET restyled_from = ${rootId} WHERE id = ${designId}`;
+}

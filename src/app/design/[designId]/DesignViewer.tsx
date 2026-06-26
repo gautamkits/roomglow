@@ -8,7 +8,7 @@ import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
-import { ArrowLeft, Download, Wand2, Sparkles } from "lucide-react";
+import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
 interface DesignData {
   id: string;
@@ -44,6 +44,30 @@ function Viewer({
   const [publishState, setPublishState] = useState<
     "idle" | "sending" | "pending"
   >(galleryStatus === "pending" ? "pending" : "idle");
+  const [restyling, setRestyling] = useState<string | null>(null);
+  const [restyleError, setRestyleError] = useState<string | null>(null);
+
+  const restyle = async (style: string) => {
+    setRestyling(style);
+    setRestyleError(null);
+    try {
+      const res = await fetch("/api/restyle-design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designId, styleHint: style }),
+      });
+      const data = await res.json();
+      if (res.ok && data.designId) {
+        router.push(`/design/${data.designId}`);
+      } else {
+        setRestyleError(data.error || "Restyle failed. Please try again.");
+        setRestyling(null);
+      }
+    } catch {
+      setRestyleError("Restyle failed. Please try again.");
+      setRestyling(null);
+    }
+  };
 
   const submitToGallery = async () => {
     setPublishState("sending");
@@ -192,6 +216,35 @@ function Viewer({
             />
           )}
         </div>
+
+        {isUnlocked && !approved && design.mode === "space" && (
+          <div className="mt-8">
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
+              {restyling ? `Rendering ${restyling} style…` : "Try a different style"}
+            </p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {["Modern", "Bohemian", "Minimalist", "Industrial", "Scandinavian"].map(
+                (style) => (
+                  <button
+                    key={style}
+                    onClick={() => restyle(style)}
+                    disabled={!!restyling}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm hover:border-orange-700 hover:text-orange-700 dark:hover:border-orange-600 dark:hover:text-orange-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <RefreshCw size={12} className={restyling === style ? "animate-spin" : ""} />
+                    {style}
+                  </button>
+                )
+              )}
+            </div>
+            <p className="text-center text-xs text-zinc-400 mt-2">
+              Each restyle saves as a new design (up to 5).
+            </p>
+            {restyleError && (
+              <p className="text-center text-xs text-red-600 mt-1.5">{restyleError}</p>
+            )}
+          </div>
+        )}
 
         {canPublish && (
           <div className="mt-6 flex flex-col items-center gap-1.5">
