@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sofa, PartyPopper, Calendar } from "lucide-react";
 import { EVENTS } from "@/lib/events";
 import type { AppMode, EventConfig } from "@/lib/types";
+import { useLocale } from "@/lib/useLocale";
 import ImageUpload from "./ImageUpload";
 
 interface SetupPanelProps {
@@ -14,9 +15,6 @@ interface SetupPanelProps {
     maxBudget?: number
   ) => void;
 }
-
-const BUDGET_MIN = 1000;
-const BUDGET_MAX = 25000;
 
 function Chip({
   label,
@@ -42,6 +40,7 @@ function Chip({
 }
 
 export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
+  const { budgetMin, budgetMax, budgetStep, formatBudget } = useLocale();
   const [mode, setMode] = useState<AppMode>("space");
   const [eventId, setEventId] = useState<string | null>(null);
   const [subTheme, setSubTheme] = useState<string | null>(null);
@@ -49,7 +48,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
-  const [maxBudget, setMaxBudget] = useState(5000);
+  const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
   const [budgetSet, setBudgetSet] = useState(false);
 
   const event = EVENTS.find((e) => e.id === eventId);
@@ -207,8 +206,8 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
             {budgetSet ? (
               <>
-                ₹{maxBudget.toLocaleString("en-IN")}
-                {maxBudget >= BUDGET_MAX && "+"}
+                {formatBudget(maxBudget)}
+                {maxBudget >= budgetMax && "+"}
               </>
             ) : (
               <span className="text-zinc-400 font-normal text-xs">
@@ -219,9 +218,9 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </div>
         <input
           type="range"
-          min={BUDGET_MIN}
-          max={BUDGET_MAX}
-          step={500}
+          min={budgetMin}
+          max={budgetMax}
+          step={budgetStep}
           value={maxBudget}
           onChange={(e) => {
             setMaxBudget(Number(e.target.value));
@@ -230,8 +229,8 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           className="w-full accent-orange-700"
         />
         <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
-          <span>₹{BUDGET_MIN.toLocaleString("en-IN")}</span>
-          <span>₹{BUDGET_MAX.toLocaleString("en-IN")}+</span>
+          <span>{formatBudget(budgetMin)}</span>
+          <span>{formatBudget(budgetMax)}+</span>
         </div>
       </div>
 

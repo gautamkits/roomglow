@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import UserMenu from "./UserMenu";
 import Logo from "./Logo";
+import LocaleSwitcher from "./LocaleSwitcher";
 
 interface MenuUser {
   name?: string | null;
@@ -34,6 +35,7 @@ export default function SiteHeader({
         {center ? <div className="flex-1 min-w-0">{center}</div> : <div className="flex-1" />}
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <LocaleSwitcher />
           {rightExtra}
           {showDesignCta && (
             <Link

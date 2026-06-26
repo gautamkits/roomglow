@@ -1,5 +1,6 @@
+import { type Locale, AFFILIATE_TAGS, AMAZON_DOMAINS } from "@/lib/locale";
+
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY!;
-const AFFILIATE_TAG = process.env.AMAZON_PARTNER_TAG || "yuaid-21";
 
 export interface AmazonSearchResult {
   title: string;
@@ -12,13 +13,14 @@ export interface AmazonSearchResult {
 
 export async function searchProducts(
   searchQuery: string,
-  count: number = 5
+  count: number = 5,
+  locale: Locale = "IN"
 ): Promise<AmazonSearchResult[]> {
   try {
     const params = new URLSearchParams({
       query: searchQuery,
       page: "1",
-      country: "IN",
+      country: locale,
       sort_by: "RELEVANCE",
       product_condition: "ALL",
       is_prime: "false",
@@ -45,6 +47,9 @@ export async function searchProducts(
     const products = data.data?.products;
     if (!products?.length) return [];
 
+    const tag = AFFILIATE_TAGS[locale];
+    const domain = AMAZON_DOMAINS[locale];
+
     return products
       .filter((p: Record<string, string>) => p.product_photo && p.product_price)
       .slice(0, count)
@@ -55,7 +60,7 @@ export async function searchProducts(
           price: item.product_price || "Price unavailable",
           imageUrl: item.product_photo || "",
           affiliateUrl: asin
-            ? `https://www.amazon.in/dp/${asin}?tag=${AFFILIATE_TAG}`
+            ? `https://www.${domain}/dp/${asin}?tag=${tag}`
             : item.product_url || "",
           rating: parseFloat(item.product_star_rating) || 0,
           asin,

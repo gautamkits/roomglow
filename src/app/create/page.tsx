@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { useUserLibrary } from "@/lib/useUserLibrary";
+import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
 import ProductSelection from "@/components/ProductSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
@@ -55,6 +56,7 @@ function HomeContent() {
     sessionStatus === "authenticated" && step === "upload"
   );
 
+  const { formatBudget } = useLocale();
   const [showBefore, setShowBefore] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sending" | "done">("idle");
   const firstName = session?.user?.name?.split(" ")[0] || "there";
@@ -229,7 +231,7 @@ function HomeContent() {
                   </span>
                   {maxBudget && (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium">
-                      Budget: up to ₹{maxBudget.toLocaleString("en-IN")}
+                      Budget: up to {formatBudget(maxBudget)}
                     </span>
                   )}
                 </div>
@@ -295,7 +297,7 @@ function HomeContent() {
                 <div className="flex flex-wrap items-center gap-1.5">
                   {maxBudget && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium">
-                      Budget: up to ₹{maxBudget.toLocaleString("en-IN")}
+                      Budget: up to {formatBudget(maxBudget)}
                     </span>
                   )}
                   {eventConfig?.subTheme && (
