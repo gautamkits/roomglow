@@ -27,7 +27,8 @@ export async function POST(request: Request) {
 
     const session = await auth();
     const userId = session?.user?.id ?? null;
-    const isUnlocked = !!userId;
+    // Always save locked — Stripe payment (or admin bypass) unlocks it.
+    const isUnlocked = false;
 
     const ts = Date.now();
     const originalBuf = toBuffer(originalImage);

@@ -342,7 +342,6 @@ function HomeContent() {
               {!isUnlocked && (
                 <PaywallOverlay
                   designId={designId}
-                  price={mode === "event" ? 79 : 49}
                   mode={mode}
                   onUnlocked={handleUnlocked}
                 />

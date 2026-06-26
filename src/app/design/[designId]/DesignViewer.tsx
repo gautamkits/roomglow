@@ -182,7 +182,6 @@ function Viewer({
           {!isUnlocked && !approved && (
             <PaywallOverlay
               designId={design.id}
-              price={design.mode === "event" ? 79 : 49}
               mode={design.mode as "space" | "event"}
               onUnlocked={() => setIsUnlocked(true)}
             />
