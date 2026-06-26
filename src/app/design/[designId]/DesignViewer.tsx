@@ -171,7 +171,7 @@ function Viewer({
         )}
 
         <div className="relative">
-          <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none"}>
+          <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
             <ImageWithHotspots
               imageSrc={design.generated_image_url}
               hotspots={showProducts ? design.hotspots : []}

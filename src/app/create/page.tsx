@@ -332,7 +332,7 @@ function HomeContent() {
                   </p>
                 </div>
               ) : (
-                <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none"}>
+                <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
                   <ImageWithHotspots
                     imageSrc={generatedImage || image!}
                     hotspots={isUnlocked ? hotspots : []}
