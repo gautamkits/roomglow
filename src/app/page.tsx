@@ -94,6 +94,12 @@ export default async function Home({
     return p ? `/?${p}` : "/";
   };
   const keep = { sort: sort !== "top" ? sort : undefined, q: q || undefined };
+  const chip = (active: boolean) =>
+    `shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs border transition-colors capitalize ${
+      active
+        ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
+        : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
+    }`;
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950 flex flex-col">
@@ -126,93 +132,64 @@ export default async function Home({
           </p>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col gap-3 mb-7">
-          <div className="flex flex-wrap items-center gap-2">
-            {tabs.map((t) => {
-              const active = (t.type || "") === (mode || "");
-              return (
+        {/* Filters — one compact row; category chips only for the active tab */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5">
+              {tabs.map((t) => {
+                const active = (t.type || "") === (mode || "");
+                return (
+                  <Link
+                    key={t.label}
+                    href={qs({ type: t.type, ...keep })}
+                    className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                      active
+                        ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
+                        : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {t.label}
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-3 shrink-0 text-sm">
+              {sorts.map((s) => (
                 <Link
-                  key={t.label}
-                  href={qs({ type: t.type, ...keep })}
-                  className={`px-3.5 py-1.5 rounded-lg text-sm border transition-colors ${
-                    active
-                      ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300"
+                  key={s.val}
+                  href={qs({ type: mode, room, event, sort: s.val, q: q || undefined })}
+                  className={`transition-colors ${
+                    sort === s.val
+                      ? "text-zinc-900 dark:text-zinc-100 font-medium"
+                      : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
                   }`}
                 >
-                  {t.label}
+                  {s.label}
                 </Link>
-              );
-            })}
-            <span className="w-px h-5 bg-zinc-200 dark:bg-zinc-800 mx-1" />
-            {sorts.map((s) => (
-              <Link
-                key={s.val}
-                href={qs({ type: mode, room, event, sort: s.val, q: q || undefined })}
-                className={`px-3.5 py-1.5 rounded-lg text-sm border transition-colors ${
-                  sort === s.val
-                    ? "border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100 font-medium"
-                    : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
-                }`}
-              >
-                {s.label}
-              </Link>
-            ))}
+              ))}
+            </div>
           </div>
 
-          {/* Room facets (when Rooms or All) */}
-          {mode !== "event" && roomFacets.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Link
-                href={qs({ type: mode, ...keep })}
-                className={`px-2.5 py-1 rounded-full text-xs border transition-colors capitalize ${
-                  !room
-                    ? "border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100"
-                    : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
-                }`}
-              >
+          {/* Category facets — only for the active tab, single scrollable row */}
+          {mode === "space" && roomFacets.length > 0 && (
+            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <Link href={qs({ type: "space", ...keep })} className={chip(!room)}>
                 All rooms
               </Link>
               {roomFacets.map((r) => (
-                <Link
-                  key={r}
-                  href={qs({ type: "space", room: r, ...keep })}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors capitalize ${
-                    room === r
-                      ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
-                  }`}
-                >
+                <Link key={r} href={qs({ type: "space", room: r, ...keep })} className={chip(room === r)}>
                   {r}
                 </Link>
               ))}
             </div>
           )}
-
-          {/* Event facets (when Events or All) */}
-          {mode !== "space" && eventFacets.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Link
-                href={qs({ type: mode, ...keep })}
-                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                  !event
-                    ? "border-zinc-900 dark:border-zinc-100 text-zinc-900 dark:text-zinc-100"
-                    : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
-                }`}
-              >
+          {mode === "event" && eventFacets.length > 0 && (
+            <div className="mt-3 flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <Link href={qs({ type: "event", ...keep })} className={chip(!event)}>
                 All events
               </Link>
               {eventFacets.map((e) => (
-                <Link
-                  key={e}
-                  href={qs({ type: "event", event: e, ...keep })}
-                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
-                    event === e
-                      ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300"
-                  }`}
-                >
+                <Link key={e} href={qs({ type: "event", event: e, ...keep })} className={chip(event === e)}>
                   {e}
                 </Link>
               ))}
