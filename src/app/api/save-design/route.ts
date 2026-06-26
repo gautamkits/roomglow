@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { saveDesign, saveEventDate } from "@/lib/db";
 import { makeBlurDataUrl } from "@/lib/images";
 import { sendDesignReadyEmail } from "@/lib/email";
+import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 
 export const runtime = "nodejs";
 
@@ -27,8 +28,11 @@ export async function POST(request: Request) {
 
     const session = await auth();
     const userId = session?.user?.id ?? null;
-    // Always save locked — Stripe payment (or admin bypass) unlocks it.
-    const isUnlocked = false;
+    // In markets without payment (India, until Instamojo is approved), a
+    // signed-in user's design unlocks immediately. Where payment is enabled
+    // (US/Stripe), it stays locked until paid.
+    const locale = localeFromRequest(request);
+    const isUnlocked = !!userId && !PAYMENT_ENABLED[locale];
 
     const ts = Date.now();
     const originalBuf = toBuffer(originalImage);

@@ -15,6 +15,13 @@ export const CURRENCY_SYMBOLS: Record<Locale, string> = {
   US: "$",
 };
 
+// Payment is only enabled for markets where we have a working gateway.
+// India stays free until Instamojo is approved.
+export const PAYMENT_ENABLED: Record<Locale, boolean> = {
+  IN: false,
+  US: true,
+};
+
 /** Read locale from the noosho-locale cookie string (works in server components / API routes). */
 export function localeFromCookieHeader(cookieHeader: string | null): Locale {
   if (!cookieHeader) return "IN";

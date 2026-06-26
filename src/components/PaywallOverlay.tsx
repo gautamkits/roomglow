@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { Lock, Sparkles, LogIn } from "lucide-react";
 import { useLocale } from "@/lib/useLocale";
@@ -13,11 +13,31 @@ interface PaywallOverlayProps {
 
 export default function PaywallOverlay({ designId, mode, onUnlocked }: PaywallOverlayProps) {
   const { data: session, status } = useSession();
-  const { locale, currency } = useLocale();
+  const { locale, paymentEnabled } = useLocale();
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const claimed = useRef(false);
 
   const price = locale === "US" ? "$4.99" : "₹99";
+
+  // Free markets (no payment): once signed in, claim + reveal automatically.
+  useEffect(() => {
+    if (paymentEnabled) return;
+    if (status !== "authenticated" || !session || claimed.current) return;
+    claimed.current = true;
+    (async () => {
+      if (designId) {
+        try {
+          await fetch("/api/unlock-design", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ designId }),
+          });
+        } catch {}
+      }
+      onUnlocked();
+    })();
+  }, [status, session, designId, paymentEnabled, onUnlocked]);
 
   const handleSignIn = () => {
     signIn("google", {
@@ -61,7 +81,10 @@ export default function PaywallOverlay({ designId, mode, onUnlocked }: PaywallOv
     }
   };
 
-  if (status === "loading") {
+  const isSignedIn = status === "authenticated" && !!session;
+
+  // Loading session, or a free-market signed-in user mid-claim → spinner.
+  if (status === "loading" || (!paymentEnabled && isSignedIn)) {
     return (
       <div className="absolute inset-0 flex items-center justify-center z-40">
         <div className="absolute inset-0 bg-gradient-to-t from-white/95 via-white/60 to-white/30 dark:from-zinc-950/95 dark:via-zinc-950/60 dark:to-zinc-950/30" />
@@ -69,8 +92,6 @@ export default function PaywallOverlay({ designId, mode, onUnlocked }: PaywallOv
       </div>
     );
   }
-
-  const isSignedIn = status === "authenticated" && !!session;
 
   return (
     <div className="absolute inset-0 flex items-center justify-center z-40">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { stripe, STRIPE_PRICES } from "@/lib/stripe";
-import { localeFromRequest } from "@/lib/locale";
+import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
 
 const SITE_URL = process.env.NEXTAUTH_URL || "https://noosho.com";
@@ -18,12 +18,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing designId" }, { status: 400 });
     }
 
-    // Admin emails unlock for free — skip payment
-    if (isAdminEmail(session.user.email)) {
+    const locale = localeFromRequest(request);
+
+    // Admin emails, or markets without payment enabled (India), unlock free.
+    if (isAdminEmail(session.user.email) || !PAYMENT_ENABLED[locale]) {
       return NextResponse.json({ free: true });
     }
 
-    const locale = localeFromRequest(request);
     const price = STRIPE_PRICES[locale];
 
     const checkout = await stripe.checkout.sessions.create({

@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { getClientLocale, type Locale } from "@/lib/locale";
+import { getClientLocale, PAYMENT_ENABLED, type Locale } from "@/lib/locale";
 
 export interface LocaleConfig {
   locale: Locale;
   currency: string;       // "₹" or "$"
+  paymentEnabled: boolean;
   budgetMin: number;
   budgetMax: number;
   budgetStep: number;
@@ -19,6 +20,7 @@ export function useLocale(): LocaleConfig {
     return {
       locale,
       currency: isUS ? "$" : "₹",
+      paymentEnabled: PAYMENT_ENABLED[locale],
       budgetMin: isUS ? 100 : 1000,
       budgetMax: isUS ? 2000 : 25000,
       budgetStep: isUS ? 50 : 500,
