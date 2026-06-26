@@ -343,6 +343,7 @@ function HomeContent() {
                 <PaywallOverlay
                   designId={designId}
                   mode={mode}
+                  itemCount={products.length}
                   onUnlocked={handleUnlocked}
                 />
               )}

@@ -18,8 +18,20 @@ function parsePrice(s?: string): number {
   return isNaN(v) ? 0 : v;
 }
 
-const inr = (n: number) =>
-  "₹" + n.toLocaleString("en-IN", { maximumFractionDigits: 0 });
+// Pull the currency symbol straight from an Amazon price string ("$329.99",
+// "₹2,999") so the total always matches the marketplace the products came from.
+function currencyOf(prices: (string | undefined)[]): string {
+  for (const p of prices) {
+    const m = p?.match(/[^\d.,\s]+/);
+    if (m) return m[0];
+  }
+  return "₹";
+}
+
+const formatTotal = (n: number, symbol: string) =>
+  symbol + n.toLocaleString(symbol === "$" ? "en-US" : "en-IN", {
+    maximumFractionDigits: symbol === "$" ? 2 : 0,
+  });
 
 export default function ImageWithHotspots({
   imageSrc,
@@ -103,6 +115,7 @@ export default function ImageWithHotspots({
     (sum, p) => sum + parsePrice(p.amazonProduct?.price),
     0
   );
+  const currency = currencyOf(matched.map((p) => p.amazonProduct?.price));
 
   return (
     <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5 lg:gap-6 items-start">
@@ -233,7 +246,7 @@ export default function ImageWithHotspots({
           <div className="px-4 py-3 bg-orange-50/60 dark:bg-orange-950/20 border-b border-zinc-100 dark:border-zinc-800 flex items-baseline justify-between">
             <span className="text-xs text-zinc-500">Estimated total</span>
             <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-              {inr(total)}
+              {formatTotal(total, currency)}
             </span>
           </div>
         )}

@@ -183,6 +183,7 @@ function Viewer({
             <PaywallOverlay
               designId={design.id}
               mode={design.mode as "space" | "event"}
+              itemCount={design.products?.length ?? 0}
               onUnlocked={() => setIsUnlocked(true)}
             />
           )}
