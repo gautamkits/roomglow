@@ -11,16 +11,28 @@ import {
   ArrowRight,
   PartyPopper,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import Footer from "./Footer";
 import BeforeAfterSlider from "./BeforeAfterSlider";
 import GalleryPreview from "./GalleryPreview";
-import { EVENTS } from "@/lib/events";
+import { getEvents } from "@/lib/events";
+import { getClientLocale, type Locale } from "@/lib/locale";
 
 const EVENT_HOOKS: Record<string, string> = {
   birthday: "Balloon arches, backdrops & themed décor",
   anniversary: "Romantic, elegant celebration setups",
-  annaprasan: "Traditional rice-ceremony décor",
   baby_shower: "Sweet, cohesive welcome themes",
+  annaprasan: "Traditional rice-ceremony décor",
+  diwali: "Diyas, rangoli & festive lights",
+  housewarming: "Warm, welcoming new-home setups",
+  halloween: "Spooky pumpkins, lights & backdrops",
+  thanksgiving: "Cozy harvest & fall table décor",
+  christmas: "Trees, garlands & holiday glow",
+  easter: "Pastel spring & floral brunch décor",
+  independence_day: "Stars, stripes & backyard BBQ",
+  valentines: "Romantic florals & candlelight",
+  new_year: "Glam confetti & midnight sparkle",
+  graduation: "Bold, celebratory party setups",
 };
 
 const STEPS = [
@@ -87,6 +99,12 @@ const FAQS = [
 
 export default function Landing() {
   const go = () => signIn("google");
+
+  // Read locale client-side (defaults to IN on the server to avoid hydration
+  // mismatch, then corrects after mount) so US visitors see US events.
+  const [locale, setLocale] = useState<Locale>("IN");
+  useEffect(() => setLocale(getClientLocale()), []);
+  const eventCards = getEvents(locale).slice(0, 8);
 
   return (
     <div className="flex flex-col">
@@ -199,7 +217,7 @@ export default function Landing() {
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-9">
-            {EVENTS.map((e) => (
+            {eventCards.map((e) => (
               <div
                 key={e.id}
                 className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-900 p-5"
