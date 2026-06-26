@@ -279,12 +279,28 @@ function renderProductCard(
   ctx.globalAlpha = ease;
   ctx.translate(0, slide);
 
-  // Card geometry — scale to the frame's smaller dimension.
+  // Card geometry — height derived from content so the pill never overlaps price.
   const s = Math.min(W, H);
   const cardW = Math.min(W * 0.84, s * 1.15);
   const pad = s * 0.045;
   const thumb = s * 0.26;
-  const cardH = thumb + pad * 2;
+
+  const titleSize = Math.round(s * 0.038);
+  const priceSize = Math.round(s * 0.05);
+  const pillSize = Math.round(s * 0.026);
+  const lineH = titleSize * 1.25;
+  const pillH = pillSize + s * 0.022;
+  const gapTitlePrice = s * 0.012;
+  const gapPricePill = s * 0.016;
+
+  const textXrel = pad + thumb + pad * 0.8; // text column relative to card left
+  const textW = cardW - pad - textXrel;
+  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+  const titleLines = wrapText(ctx, title, textW, 2);
+
+  const textBlockH =
+    titleLines.length * lineH + gapTitlePrice + priceSize + gapPricePill + pillH;
+  const cardH = Math.max(thumb + pad * 2, textBlockH + pad * 2);
   const cx = (W - cardW) / 2;
   const cy = H * 0.5 - cardH / 2;
 
@@ -293,9 +309,9 @@ function renderProductCard(
   ctx.fillStyle = "#ffffff";
   ctx.fill();
 
-  // Product thumbnail (contain-fit on white tile).
+  // Product thumbnail (contain-fit on white tile, vertically centered).
   const tileX = cx + pad;
-  const tileY = cy + pad;
+  const tileY = cy + (cardH - thumb) / 2;
   roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.025);
   ctx.save();
   ctx.clip();
@@ -309,45 +325,33 @@ function renderProductCard(
   }
   ctx.restore();
 
-  // Text column.
-  const textX = tileX + thumb + pad * 0.8;
-  const textW = cx + cardW - pad - textX;
-  let ty = tileY + s * 0.03;
-
-  const titleSize = Math.round(s * 0.038);
-  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+  // Text column flows top→down, vertically centered within the card.
+  const textX = cx + textXrel;
+  let ty = cy + (cardH - textBlockH) / 2;
   ctx.fillStyle = "#1c1917";
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
-  const titleLines = wrapText(ctx, title, textW, 2);
+  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
   for (const l of titleLines) {
     ctx.fillText(l, textX, ty);
-    ty += titleSize * 1.25;
+    ty += lineH;
   }
-
-  // Price.
-  ty += s * 0.012;
-  const priceSize = Math.round(s * 0.05);
+  ty += gapTitlePrice;
   ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
   ctx.fillStyle = "#a04525";
   ctx.fillText(price, textX, ty);
+  ty += priceSize + gapPricePill;
 
-  // "Shop the look" pill anchored bottom-left of the text column.
-  const pillSize = Math.round(s * 0.026);
   ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
   const pillText = "Shop the look · noosho.com";
-  const pillTextW = ctx.measureText(pillText).width;
   const pillPadX = s * 0.022;
-  const pillH = pillSize + s * 0.022;
-  const pillW = pillTextW + pillPadX * 2;
-  const pillX = textX;
-  const pillY = cy + cardH - pad - pillH;
-  roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+  const pillW = ctx.measureText(pillText).width + pillPadX * 2;
+  roundRect(ctx, textX, ty, pillW, pillH, pillH / 2);
   ctx.fillStyle = "#a04525";
   ctx.fill();
   ctx.fillStyle = "#ffffff";
   ctx.textBaseline = "middle";
-  ctx.fillText(pillText, pillX + pillPadX, pillY + pillH / 2 + 1);
+  ctx.fillText(pillText, textX + pillPadX, ty + pillH / 2 + 1);
 
   ctx.restore();
 
@@ -401,12 +405,28 @@ function renderProductCallout(
 
   const s = Math.min(W, H);
 
-  // ── Chip geometry: place in the opposite half from the hotspot, clamped. ──
+  // ── Chip content + geometry (height derived from content so nothing overlaps) ──
   const chipW = Math.min(W * 0.62, s * 0.95);
   const thumb = s * 0.16;
   const chipPad = s * 0.03;
-  const chipH = thumb + chipPad * 2;
   const margin = s * 0.05;
+
+  const titleSize = Math.round(s * 0.032);
+  const priceSize = Math.round(s * 0.04);
+  const pillSize = Math.round(s * 0.024);
+  const lineH = titleSize * 1.25;
+  const pillH = pillSize + s * 0.02;
+  const gapTitlePrice = s * 0.008;
+  const gapPricePill = s * 0.012;
+
+  const textXrel = chipPad + thumb + chipPad * 0.8; // text column, relative to chip left
+  const textW = chipW - chipPad - textXrel;
+  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+  const titleLines = wrapText(ctx, title, textW, 2);
+
+  const textBlockH =
+    titleLines.length * lineH + gapTitlePrice + priceSize + gapPricePill + pillH;
+  const chipH = Math.max(thumb + chipPad * 2, textBlockH + chipPad * 2);
   const chipX = clamp(hx - chipW / 2, margin, W - chipW - margin);
   const chipY =
     hy < H / 2 ? H - chipH - margin * 1.4 : margin * 1.4; // opposite vertical half
@@ -470,7 +490,7 @@ function renderProductCallout(
     ctx.fill();
 
     const tileX = chipX + chipPad;
-    const tileY = chipY + chipPad;
+    const tileY = chipY + (chipH - thumb) / 2;
     roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.02);
     ctx.save();
     ctx.clip();
@@ -484,37 +504,33 @@ function renderProductCallout(
     }
     ctx.restore();
 
-    const textX = tileX + thumb + chipPad * 0.8;
-    const textW = chipX + chipW - chipPad - textX;
-    let ty = tileY + s * 0.012;
-    const titleSize = Math.round(s * 0.032);
-    ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
-    ctx.fillStyle = "#1c1917";
+    // Text column flows top→down, vertically centered within the chip.
+    const textX = chipX + textXrel;
+    let ty = chipY + (chipH - textBlockH) / 2;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    for (const l of wrapText(ctx, title, textW, 2)) {
+    ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+    ctx.fillStyle = "#1c1917";
+    for (const l of titleLines) {
       ctx.fillText(l, textX, ty);
-      ty += titleSize * 1.25;
+      ty += lineH;
     }
-    ty += s * 0.008;
-    const priceSize = Math.round(s * 0.04);
+    ty += gapTitlePrice;
     ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
     ctx.fillStyle = "#a04525";
     ctx.fillText(price, textX, ty);
+    ty += priceSize + gapPricePill;
 
-    const pillSize = Math.round(s * 0.024);
     ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
     const pillText = "Shop · noosho.com";
-    const pillW = ctx.measureText(pillText).width + s * 0.04;
-    const pillH = pillSize + s * 0.02;
-    const pillX = textX;
-    const pillY = chipY + chipH - chipPad - pillH;
-    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    const pillPadX = s * 0.02;
+    const pillW = ctx.measureText(pillText).width + pillPadX * 2;
+    roundRect(ctx, textX, ty, pillW, pillH, pillH / 2);
     ctx.fillStyle = "#a04525";
     ctx.fill();
     ctx.fillStyle = "#ffffff";
     ctx.textBaseline = "middle";
-    ctx.fillText(pillText, pillX + s * 0.02, pillY + pillH / 2 + 1);
+    ctx.fillText(pillText, textX + pillPadX, ty + pillH / 2 + 1);
 
     ctx.restore();
   }
