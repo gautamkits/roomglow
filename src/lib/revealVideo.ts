@@ -7,8 +7,9 @@ const HOLD_BEFORE = 24; // ~0.8s
 const WIPE = 90; // ~3.0s
 const HOLD_AFTER = 42; // ~1.4s
 const REVEAL_TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
-const PRODUCT_SEG = 45; // ~1.5s per shoppable product card
-const PRODUCT_END_HOLD = 15; // ~0.5s extra hold on the final card (loop-friendly)
+const PRODUCT_SEG = 78; // ~2.6s per product: animate in, then hold so it's readable
+const PRODUCT_ANIM = 30; // ~1s to fully appear; the remainder of the segment holds
+const PRODUCT_END_HOLD = 18; // ~0.6s extra hold on the final card (loop-friendly)
 const MAX_SIDE = 1920; // clamp so we stay within H.264 level limits
 
 export function isRevealVideoSupported(): boolean {
@@ -631,7 +632,7 @@ export async function generateRevealVideo(
       if (idx > cards.length - 1) idx = cards.length - 1; // end-hold on last card
       const local = into - idx * PRODUCT_SEG;
       const card = cards[idx];
-      const p = Math.min(1, local / PRODUCT_SEG);
+      const p = Math.min(1, local / PRODUCT_ANIM);
 
       // Use the in-scene arrow callout when the product's hotspot lands inside
       // the frame; otherwise fall back to the centered product card.
