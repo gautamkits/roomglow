@@ -145,7 +145,7 @@ export async function getGalleryCards(opts: {
     sort === "newest"
       ? "published_at DESC NULLS LAST"
       : "like_count DESC, published_at DESC NULLS LAST";
-  const cols = `id, mode, event_config, room_analysis, design_narrative, selected_items, products, like_count, published_at, original_image_url, generated_image_url, original_blur, generated_blur`;
+  const cols = `id, mode, event_config, room_analysis, design_narrative, selected_items, products, hotspots, like_count, published_at, original_image_url, generated_image_url, original_blur, generated_blur`;
   if (mode === "space" || mode === "event") {
     const { rows } = await sql.query(
       `SELECT ${cols} FROM designs WHERE gallery_status = 'approved' AND mode = $1

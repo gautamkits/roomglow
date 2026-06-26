@@ -264,7 +264,7 @@ function renderProductCard(
   price: string,
   W: number,
   H: number,
-  t: number
+  p: number // 0→1 across the segment
 ) {
   ctx.clearRect(0, 0, W, H);
   drawCover(ctx, after, W, H);
@@ -273,7 +273,7 @@ function renderProductCard(
   ctx.fillStyle = "rgba(20,16,12,0.55)";
   ctx.fillRect(0, 0, W, H);
 
-  const ease = smoothstep(t);
+  const ease = smoothstep(Math.min(1, p / 0.27)); // ~0.4s fade-in
   const slide = (1 - ease) * H * 0.06;
   ctx.save();
   ctx.globalAlpha = ease;
@@ -358,6 +358,168 @@ export interface RevealProduct {
   imageUrl: string; // same-origin (proxied) URL
   title: string;
   price: string;
+  x?: number; // hotspot center X as % of the design image
+  y?: number; // hotspot center Y as % of the design image
+}
+
+/** Map a hotspot (x%,y%) to a canvas point using the same cover transform as drawCover. */
+function mapCover(
+  img: HTMLImageElement,
+  W: number,
+  H: number,
+  xPct: number,
+  yPct: number
+): { x: number; y: number } {
+  const scale = Math.max(W / img.width, H / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const ox = (W - dw) / 2;
+  const oy = (H - dh) / 2;
+  return { x: ox + (xPct / 100) * dw, y: oy + (yPct / 100) * dh };
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
+/** Draw an animated arrow pointing to the product at (hx,hy), then a product chip. */
+function renderProductCallout(
+  ctx: CanvasRenderingContext2D,
+  after: HTMLImageElement,
+  prodImg: HTMLImageElement | null,
+  title: string,
+  price: string,
+  hx: number,
+  hy: number,
+  W: number,
+  H: number,
+  p: number // 0→1 across the segment
+) {
+  ctx.clearRect(0, 0, W, H);
+  drawCover(ctx, after, W, H);
+  // Soft dim — lighter than the full card so the room stays visible.
+  ctx.fillStyle = "rgba(20,16,12,0.32)";
+  ctx.fillRect(0, 0, W, H);
+
+  const s = Math.min(W, H);
+
+  // ── Chip geometry: place in the opposite half from the hotspot, clamped. ──
+  const chipW = Math.min(W * 0.62, s * 0.95);
+  const thumb = s * 0.16;
+  const chipPad = s * 0.03;
+  const chipH = thumb + chipPad * 2;
+  const margin = s * 0.05;
+  const chipX = clamp(hx - chipW / 2, margin, W - chipW - margin);
+  const chipY =
+    hy < H / 2 ? H - chipH - margin * 1.4 : margin * 1.4; // opposite vertical half
+
+  // ── Phase 1: pulsing ring on the product ──
+  const ringIn = smoothstep(clamp(p / 0.25, 0, 1));
+  const pulse = 1 + 0.12 * Math.sin(p * Math.PI * 6);
+  const ringR = s * 0.035 * ringIn * pulse;
+  ctx.save();
+  ctx.globalAlpha = ringIn;
+  ctx.beginPath();
+  ctx.arc(hx, hy, ringR, 0, Math.PI * 2);
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = Math.max(3, s * 0.006);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(hx, hy, s * 0.008, 0, Math.PI * 2);
+  ctx.fillStyle = "#a04525";
+  ctx.fill();
+  ctx.restore();
+
+  // ── Phase 2: arrow draws from chip toward the dot ──
+  const arrowP = smoothstep(clamp((p - 0.2) / 0.4, 0, 1));
+  if (arrowP > 0.01) {
+    const startX = clamp(hx, chipX + chipPad, chipX + chipW - chipPad);
+    const startY = hy < H / 2 ? chipY : chipY + chipH; // leave from chip edge nearest dot
+    const endX = hx;
+    const endYFull = hy + (hy < H / 2 ? ringR + s * 0.02 : -(ringR + s * 0.02));
+    const curX = startX + (endX - startX) * arrowP;
+    const curY = startY + (endYFull - startY) * arrowP;
+    ctx.save();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = Math.max(3, s * 0.006);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(curX, curY);
+    ctx.stroke();
+    if (arrowP > 0.85) {
+      const ang = Math.atan2(endYFull - startY, endX - startX);
+      const head = s * 0.022;
+      ctx.beginPath();
+      ctx.moveTo(curX, curY);
+      ctx.lineTo(curX - head * Math.cos(ang - 0.4), curY - head * Math.sin(ang - 0.4));
+      ctx.moveTo(curX, curY);
+      ctx.lineTo(curX - head * Math.cos(ang + 0.4), curY - head * Math.sin(ang + 0.4));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Phase 3: product chip fades/slides in ──
+  const chipIn = smoothstep(clamp((p - 0.4) / 0.4, 0, 1));
+  if (chipIn > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = chipIn;
+    ctx.translate(0, (1 - chipIn) * s * 0.03);
+
+    roundRect(ctx, chipX, chipY, chipW, chipH, s * 0.03);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+
+    const tileX = chipX + chipPad;
+    const tileY = chipY + chipPad;
+    roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.02);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = "#f5f1ea";
+    ctx.fillRect(tileX, tileY, thumb, thumb);
+    if (prodImg) {
+      const sc = Math.min(thumb / prodImg.width, thumb / prodImg.height);
+      const w = prodImg.width * sc;
+      const h = prodImg.height * sc;
+      ctx.drawImage(prodImg, tileX + (thumb - w) / 2, tileY + (thumb - h) / 2, w, h);
+    }
+    ctx.restore();
+
+    const textX = tileX + thumb + chipPad * 0.8;
+    const textW = chipX + chipW - chipPad - textX;
+    let ty = tileY + s * 0.012;
+    const titleSize = Math.round(s * 0.032);
+    ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
+    ctx.fillStyle = "#1c1917";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    for (const l of wrapText(ctx, title, textW, 2)) {
+      ctx.fillText(l, textX, ty);
+      ty += titleSize * 1.25;
+    }
+    ty += s * 0.008;
+    const priceSize = Math.round(s * 0.04);
+    ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
+    ctx.fillStyle = "#a04525";
+    ctx.fillText(price, textX, ty);
+
+    const pillSize = Math.round(s * 0.024);
+    ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
+    const pillText = "Shop · noosho.com";
+    const pillW = ctx.measureText(pillText).width + s * 0.04;
+    const pillH = pillSize + s * 0.02;
+    const pillX = textX;
+    const pillY = chipY + chipH - chipPad - pillH;
+    roundRect(ctx, pillX, pillY, pillW, pillH, pillH / 2);
+    ctx.fillStyle = "#a04525";
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.textBaseline = "middle";
+    ctx.fillText(pillText, pillX + s * 0.02, pillY + pillH / 2 + 1);
+
+    ctx.restore();
+  }
+
+  drawWatermark(ctx, W, H);
 }
 
 export interface RevealVideoInput {
@@ -383,18 +545,25 @@ export async function generateRevealVideo(
 
   // Load product card images (same-origin/proxied). Drop any that fail so a
   // single broken image never breaks the export.
+  type Card = {
+    img: HTMLImageElement;
+    title: string;
+    price: string;
+    x?: number;
+    y?: number;
+  };
   const cards = (
     await Promise.all(
-      products.slice(0, 2).map(async (p) => {
+      products.slice(0, 2).map(async (p): Promise<Card | null> => {
         try {
           const img = await loadImage(p.imageUrl);
-          return { img, title: p.title, price: p.price };
+          return { img, title: p.title, price: p.price, x: p.x, y: p.y };
         } catch {
           return null;
         }
       })
     )
-  ).filter((c): c is { img: HTMLImageElement; title: string; price: string } => !!c);
+  ).filter((c): c is Card => c !== null);
 
   const TOTAL =
     REVEAL_TOTAL + cards.length * PRODUCT_SEG + (cards.length ? PRODUCT_END_HOLD : 0);
@@ -446,8 +615,20 @@ export async function generateRevealVideo(
       if (idx > cards.length - 1) idx = cards.length - 1; // end-hold on last card
       const local = into - idx * PRODUCT_SEG;
       const card = cards[idx];
-      const t = Math.min(1, local / 12); // ~0.4s fade/slide-in
-      renderProductCard(ctx, after, card.img, card.title, card.price, W, H, t);
+      const p = Math.min(1, local / PRODUCT_SEG);
+
+      // Use the in-scene arrow callout when the product's hotspot lands inside
+      // the frame; otherwise fall back to the centered product card.
+      let pt: { x: number; y: number } | null = null;
+      if (card.x != null && card.y != null) {
+        const m = mapCover(after, W, H, card.x, card.y);
+        if (m.x >= 0 && m.x <= W && m.y >= 0 && m.y <= H) pt = m;
+      }
+      if (pt) {
+        renderProductCallout(ctx, after, card.img, card.title, card.price, pt.x, pt.y, W, H, p);
+      } else {
+        renderProductCard(ctx, after, card.img, card.title, card.price, W, H, p);
+      }
     }
 
     const frame = new VideoFrame(canvas, {

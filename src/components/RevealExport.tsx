@@ -23,31 +23,42 @@ interface ParsedProduct {
   recommendation?: { category?: string } | null;
 }
 
-/** Top buyable products (image + price) from a design, as proxied card data. */
-function buyableProducts(design: RevealDesign): RevealProduct[] {
-  let prods: ParsedProduct[] = [];
-  const raw = design.products;
+function parseJsonish<T>(raw: unknown): T[] {
   if (typeof raw === "string") {
     try {
-      prods = JSON.parse(raw);
+      return JSON.parse(raw);
     } catch {
-      prods = [];
+      return [];
     }
-  } else if (Array.isArray(raw)) {
-    prods = raw as ParsedProduct[];
   }
-  return prods
-    .map((p) => p.amazonProduct)
-    .filter(
-      (ap): ap is { title: string; price: string; imageUrl: string } =>
-        !!ap && !!ap.imageUrl && !!ap.price
-    )
-    .slice(0, 2)
-    .map((ap) => ({
-      imageUrl: `/api/proxy-image?url=${encodeURIComponent(ap.imageUrl)}`,
-      title: ap.title || "Featured product",
-      price: ap.price,
-    }));
+  return Array.isArray(raw) ? (raw as T[]) : [];
+}
+
+/** Top buyable products (image + price) joined to their hotspot, proxied for the canvas. */
+function buyableProducts(design: RevealDesign): RevealProduct[] {
+  const prods = parseJsonish<ParsedProduct>(design.products);
+  const hotspots = parseJsonish<{ productIndex: number; x: number; y: number }>(
+    design.hotspots
+  );
+
+  const buyable = prods
+    .map((p, i): RevealProduct | null => {
+      const ap = p.amazonProduct;
+      if (!ap || !ap.imageUrl || !ap.price) return null;
+      const hs = hotspots.find((h) => h.productIndex === i);
+      return {
+        imageUrl: `/api/proxy-image?url=${encodeURIComponent(ap.imageUrl)}`,
+        title: ap.title || "Featured product",
+        price: ap.price,
+        x: hs?.x,
+        y: hs?.y,
+      };
+    })
+    .filter((p): p is RevealProduct => p !== null);
+
+  // Prefer products that have a hotspot (so the arrow has a real target).
+  buyable.sort((a, b) => (b.x != null ? 1 : 0) - (a.x != null ? 1 : 0));
+  return buyable.slice(0, 2);
 }
 
 export interface RevealDesign {
@@ -57,6 +68,7 @@ export interface RevealDesign {
   event_config?: Record<string, unknown> | string | null;
   design_narrative?: string;
   products?: unknown;
+  hotspots?: unknown;
   selected_items?: unknown;
 }
 
