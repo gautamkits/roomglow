@@ -62,3 +62,26 @@ CREATE TABLE IF NOT EXISTS event_dates (
   honoree TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Billing: pricing + coupons (also self-initialized by src/lib/db.ts).
+-- Amounts are in the smallest currency unit (paise / cents).
+CREATE TABLE IF NOT EXISTS pricing (
+  locale TEXT PRIMARY KEY,        -- 'IN' | 'US'
+  actual_amount INTEGER NOT NULL, -- MRP, shown struck-through
+  sale_amount INTEGER NOT NULL,   -- current selling price
+  currency TEXT NOT NULL,         -- 'inr' | 'usd'
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT UNIQUE NOT NULL,
+  discount_type TEXT NOT NULL,    -- 'percent' | 'fixed'
+  discount_value INTEGER NOT NULL,-- percent (1-100) or fixed amount in smallest unit
+  locale TEXT,                    -- NULL = all regions
+  active BOOLEAN DEFAULT true,
+  expires_at TIMESTAMPTZ,
+  max_uses INTEGER,
+  used_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);

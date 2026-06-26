@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2 } from "lucide-react";
+import { Check, X, BarChart2, Tag } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -97,13 +97,22 @@ function AdminContent() {
         isAdmin={session?.user?.isAdmin}
         showDesignCta={false}
         rightExtra={
-          <button
-            onClick={() => router.push("/admin/analytics")}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
-          >
-            <BarChart2 size={14} />
-            Analytics
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push("/admin/pricing")}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+            >
+              <Tag size={14} />
+              <span className="hidden sm:inline">Pricing</span>
+            </button>
+            <button
+              onClick={() => router.push("/admin/analytics")}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+            >
+              <BarChart2 size={14} />
+              <span className="hidden sm:inline">Analytics</span>
+            </button>
+          </div>
         }
         center={
           <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">

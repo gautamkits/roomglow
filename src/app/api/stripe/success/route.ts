@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { unlockDesign, getDesign, saveEventDate } from "@/lib/db";
+import { unlockDesign, getDesign, saveEventDate, incrementCouponUse } from "@/lib/db";
 
 const SITE_URL = process.env.NEXTAUTH_URL || "https://noosho.com";
 
@@ -25,6 +25,10 @@ export async function GET(request: Request) {
     const userId = session.metadata?.userId;
     if (userId) {
       await unlockDesign(designId, userId);
+
+      // Record coupon usage on successful payment.
+      const usedCoupon = session.metadata?.couponCode;
+      if (usedCoupon) await incrementCouponUse(usedCoupon).catch(() => {});
 
       // Save event date for reminders if applicable
       const design = await getDesign(designId);

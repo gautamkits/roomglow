@@ -330,3 +330,128 @@ export async function getPayment(paymentId: string) {
   const { rows } = await sql`SELECT * FROM payments WHERE id = ${paymentId} LIMIT 1`;
   return rows[0] || null;
 }
+
+// ─── Billing: pricing + coupons ───
+// Amounts are stored in the smallest currency unit (paise / cents), matching
+// Stripe. Tables self-initialize on first access (no migration runner exists).
+let billingSchemaReady = false;
+async function ensureBillingSchema() {
+  if (billingSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS pricing (
+      locale TEXT PRIMARY KEY,
+      actual_amount INTEGER NOT NULL,
+      sale_amount INTEGER NOT NULL,
+      currency TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS coupons (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      code TEXT UNIQUE NOT NULL,
+      discount_type TEXT NOT NULL,
+      discount_value INTEGER NOT NULL,
+      locale TEXT,
+      active BOOLEAN DEFAULT true,
+      expires_at TIMESTAMPTZ,
+      max_uses INTEGER,
+      used_count INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  // Seed defaults from the current hardcoded prices (no-op once set).
+  await sql`INSERT INTO pricing (locale, actual_amount, sale_amount, currency)
+            VALUES ('IN', 9900, 9900, 'inr') ON CONFLICT (locale) DO NOTHING`;
+  await sql`INSERT INTO pricing (locale, actual_amount, sale_amount, currency)
+            VALUES ('US', 499, 499, 'usd') ON CONFLICT (locale) DO NOTHING`;
+  billingSchemaReady = true;
+}
+
+export interface PricingRow {
+  locale: string;
+  actual_amount: number;
+  sale_amount: number;
+  currency: string;
+}
+
+export async function getPricing(locale: string): Promise<PricingRow | null> {
+  await ensureBillingSchema();
+  const { rows } = await sql`SELECT * FROM pricing WHERE locale = ${locale} LIMIT 1`;
+  return (rows[0] as PricingRow) || null;
+}
+
+export async function getAllPricing(): Promise<PricingRow[]> {
+  await ensureBillingSchema();
+  const { rows } = await sql`SELECT * FROM pricing ORDER BY locale`;
+  return rows as PricingRow[];
+}
+
+export async function updatePricing(
+  locale: string,
+  actualAmount: number,
+  saleAmount: number
+) {
+  await ensureBillingSchema();
+  await sql`
+    UPDATE pricing SET actual_amount = ${actualAmount}, sale_amount = ${saleAmount}, updated_at = now()
+    WHERE locale = ${locale}
+  `;
+}
+
+export async function listCoupons() {
+  await ensureBillingSchema();
+  const { rows } = await sql`SELECT * FROM coupons ORDER BY created_at DESC`;
+  return rows;
+}
+
+export async function createCoupon(p: {
+  code: string;
+  discountType: string;
+  discountValue: number;
+  locale?: string | null;
+  active?: boolean;
+  expiresAt?: string | null;
+  maxUses?: number | null;
+}) {
+  await ensureBillingSchema();
+  await sql`
+    INSERT INTO coupons (code, discount_type, discount_value, locale, active, expires_at, max_uses)
+    VALUES (
+      ${p.code.toUpperCase()},
+      ${p.discountType},
+      ${p.discountValue},
+      ${p.locale || null},
+      ${p.active ?? true},
+      ${p.expiresAt || null},
+      ${p.maxUses ?? null}
+    )
+    ON CONFLICT (code) DO UPDATE SET
+      discount_type = EXCLUDED.discount_type,
+      discount_value = EXCLUDED.discount_value,
+      locale = EXCLUDED.locale,
+      active = EXCLUDED.active,
+      expires_at = EXCLUDED.expires_at,
+      max_uses = EXCLUDED.max_uses
+  `;
+}
+
+export async function setCouponActive(id: string, active: boolean) {
+  await ensureBillingSchema();
+  await sql`UPDATE coupons SET active = ${active} WHERE id = ${id}`;
+}
+
+export async function deleteCoupon(id: string) {
+  await ensureBillingSchema();
+  await sql`DELETE FROM coupons WHERE id = ${id}`;
+}
+
+export async function getCouponByCode(code: string) {
+  await ensureBillingSchema();
+  const { rows } = await sql`SELECT * FROM coupons WHERE code = ${code.toUpperCase()} LIMIT 1`;
+  return rows[0] || null;
+}
+
+export async function incrementCouponUse(code: string) {
+  await sql`UPDATE coupons SET used_count = used_count + 1 WHERE code = ${code.toUpperCase()}`;
+}

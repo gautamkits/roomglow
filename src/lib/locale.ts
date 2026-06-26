@@ -48,6 +48,12 @@ export function affiliateUrl(asin: string, locale: Locale): string {
   return `https://www.${AMAZON_DOMAINS[locale]}/dp/${asin}?tag=${AFFILIATE_TAGS[locale]}`;
 }
 
+/** Format an amount in the smallest currency unit (paise/cents) for display. */
+export function formatAmount(amount: number, currency: string): string {
+  if (currency === "usd") return `$${(amount / 100).toFixed(2)}`;
+  return `₹${Math.round(amount / 100).toLocaleString("en-IN")}`;
+}
+
 /** Client-side: read locale cookie from document.cookie */
 export function getClientLocale(): Locale {
   if (typeof document === "undefined") return "IN";
