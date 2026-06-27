@@ -30,6 +30,15 @@ export async function addCredits(userId: string, amount: number) {
   await sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId}`;
 }
 
+// preview_image_url was added in code without a migration; self-init it so
+// inserts don't 500 on databases that predate the column.
+let designColumnsReady = false;
+async function ensureDesignColumns() {
+  if (designColumnsReady) return;
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS preview_image_url TEXT`;
+  designColumnsReady = true;
+}
+
 export async function saveDesign(params: {
   mode: string;
   eventConfig: unknown;
@@ -47,6 +56,7 @@ export async function saveDesign(params: {
   // Watermarked, downscaled preview served to non-entitled viewers (paywall).
   previewImageUrl?: string | null;
 }) {
+  await ensureDesignColumns();
   const { rows } = await sql`
     INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, original_blur, generated_blur)
     VALUES (
