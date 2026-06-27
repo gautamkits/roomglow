@@ -350,6 +350,30 @@ async function ensurePaymentsColumns() {
   paymentsColumnsReady = true;
 }
 
+/** Per-user report for the admin table: counts, spend, activity. */
+export async function getUserReport() {
+  await ensurePaymentsColumns();
+  const { rows } = await sql`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.created_at,
+      (SELECT COUNT(*) FROM designs d WHERE d.user_id = u.id) AS designs,
+      (SELECT COUNT(*) FROM designs d WHERE d.user_id = u.id AND d.is_unlocked) AS unlocked,
+      (SELECT COALESCE(SUM(amount_paise), 0) FROM payments p
+         WHERE p.user_id = u.id AND p.status = 'completed') AS spent,
+      (SELECT currency FROM payments p
+         WHERE p.user_id = u.id AND p.status = 'completed'
+         ORDER BY created_at DESC LIMIT 1) AS currency,
+      (SELECT MAX(created_at) FROM designs d WHERE d.user_id = u.id) AS last_active
+    FROM users u
+    ORDER BY u.created_at DESC
+    LIMIT 500
+  `;
+  return rows;
+}
+
 /** Record a completed Stripe sale (idempotent on stripe_session_id). */
 export async function recordStripeSale(p: {
   userId: string;

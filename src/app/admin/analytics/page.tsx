@@ -157,9 +157,15 @@ function AnalyticsContent() {
           </button>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Analytics</h1>
           <button
+            onClick={() => router.push("/admin/users")}
+            className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors"
+          >
+            Users report
+          </button>
+          <button
             onClick={syncStripe}
             disabled={syncing}
-            className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors disabled:opacity-50"
+            className="text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors disabled:opacity-50"
           >
             {syncing ? "Syncing…" : "Sync Stripe sales"}
           </button>
