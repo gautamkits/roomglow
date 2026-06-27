@@ -71,6 +71,17 @@ function AdminContent() {
     });
   };
 
+  // Remove a published design from the public home-page gallery.
+  const removeFromGallery = async (id: string) => {
+    if (!confirm("Remove this design from the home page gallery?")) return;
+    setApproved((d) => d.filter((x) => x.id !== id));
+    await fetch("/api/admin/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designId: id, action: "reject" }),
+    });
+  };
+
   if (status === "loading" || (loading && !forbidden)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-stone-50 dark:bg-zinc-950">
@@ -196,6 +207,12 @@ function AdminContent() {
                 </div>
                 <div className="p-4">
                   <RevealExport design={d} />
+                  <button
+                    onClick={() => removeFromGallery(d.id)}
+                    className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                  >
+                    <X size={15} /> Remove from home page
+                  </button>
                 </div>
               </div>
             ))}
