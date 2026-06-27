@@ -274,7 +274,8 @@ export async function getUpcomingEventReminders(daysAhead: number) {
 
 /** Analytics: aggregate stats for the admin dashboard. */
 export async function getAnalyticsStats() {
-  const [totals, funnel, revenue, roomTypes, signups] = await Promise.all([
+  await ensurePaymentsColumns();
+  const [totals, funnel, revenue, revenueByCurrency, roomTypes, signups] = await Promise.all([
     sql`
       SELECT
         COUNT(*) AS total_designs,
@@ -302,6 +303,16 @@ export async function getAnalyticsStats() {
     `,
     sql`
       SELECT
+        COALESCE(currency, 'inr') AS currency,
+        COALESCE(SUM(amount_paise), 0) AS total,
+        COUNT(*) AS cnt
+      FROM payments
+      WHERE status = 'completed'
+      GROUP BY COALESCE(currency, 'inr')
+      ORDER BY total DESC
+    `,
+    sql`
+      SELECT
         room_analysis->>'roomType' AS room_type,
         COUNT(*) AS cnt
       FROM designs
@@ -323,9 +334,36 @@ export async function getAnalyticsStats() {
     totals: totals.rows[0],
     funnel: funnel.rows[0],
     revenue: revenue.rows[0],
+    revenueByCurrency: revenueByCurrency.rows,
     roomTypes: roomTypes.rows,
     signups: signups.rows[0],
   };
+}
+
+// Stripe payments need a currency + a unique key for idempotent recording.
+let paymentsColumnsReady = false;
+async function ensurePaymentsColumns() {
+  if (paymentsColumnsReady) return;
+  await sql`ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency TEXT`;
+  await sql`ALTER TABLE payments ADD COLUMN IF NOT EXISTS stripe_session_id TEXT`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_stripe_session ON payments(stripe_session_id)`;
+  paymentsColumnsReady = true;
+}
+
+/** Record a completed Stripe sale (idempotent on stripe_session_id). */
+export async function recordStripeSale(p: {
+  userId: string;
+  designId: string;
+  amount: number; // smallest currency unit (cents / paise)
+  currency: string;
+  stripeSessionId: string;
+}) {
+  await ensurePaymentsColumns();
+  await sql`
+    INSERT INTO payments (user_id, design_id, amount_paise, currency, status, stripe_session_id)
+    VALUES (${p.userId}, ${p.designId}, ${p.amount}, ${p.currency}, 'completed', ${p.stripeSessionId})
+    ON CONFLICT (stripe_session_id) DO NOTHING
+  `;
 }
 
 export async function createPayment(userId: string, designId: string, amountPaise: number) {

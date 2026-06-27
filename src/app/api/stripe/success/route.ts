@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { stripe } from "@/lib/stripe";
-import { unlockDesign, getDesign, saveEventDate, incrementCouponUse } from "@/lib/db";
+import { unlockDesign, getDesign, saveEventDate, incrementCouponUse, recordStripeSale } from "@/lib/db";
 import { sendDesignReadyEmail } from "@/lib/email";
 import { ensureHotspots } from "@/lib/hotspots";
 import type { EventConfig, ProductResult } from "@/lib/types";
@@ -41,6 +41,17 @@ export async function GET(request: Request) {
     const userId = session.metadata?.userId;
     if (userId) {
       await unlockDesign(designId, userId);
+
+      // Record the sale for analytics (idempotent on the Stripe session id).
+      if (session.amount_total != null) {
+        await recordStripeSale({
+          userId,
+          designId,
+          amount: session.amount_total,
+          currency: session.currency || "usd",
+          stripeSessionId: session.id,
+        }).catch((e) => console.error("[stripe/success] recordSale failed:", e));
+      }
 
       // Fill in deferred hotspots now that the design is paid/entitled (P1-b).
       after(() => ensureHotspots(designId).catch(() => {}));

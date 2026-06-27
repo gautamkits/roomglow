@@ -1,6 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { unlockDesign } from "@/lib/db";
+import { unlockDesign, recordStripeSale } from "@/lib/db";
 import { ensureHotspots } from "@/lib/hotspots";
 
 export const runtime = "nodejs";
@@ -30,6 +30,15 @@ export async function POST(request: Request) {
       await unlockDesign(designId, userId).catch((e) =>
         console.error("[stripe/webhook] unlock failed:", e)
       );
+      if (session.amount_total != null) {
+        await recordStripeSale({
+          userId,
+          designId,
+          amount: session.amount_total,
+          currency: session.currency || "usd",
+          stripeSessionId: session.id,
+        }).catch((e) => console.error("[stripe/webhook] recordSale failed:", e));
+      }
       after(() => ensureHotspots(designId).catch(() => {}));
     }
   }

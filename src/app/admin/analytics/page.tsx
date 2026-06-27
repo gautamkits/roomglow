@@ -26,6 +26,7 @@ interface AnalyticsData {
     paid_count: string;
     paid_30d: string;
   };
+  revenueByCurrency: { currency: string; total: string; cnt: string }[];
   roomTypes: { room_type: string; cnt: string }[];
   signups: {
     total_users: string;
@@ -67,10 +68,9 @@ function AnalyticsContent() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    if (status === "unauthenticated") signIn("google");
-    if (status !== "authenticated") return;
+  const load = () =>
     fetch("/api/admin/analytics")
       .then((res) => {
         if (res.status === 403) { setForbidden(true); return null; }
@@ -78,7 +78,22 @@ function AnalyticsContent() {
       })
       .then((d) => { if (d) setData(d); })
       .finally(() => setLoading(false));
+
+  useEffect(() => {
+    if (status === "unauthenticated") signIn("google");
+    if (status !== "authenticated") return;
+    load();
   }, [status]);
+
+  const syncStripe = async () => {
+    setSyncing(true);
+    try {
+      await fetch("/api/admin/backfill-stripe", { method: "POST" });
+      await load();
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (status === "loading" || (loading && !forbidden)) {
     return (
@@ -108,12 +123,22 @@ function AnalyticsContent() {
   const approvalRate = approvedTotal > 0
     ? Math.round((Number(data.funnel.approved) / approvedTotal) * 100)
     : 0;
-  const revenueRupees = (Number(data.revenue.total_paise) / 100).toLocaleString("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  });
-  const revenue30dRupees = ((Number(data.revenue.paid_30d) || 0)).toLocaleString("en-IN");
+  const fmtMoney = (minor: number, currency: string) => {
+    try {
+      return (minor / 100).toLocaleString(undefined, {
+        style: "currency",
+        currency: currency.toUpperCase(),
+        maximumFractionDigits: 2,
+      });
+    } catch {
+      return `${currency.toUpperCase()} ${(minor / 100).toFixed(2)}`;
+    }
+  };
+  const byCurrency = data.revenueByCurrency || [];
+  const revenueDisplay =
+    byCurrency.length === 0
+      ? fmtMoney(0, "usd")
+      : byCurrency.map((r) => fmtMoney(Number(r.total), r.currency)).join(" · ");
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
@@ -131,6 +156,13 @@ function AnalyticsContent() {
             <ArrowLeft size={18} />
           </button>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Analytics</h1>
+          <button
+            onClick={syncStripe}
+            disabled={syncing}
+            className="ml-auto text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors disabled:opacity-50"
+          >
+            {syncing ? "Syncing…" : "Sync Stripe sales"}
+          </button>
         </div>
 
         {/* Key metrics */}
@@ -151,8 +183,8 @@ function AnalyticsContent() {
           <StatCard
             icon={<TrendingUp size={14} />}
             label="Revenue"
-            value={revenueRupees}
-            sub={`${data.revenue.paid_count} paid designs · ${revenue30dRupees} txns/30d`}
+            value={revenueDisplay}
+            sub={`${data.revenue.paid_count} paid · ${data.revenue.paid_30d} in 30d`}
           />
           <StatCard
             icon={<Heart size={14} />}
