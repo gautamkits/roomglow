@@ -35,10 +35,13 @@ function parseJsonish<T>(raw: unknown): T[] {
 }
 
 /** Top buyable products (image + price) joined to their hotspot, proxied for the canvas. */
-function buyableProducts(design: RevealDesign): RevealProduct[] {
+function buyableProducts(
+  design: RevealDesign,
+  hotspotsOverride?: unknown
+): RevealProduct[] {
   const prods = parseJsonish<ParsedProduct>(design.products);
   const hotspots = parseJsonish<{ productIndex: number; x: number; y: number }>(
-    design.hotspots
+    hotspotsOverride !== undefined ? hotspotsOverride : design.hotspots
   );
 
   const buyable = prods
@@ -82,6 +85,7 @@ function slugify(s: string): string {
 
 export default function RevealExport({ design }: { design: RevealDesign }) {
   const [busy, setBusy] = useState(false);
+  const [prepping, setPrepping] = useState(false);
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -111,12 +115,35 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     setError(null);
     setPct(0);
     try {
+      // The in-scene arrow needs product positions (hotspots). They're computed
+      // lazily, so older/gallery designs may have none — generate them on demand
+      // so the export gets the arrow callout instead of the plain card.
+      let products = allProducts.slice(0, cardCount);
+      if (cardCount > 0 && products.some((p) => p.x == null)) {
+        setPrepping(true);
+        try {
+          const r = await fetch("/api/admin/ensure-hotspots", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ designId: design.id }),
+          });
+          if (r.ok) {
+            const { hotspots } = await r.json();
+            products = buyableProducts(design, hotspots).slice(0, cardCount);
+          }
+        } catch {
+          /* fall back to centered cards */
+        } finally {
+          setPrepping(false);
+        }
+      }
+
       const blob = await generateRevealVideo(
         {
           beforeUrl: `/api/image/${design.id}/before?inline=1`,
           afterUrl: `/api/image/${design.id}/after?inline=1`,
           aspect,
-          products: allProducts.slice(0, cardCount),
+          products,
         },
         (f) => setPct(Math.round(f * 100))
       );
@@ -195,7 +222,11 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
           >
             <Film size={15} />
-            {busy ? `Rendering… ${pct}%` : "Export reveal MP4"}
+            {prepping
+              ? "Detecting product spots…"
+              : busy
+                ? `Rendering… ${pct}%`
+                : "Export reveal MP4"}
           </button>
           <p className="mt-1.5 text-[11px] text-zinc-400">
             {aspect === "original"
