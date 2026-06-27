@@ -17,6 +17,7 @@ import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
 import ProductSelection from "@/components/ProductSelection";
+import DeclutterStep from "@/components/DeclutterStep";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import Landing from "@/components/Landing";
@@ -46,7 +47,12 @@ function HomeContent() {
     selectedItems,
     error,
     statusMessage,
+    emptiedImage,
+    isEmptying,
     handleImageSelected,
+    handleEmptyRoom,
+    confirmDeclutter,
+    skipDeclutter,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
@@ -231,6 +237,19 @@ function HomeContent() {
             step={step as "analyzing" | "generating" | "curating"}
             isEvent={isEvent}
             statusMessage={statusMessage}
+          />
+        )}
+
+        {/* ─── DECLUTTER (clear a cluttered room before designing) ─── */}
+        {step === "declutter" && roomAnalysis && image && (
+          <DeclutterStep
+            originalImage={image}
+            removableObjects={roomAnalysis.removableObjects || []}
+            emptiedImage={emptiedImage}
+            isEmptying={isEmptying}
+            onConfirm={handleEmptyRoom}
+            onContinue={confirmDeclutter}
+            onSkip={skipDeclutter}
           />
         )}
 

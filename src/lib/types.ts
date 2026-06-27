@@ -6,7 +6,16 @@ export interface RoomAnalysis {
   lightingCondition: string;
   colorPalette: string[];
   suggestedProducts: SuggestedProduct[];
+  clutterLevel: ClutterLevel;
+  removableObjects: RemovableObject[];
   questions: Question[]; // kept for backwards compatibility
+}
+
+export type ClutterLevel = "clean" | "moderate" | "cluttered";
+
+export interface RemovableObject {
+  id: string;
+  label: string;
 }
 
 export interface Question {
@@ -74,6 +83,7 @@ export type FlowStep =
   | "event-setup"
   | "upload"
   | "analyzing"
+  | "declutter"
   | "product-selection"
   | "generating"
   | "curating"

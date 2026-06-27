@@ -29,6 +29,15 @@ const suggestedProductSchema = {
   required: ["id", "label", "description", "icon"],
 };
 
+const removableObjectSchema = {
+  type: Type.OBJECT,
+  properties: {
+    id: { type: Type.STRING },
+    label: { type: Type.STRING },
+  },
+  required: ["id", "label"],
+};
+
 const roomAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
@@ -39,6 +48,8 @@ const roomAnalysisSchema = {
     lightingCondition: { type: Type.STRING },
     colorPalette: { type: Type.ARRAY, items: { type: Type.STRING } },
     suggestedProducts: { type: Type.ARRAY, items: suggestedProductSchema },
+    clutterLevel: { type: Type.STRING },
+    removableObjects: { type: Type.ARRAY, items: removableObjectSchema },
   },
   required: [
     "roomType",
@@ -48,6 +59,8 @@ const roomAnalysisSchema = {
     "lightingCondition",
     "colorPalette",
     "suggestedProducts",
+    "clutterLevel",
+    "removableObjects",
   ],
 };
 
@@ -65,6 +78,8 @@ Fill in:
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the room
 - suggestedProducts: 6-8 products
+- clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
+- removableObjects: the movable furniture and objects you actually see that COULD be cleared to empty the space (e.g. sofa, coffee table, chairs, rug, lamp, decor, boxes). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry). Return an empty array only if the room is already empty.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest products that can REALISTICALLY be added to THIS room
@@ -89,6 +104,8 @@ Fill in:
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
 - suggestedProducts: 6-8 EVENT DECORATION items
+- clutterLevel: "clean" if the space is empty or nearly so, "moderate" if it has some furniture/objects, "cluttered" if it is full of items that would crowd the decorations
+- removableObjects: the movable furniture and objects you actually see that COULD be cleared to free up the space (e.g. sofa, table, chairs, rug, clutter). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors). Return an empty array only if the space is already empty.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest ONLY event DECORATIONS appropriate to the occasion and theme — NOT permanent furniture
@@ -117,6 +134,72 @@ CRITICAL RULES for suggestedProducts:
   });
 
   return response.text ?? "";
+}
+
+/**
+ * Empty a cluttered room so the design step has a clean canvas to work on.
+ * Strict photo edit: remove the listed movable objects and reconstruct the
+ * surfaces behind them, preserving the room's architecture, perspective and
+ * lighting. Items in `keepLabels` are explicitly left in place. Falls back to
+ * the original image if the model returns no image.
+ */
+export async function emptyRoom(
+  imageBase64: string,
+  removeLabels: string[],
+  keepLabels: string[] = []
+): Promise<string> {
+  const removeLine = removeLabels.length
+    ? `Remove these objects: ${removeLabels.join(", ")}.`
+    : `Remove ALL movable furniture and objects (sofas, tables, chairs, rugs, lamps, decor, clutter).`;
+  const keepLine = keepLabels.length
+    ? `\nKEEP these items exactly as they are, do NOT remove them: ${keepLabels.join(", ")}.`
+    : "";
+
+  const prompt = `This is a photo of a room. This is a STRICT photo editing task — produce a clean, EMPTY version of this exact room.
+
+${removeLine}${keepLine}
+
+MUST DO:
+- Photo-realistically reconstruct the floor, walls, and any surfaces that were hidden behind the removed objects, matching the existing flooring material, wall color, and texture.
+- Keep the EXACT same walls, floor, ceiling, windows, doors, built-in fixtures, room layout, dimensions, perspective, camera angle, and lighting.
+
+MUST NOT:
+- Do NOT add any new furniture, decorations, or objects.
+- Do NOT add or remove windows, doors, or change the architecture.
+- Do NOT change the camera angle or crop.
+
+The result must look like a real photograph of the same empty room.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-image",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    config: {
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  });
+
+  const candidates = response.candidates;
+  if (candidates && candidates.length > 0) {
+    const responseParts = candidates[0].content?.parts;
+    if (responseParts) {
+      for (const part of responseParts) {
+        if (part.inlineData?.data) {
+          return part.inlineData.data;
+        }
+      }
+    }
+  }
+
+  // No image returned — fall back to the original so the flow can continue.
+  return imageBase64;
 }
 
 export interface AmazonCandidate {

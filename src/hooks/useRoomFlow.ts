@@ -30,6 +30,13 @@ export function useRoomFlow() {
   const [mode, setMode] = useState<AppMode>("space");
   const [eventConfig, setEventConfig] = useState<EventConfig | null>(null);
   const [image, setImage] = useState<string | null>(null);
+  // The canvas the design is generated on. Equals `image` for clean rooms, or
+  // the emptied photo once the user clears a cluttered space. `image` always
+  // stays the true upload so the before/after compare and saved "original"
+  // remain the room the user actually photographed.
+  const [baseImage, setBaseImage] = useState<string | null>(null);
+  const [emptiedImage, setEmptiedImage] = useState<string | null>(null);
+  const [isEmptying, setIsEmptying] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [roomAnalysis, setRoomAnalysis] = useState<RoomAnalysis | null>(null);
   const [products, setProducts] = useState<ProductResult[]>([]);
@@ -68,6 +75,8 @@ export function useRoomFlow() {
       setMaxBudget(selectedMaxBudget);
 
       setImage(base64);
+      setBaseImage(base64);
+      setEmptiedImage(null);
       setStep("analyzing");
       setError(null);
 
@@ -94,7 +103,13 @@ export function useRoomFlow() {
         }
         const analysis: RoomAnalysis = await res.json();
         setRoomAnalysis(analysis);
-        setStep("product-selection");
+        // Cluttered rooms make for poor designs (products pile on top of
+        // existing furniture). Offer to clear the space first; clean rooms skip
+        // straight to product selection.
+        const hasClutter =
+          analysis.clutterLevel !== "clean" &&
+          (analysis.removableObjects?.length ?? 0) > 0;
+        setStep(hasClutter ? "declutter" : "product-selection");
       } catch (e) {
         setError(
           e instanceof Error
@@ -106,6 +121,59 @@ export function useRoomFlow() {
     },
     [mode, eventConfig]
   );
+
+  // Clear the space: empty out the chosen objects so the design lands on a
+  // clean canvas. `keepIds` are the removableObjects the user chose to keep.
+  const handleEmptyRoom = useCallback(
+    async (keepIds: string[]) => {
+      if (!image || !roomAnalysis) return;
+      setIsEmptying(true);
+      setError(null);
+      try {
+        const objects = roomAnalysis.removableObjects ?? [];
+        const keep = objects.filter((o) => keepIds.includes(o.id));
+        const remove = objects.filter((o) => !keepIds.includes(o.id));
+        const res = await fetch("/api/empty-room", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            image,
+            removeLabels: remove.map((o) => o.label),
+            keepLabels: keep.map((o) => o.label),
+          }),
+        });
+        if (!res.ok) {
+          const { error: msg } = await res.json().catch(() => ({ error: "" }));
+          throw new Error(msg || "We couldn't clear your space. Please try again.");
+        }
+        const { emptiedImage: emptied } = await res.json();
+        const dataUrl = emptied.startsWith("data:")
+          ? emptied
+          : `data:image/png;base64,${emptied}`;
+        setEmptiedImage(dataUrl);
+      } catch (e) {
+        setError(
+          e instanceof Error ? e.message : "We couldn't clear your space. Please try again."
+        );
+      } finally {
+        setIsEmptying(false);
+      }
+    },
+    [image, roomAnalysis]
+  );
+
+  // User accepted the emptied room → design on the clean canvas.
+  const confirmDeclutter = useCallback(() => {
+    if (emptiedImage) setBaseImage(emptiedImage);
+    setStep("product-selection");
+  }, [emptiedImage]);
+
+  // User opted to keep their room as-is → design on the original photo.
+  const skipDeclutter = useCallback(() => {
+    setEmptiedImage(null);
+    setBaseImage(image);
+    setStep("product-selection");
+  }, [image]);
 
   // Each create-pipeline call is expensive (a paid AI step). We stash each
   // step's output here so that if a later step fails, retrying resumes from the
@@ -128,6 +196,9 @@ export function useRoomFlow() {
     if (!roomAnalysis || !image) return;
     const p = progressRef.current;
     const selected = p.selected ?? [];
+    // Generate on the clean canvas (emptied room when decluttered, else the
+    // original). `image` stays the true upload for saving and before/after.
+    const canvas = baseImage ?? image;
 
     setStep("generating");
     setError(null);
@@ -204,7 +275,7 @@ export function useRoomFlow() {
           await callStep(
             "/api/curate-products",
             {
-              originalImage: image,
+              originalImage: canvas,
               designVision: p.designVision || "Create a cohesive, stylish design",
               categories: p.categories,
               budgetInstruction: maxBudget
@@ -231,7 +302,7 @@ export function useRoomFlow() {
         const design = await callStep(
           "/api/generate-image",
           {
-            originalImage: image,
+            originalImage: canvas,
             eventContext,
             products: curated.map((pr: ProductResult) => ({
               category: pr.recommendation.category,
@@ -292,7 +363,7 @@ export function useRoomFlow() {
       setCanRetry(true);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, mode, eventConfig, maxBudget]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, maxBudget]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
@@ -329,7 +400,7 @@ export function useRoomFlow() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            originalImage: image,
+            originalImage: baseImage ?? image,
             eventContext,
             styleHint,
             products: products.map((p: ProductResult) => ({
@@ -357,7 +428,7 @@ export function useRoomFlow() {
         setStep("results");
       }
     },
-    [image, products, mode, eventConfig, generatedImage, restyleCount]
+    [image, baseImage, products, mode, eventConfig, generatedImage, restyleCount]
   );
 
   const handleUnlocked = useCallback(() => {
@@ -369,6 +440,9 @@ export function useRoomFlow() {
     setMode("space");
     setEventConfig(null);
     setImage(null);
+    setBaseImage(null);
+    setEmptiedImage(null);
+    setIsEmptying(false);
     setGeneratedImage(null);
     setRoomAnalysis(null);
     setProducts([]);
@@ -401,9 +475,14 @@ export function useRoomFlow() {
     isUnlocked,
     error,
     statusMessage,
+    emptiedImage,
+    isEmptying,
     selectMode,
     submitEventConfig,
     handleImageSelected,
+    handleEmptyRoom,
+    confirmDeclutter,
+    skipDeclutter,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
