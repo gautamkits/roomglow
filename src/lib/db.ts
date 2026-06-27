@@ -44,9 +44,11 @@ export async function saveDesign(params: {
   selectedItems?: unknown;
   originalBlur?: string | null;
   generatedBlur?: string | null;
+  // Watermarked, downscaled preview served to non-entitled viewers (paywall).
+  previewImageUrl?: string | null;
 }) {
   const { rows } = await sql`
-    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, user_id, is_unlocked, selected_items, original_blur, generated_blur)
+    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, original_blur, generated_blur)
     VALUES (
       ${params.mode},
       ${JSON.stringify(params.eventConfig)},
@@ -56,6 +58,7 @@ export async function saveDesign(params: {
       ${params.designNarrative},
       ${params.originalImageUrl},
       ${params.generatedImageUrl},
+      ${params.previewImageUrl ?? null},
       ${params.userId ?? null},
       ${params.isUnlocked ?? false},
       ${JSON.stringify(params.selectedItems ?? null)},
@@ -70,6 +73,12 @@ export async function saveDesign(params: {
 export async function getDesign(designId: string) {
   const { rows } = await sql`SELECT * FROM designs WHERE id = ${designId} LIMIT 1`;
   return rows[0] || null;
+}
+
+export async function setHotspots(designId: string, hotspots: unknown) {
+  await sql`
+    UPDATE designs SET hotspots = ${JSON.stringify(hotspots)} WHERE id = ${designId}
+  `;
 }
 
 // ─── Gallery ───
@@ -145,7 +154,9 @@ export async function getGalleryCards(opts: {
     sort === "newest"
       ? "published_at DESC NULLS LAST"
       : "like_count DESC, published_at DESC NULLS LAST";
-  const cols = `id, mode, event_config, room_analysis, design_narrative, selected_items, products, hotspots, like_count, published_at, original_image_url, generated_image_url, original_blur, generated_blur`;
+  // Card grid + search/facets never use `hotspots` (often a large JSON blob),
+  // so it's excluded from the gallery payload (P1-a).
+  const cols = `id, mode, event_config, room_analysis, design_narrative, selected_items, products, like_count, published_at, original_image_url, generated_image_url, original_blur, generated_blur`;
   if (mode === "space" || mode === "event") {
     const { rows } = await sql.query(
       `SELECT ${cols} FROM designs WHERE gallery_status = 'approved' AND mode = $1
@@ -196,10 +207,17 @@ export async function hasLiked(designId: string, fingerprint: string) {
   return rows.length > 0;
 }
 
-export async function unlockDesign(designId: string, userId: string) {
-  await sql`
-    UPDATE designs SET is_unlocked = true, user_id = ${userId} WHERE id = ${designId}
+/**
+ * Unlock a design for a user. Ownership‑guarded: only succeeds when the design
+ * is unowned (anonymous) or already belongs to this user — a caller can never
+ * claim/reassign another account's design. Returns true if a row was updated.
+ */
+export async function unlockDesign(designId: string, userId: string): Promise<boolean> {
+  const { rowCount } = await sql`
+    UPDATE designs SET is_unlocked = true, user_id = ${userId}
+    WHERE id = ${designId} AND (user_id IS NULL OR user_id = ${userId})
   `;
+  return (rowCount ?? 0) > 0;
 }
 
 export async function getUserDesigns(userId: string) {
@@ -333,57 +351,9 @@ export async function getPayment(paymentId: string) {
 
 // ─── Billing: pricing + coupons ───
 // Amounts are stored in the smallest currency unit (paise / cents), matching
-// Stripe. Tables self-initialize on first access (no migration runner exists).
-let billingSchemaReady = false;
-async function ensureBillingSchema() {
-  if (billingSchemaReady) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS pricing (
-      locale TEXT PRIMARY KEY,
-      actual_amount INTEGER NOT NULL,
-      sale_amount INTEGER NOT NULL,
-      currency TEXT NOT NULL,
-      updated_at TIMESTAMPTZ DEFAULT now()
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS coupons (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      code TEXT UNIQUE NOT NULL,
-      discount_type TEXT NOT NULL,
-      discount_value INTEGER NOT NULL,
-      locale TEXT,
-      active BOOLEAN DEFAULT true,
-      expires_at TIMESTAMPTZ,
-      max_uses INTEGER,
-      used_count INTEGER DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT now()
-    )
-  `;
-  // Abandoned-checkout funnel: one row per user+design that started Stripe
-  // checkout. last_reminder_stage tracks which reminder (1=day1, 2=day3,
-  // 3=final/day4) has been sent. Reminders stop once the design is unlocked.
-  await sql`
-    CREATE TABLE IF NOT EXISTS checkout_intents (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      user_id UUID,
-      design_id UUID,
-      email TEXT NOT NULL,
-      name TEXT,
-      amount INTEGER,
-      currency TEXT,
-      last_reminder_stage INTEGER DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT now(),
-      UNIQUE(user_id, design_id)
-    )
-  `;
-  // Seed defaults from the current hardcoded prices (no-op once set).
-  await sql`INSERT INTO pricing (locale, actual_amount, sale_amount, currency)
-            VALUES ('IN', 9900, 9900, 'inr') ON CONFLICT (locale) DO NOTHING`;
-  await sql`INSERT INTO pricing (locale, actual_amount, sale_amount, currency)
-            VALUES ('US', 499, 499, 'usd') ON CONFLICT (locale) DO NOTHING`;
-  billingSchemaReady = true;
-}
+// Stripe. Schema for the pricing/coupons/checkout_intents tables (and the
+// restyled_from column) lives in scripts/migrate.mjs — run `npm run db:migrate`
+// at deploy. These tables are assumed to exist here (no per-request DDL).
 
 export interface PricingRow {
   locale: string;
@@ -393,13 +363,11 @@ export interface PricingRow {
 }
 
 export async function getPricing(locale: string): Promise<PricingRow | null> {
-  await ensureBillingSchema();
   const { rows } = await sql`SELECT * FROM pricing WHERE locale = ${locale} LIMIT 1`;
   return (rows[0] as PricingRow) || null;
 }
 
 export async function getAllPricing(): Promise<PricingRow[]> {
-  await ensureBillingSchema();
   const { rows } = await sql`SELECT * FROM pricing ORDER BY locale`;
   return rows as PricingRow[];
 }
@@ -409,7 +377,6 @@ export async function updatePricing(
   actualAmount: number,
   saleAmount: number
 ) {
-  await ensureBillingSchema();
   await sql`
     UPDATE pricing SET actual_amount = ${actualAmount}, sale_amount = ${saleAmount}, updated_at = now()
     WHERE locale = ${locale}
@@ -417,7 +384,6 @@ export async function updatePricing(
 }
 
 export async function listCoupons() {
-  await ensureBillingSchema();
   const { rows } = await sql`SELECT * FROM coupons ORDER BY created_at DESC`;
   return rows;
 }
@@ -431,7 +397,6 @@ export async function createCoupon(p: {
   expiresAt?: string | null;
   maxUses?: number | null;
 }) {
-  await ensureBillingSchema();
   await sql`
     INSERT INTO coupons (code, discount_type, discount_value, locale, active, expires_at, max_uses)
     VALUES (
@@ -454,17 +419,14 @@ export async function createCoupon(p: {
 }
 
 export async function setCouponActive(id: string, active: boolean) {
-  await ensureBillingSchema();
   await sql`UPDATE coupons SET active = ${active} WHERE id = ${id}`;
 }
 
 export async function deleteCoupon(id: string) {
-  await ensureBillingSchema();
   await sql`DELETE FROM coupons WHERE id = ${id}`;
 }
 
 export async function getCouponByCode(code: string) {
-  await ensureBillingSchema();
   const { rows } = await sql`SELECT * FROM coupons WHERE code = ${code.toUpperCase()} LIMIT 1`;
   return rows[0] || null;
 }
@@ -482,7 +444,6 @@ export async function recordCheckoutIntent(p: {
   amount: number;
   currency: string;
 }) {
-  await ensureBillingSchema();
   await sql`
     INSERT INTO checkout_intents (user_id, design_id, email, name, amount, currency)
     VALUES (${p.userId}, ${p.designId}, ${p.email}, ${p.name || null}, ${p.amount}, ${p.currency})
@@ -498,7 +459,6 @@ export async function recordCheckoutIntent(p: {
 
 // Intents that are still unpaid and haven't finished the 3-stage funnel.
 export async function getDueCheckoutReminders() {
-  await ensureBillingSchema();
   const { rows } = await sql`
     SELECT
       ci.id, ci.design_id, ci.email, ci.name, ci.amount, ci.currency,
@@ -530,16 +490,10 @@ export async function markCheckoutReminderSent(id: string, stage: number) {
 }
 
 // ─── Restyle lineage (save-as-new) ───
-let restyleColumnReady = false;
-async function ensureRestyleColumn() {
-  if (restyleColumnReady) return;
-  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS restyled_from UUID`;
-  restyleColumnReady = true;
-}
+// The restyled_from column is created by scripts/migrate.mjs.
 
 /** Number of restyles already created from a given root design. */
 export async function countRestyles(rootId: string): Promise<number> {
-  await ensureRestyleColumn();
   const { rows } = await sql`
     SELECT COUNT(*)::int AS n FROM designs WHERE restyled_from = ${rootId}
   `;
@@ -547,6 +501,5 @@ export async function countRestyles(rootId: string): Promise<number> {
 }
 
 export async function setRestyledFrom(designId: string, rootId: string) {
-  await ensureRestyleColumn();
   await sql`UPDATE designs SET restyled_from = ${rootId} WHERE id = ${designId}`;
 }

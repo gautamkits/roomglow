@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { setGalleryStatus } from "@/lib/db";
@@ -14,6 +15,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Bad request" }, { status: 400 });
     }
     await setGalleryStatus(designId, action === "approve" ? "approved" : "rejected");
+    // The approved set drives the cached homepage gallery — refresh it now.
+    revalidateTag("gallery", "max");
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Admin review failed:", error);

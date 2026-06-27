@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { unlockDesign, getDesign, saveEventDate } from "@/lib/db";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
+import { ensureHotspots } from "@/lib/hotspots";
 
 export async function POST(request: Request) {
   try {
@@ -21,8 +22,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Design not found" }, { status: 404 });
     }
 
-    // Already paid/unlocked → idempotent success (returning paid users).
+    // Already paid/unlocked → idempotent success, but only for the owner (or an
+    // unowned design). Never confirm unlock to a user who doesn't own it.
     if (design.is_unlocked) {
+      if (design.user_id && design.user_id !== session.user.id) {
+        return NextResponse.json(
+          { error: "This design belongs to another account." },
+          { status: 403 }
+        );
+      }
       return NextResponse.json({ unlocked: true });
     }
 
@@ -36,8 +44,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ unlocked: false });
     }
 
-    // Claim the design for this user and unlock it
-    await unlockDesign(designId, session.user.id);
+    // Claim the design for this user and unlock it. The DB guard rejects any
+    // attempt to claim a design already owned by a different account.
+    const claimed = await unlockDesign(designId, session.user.id);
+    if (!claimed) {
+      return NextResponse.json(
+        { error: "This design belongs to another account." },
+        { status: 403 }
+      );
+    }
+
+    // Hotspot detection was deferred for the locked design — fill it in now that
+    // it's entitled to be viewed (non-blocking; P1-b).
+    after(() => ensureHotspots(designId).catch(() => {}));
 
     // Capture event date for future re-engagement
     if (design.mode === "event" && design.event_config) {

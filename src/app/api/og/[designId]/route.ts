@@ -1,15 +1,58 @@
 import sharp from "sharp";
 import { loadDesignImages } from "@/lib/images";
+import { getDesign } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 const H = 630; // half-height target; each panel H x H => 1260 x 630 (1.91:1 OG ratio)
+
+// Branded fallback used when a design isn't publicly viewable — never exposes
+// the locked design's pixels through social-preview generation (R1).
+async function brandedFallback() {
+  const card = await sharp({
+    create: {
+      width: 1260,
+      height: H,
+      channels: 4,
+      background: { r: 160, g: 69, b: 37, alpha: 1 },
+    },
+  })
+    .composite([
+      {
+        input: Buffer.from(
+          `<svg width="1260" height="${H}">
+            <text x="630" y="300" font-family="Arial" font-size="64" font-weight="700" fill="white" text-anchor="middle">Noosho</text>
+            <text x="630" y="360" font-family="Arial" font-size="28" fill="rgba(255,255,255,0.85)" text-anchor="middle">AI room &amp; event designs from one photo</text>
+          </svg>`
+        ),
+        left: 0,
+        top: 0,
+      },
+    ])
+    .jpeg({ quality: 82 })
+    .toBuffer();
+  return new Response(new Uint8Array(card), {
+    headers: {
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=3600",
+    },
+  });
+}
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ designId: string }> }
 ) {
   const { designId } = await params;
+
+  // Only public (approved) or unlocked designs may be rendered into an OG card;
+  // anything else gets a branded placeholder.
+  const design = await getDesign(designId);
+  if (!design) return new Response("Not found", { status: 404 });
+  if (design.gallery_status !== "approved" && !design.is_unlocked) {
+    return brandedFallback();
+  }
+
   const imgs = await loadDesignImages(designId);
   if (!imgs) return new Response("Not found", { status: 404 });
 

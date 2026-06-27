@@ -1,5 +1,17 @@
 export const runtime = "nodejs";
 
+// Only these hosts may be proxied — keeps this from being a general-purpose
+// open proxy (SSRF / bandwidth abuse). It exists solely to draw Amazon product
+// images and our own Blob assets to the export canvas without tainting it.
+function isAllowedHost(host: string): boolean {
+  return (
+    host === "m.media-amazon.com" ||
+    host === "images-na.ssl-images-amazon.com" ||
+    host.endsWith(".amazonaws.com") ||
+    host.endsWith(".public.blob.vercel-storage.com")
+  );
+}
+
 // Same-origin image proxy so cross-origin product images (Amazon CDN) can be
 // drawn to the export canvas without tainting it (required for WebCodecs).
 export async function GET(request: Request) {
@@ -14,6 +26,9 @@ export async function GET(request: Request) {
   }
   if (target.protocol !== "https:") {
     return new Response("Only https allowed", { status: 400 });
+  }
+  if (!isAllowedHost(target.hostname)) {
+    return new Response("Host not allowed", { status: 403 });
   }
 
   let upstream: Response;

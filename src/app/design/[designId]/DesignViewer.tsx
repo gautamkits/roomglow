@@ -122,6 +122,14 @@ function Viewer({
 
   const showProducts = isUnlocked || approved;
 
+  // For locked designs the server hands us the gated route URL (serves a
+  // watermarked preview). Once unlocked in-session, bust the cache so the same
+  // route re-fetches the now-entitled full-res master.
+  const generatedSrc =
+    design.generated_image_url.startsWith("/api/image") && isUnlocked
+      ? `${design.generated_image_url}?u=1`
+      : design.generated_image_url;
+
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
       <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
@@ -139,7 +147,7 @@ function Viewer({
           <div className="flex items-center gap-2">
             {isUnlocked && !approved && (
               <a
-                href={design.generated_image_url}
+                href={generatedSrc}
                 download
                 className="hidden sm:flex items-center gap-1.5 text-sm text-orange-700 hover:text-orange-800 transition-colors"
               >
@@ -197,7 +205,7 @@ function Viewer({
         <div className="relative">
           <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
             <ImageWithHotspots
-              imageSrc={design.generated_image_url}
+              imageSrc={generatedSrc}
               hotspots={showProducts ? design.hotspots : []}
               products={design.products as never[]}
               hidePrices={approved}

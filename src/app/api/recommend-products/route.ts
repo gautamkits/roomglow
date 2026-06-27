@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { recommendProducts } from "@/lib/claude";
+import { recommendProducts } from "@/lib/gemini";
 
 export async function POST(request: Request) {
   try {

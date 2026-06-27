@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

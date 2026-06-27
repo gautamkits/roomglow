@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import type {
   AppMode,
   EventConfig,
@@ -107,47 +107,60 @@ export function useRoomFlow() {
     [mode, eventConfig]
   );
 
-  const handleProductSelection = useCallback(
-    async (selected: SuggestedProduct[]) => {
-      if (!roomAnalysis || !image) return;
-      setSelectedItems(selected);
-      setStep("generating");
-      setError(null);
+  // Each create-pipeline call is expensive (a paid AI step). We stash each
+  // step's output here so that if a later step fails, retrying resumes from the
+  // failed step instead of re-running — and re-paying for — the earlier ones
+  // (U2). A fresh submission clears this, so the happy path is unchanged.
+  const progressRef = useRef<{
+    selected?: SuggestedProduct[];
+    recs?: ProductRecommendation[];
+    categories?: unknown;
+    designVision?: string;
+    curatedProducts?: ProductResult[];
+    narrative?: string;
+    generatedImg?: string;
+    hotspots?: Hotspot[];
+    designId?: string | null;
+  }>({});
+  const [canRetry, setCanRetry] = useState(false);
 
-      const eventContext = buildEventContext(
-        mode === "event" ? eventConfig : null
-      );
-      const isEvent = mode === "event";
-      const eventLabel = eventConfig?.eventLabel || "event";
-      const subTheme = eventConfig?.subTheme || "";
+  const runPipeline = useCallback(async () => {
+    if (!roomAnalysis || !image) return;
+    const p = progressRef.current;
+    const selected = p.selected ?? [];
 
-      const callStep = async (
-        url: string,
-        body: unknown,
-        failMsg: string
-      ) => {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const { error: msg } = await res.json().catch(() => ({ error: "" }));
-          throw new Error(msg || failMsg);
-        }
-        return res.json();
-      };
+    setStep("generating");
+    setError(null);
+    setCanRetry(false);
 
-      try {
+    const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
+    const isEvent = mode === "event";
+    const eventLabel = eventConfig?.eventLabel || "event";
+    const subTheme = eventConfig?.subTheme || "";
+
+    const callStep = async (url: string, body: unknown, failMsg: string) => {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const { error: msg } = await res.json().catch(() => ({ error: "" }));
+        throw new Error(msg || failMsg);
+      }
+      return res.json();
+    };
+
+    try {
+      // 1. Design vision + product recommendations
+      if (!p.recs || p.designVision === undefined) {
+        setStep("generating");
         setStatusMessage(
           isEvent
             ? `Creating a ${subTheme} decoration plan...`
             : "Creating a design vision for your room..."
         );
-        const {
-          products: recs,
-          designVision,
-        }: {
+        const { products: recs, designVision }: {
           products: ProductRecommendation[];
           designVision: string;
         } = await callStep(
@@ -155,12 +168,17 @@ export function useRoomFlow() {
           {
             roomAnalysis,
             userAnswers: {},
-            selectedProductTypes: selected.map((p) => p.label),
+            selectedProductTypes: selected.map((s) => s.label),
             eventContext,
           },
           "We couldn't create a design plan. Please try again."
         );
+        p.recs = recs;
+        p.designVision = designVision || "";
+      }
 
+      // 2. Find matching products on Amazon
+      if (!p.categories) {
         setStatusMessage(
           isEvent
             ? `Finding the best ${eventLabel} decorations on Amazon...`
@@ -168,10 +186,14 @@ export function useRoomFlow() {
         );
         const { categories } = await callStep(
           "/api/search-products",
-          { products: recs },
+          { products: p.recs },
           "We couldn't find products on Amazon. Try selecting different items."
         );
+        p.categories = categories;
+      }
 
+      // 3. Curate the cohesive set
+      if (!p.curatedProducts) {
         setStep("curating");
         setStatusMessage(
           isEvent
@@ -183,19 +205,24 @@ export function useRoomFlow() {
             "/api/curate-products",
             {
               originalImage: image,
-              designVision:
-                designVision || "Create a cohesive, stylish design",
-              categories,
+              designVision: p.designVision || "Create a cohesive, stylish design",
+              categories: p.categories,
               budgetInstruction: maxBudget
                 ? `BUDGET CONSTRAINT: Keep the COMBINED total of all chosen products at or under ₹${maxBudget.toLocaleString("en-IN")}. Prefer cheaper suitable options to stay within budget while keeping the design cohesive. Only exceed the cap for a category if it has no cheaper viable option.`
                 : undefined,
             },
             "We couldn't finalize the product selection. Please try again."
           );
+        p.curatedProducts = curatedProducts;
+        p.narrative = narrative || "";
+      }
+      const curated = p.curatedProducts ?? [];
+      setProducts(curated);
+      setDesignNarrative(p.narrative || "");
 
-        setProducts(curatedProducts);
-        setDesignNarrative(narrative || "");
-
+      // 4. Render the design image
+      if (!p.generatedImg) {
+        setStep("generating");
         setStatusMessage(
           isEvent
             ? "Rendering your decorated venue..."
@@ -206,25 +233,27 @@ export function useRoomFlow() {
           {
             originalImage: image,
             eventContext,
-            products: curatedProducts.map((p: ProductResult) => ({
-              category: p.recommendation.category,
-              placement: p.recommendation.placement,
-              title: p.amazonProduct?.title || p.recommendation.category,
-              colorSuggestion: p.recommendation.colorSuggestion,
-              imageUrl: p.amazonProduct?.imageUrl || "",
+            products: curated.map((pr: ProductResult) => ({
+              category: pr.recommendation.category,
+              placement: pr.recommendation.placement,
+              title: pr.amazonProduct?.title || pr.recommendation.category,
+              colorSuggestion: pr.recommendation.colorSuggestion,
+              imageUrl: pr.amazonProduct?.imageUrl || "",
             })),
           },
           "We couldn't render your room. Please try again."
         );
-
-        const genImg = design.generatedImage
+        p.generatedImg = design.generatedImage
           ? `data:image/png;base64,${design.generatedImage}`
           : image;
-        setGeneratedImage(genImg);
-        setHotspots(design.hotspots || []);
+        p.hotspots = design.hotspots || [];
+      }
+      const genImg = p.generatedImg ?? image;
+      setGeneratedImage(genImg);
+      setHotspots(p.hotspots || []);
 
-        // Save to DB. If the user is already signed in, save-design returns
-        // isUnlocked=true and the design is linked to their account immediately.
+      // 5. Persist. Non-fatal: a save failure still shows the result.
+      if (p.designId === undefined) {
         setStatusMessage("Saving your design...");
         try {
           const saveRes = await callStep(
@@ -233,36 +262,52 @@ export function useRoomFlow() {
               mode,
               eventConfig,
               roomAnalysis,
-              products: curatedProducts,
-              hotspots: design.hotspots || [],
-              designNarrative: narrative || "",
+              products: curated,
+              hotspots: p.hotspots || [],
+              designNarrative: p.narrative || "",
               originalImage: image,
               generatedImage: genImg,
-              selectedItems: selected.map((p) => p.label),
+              selectedItems: selected.map((s) => s.label),
             },
             "Failed to save your design."
           );
+          p.designId = saveRes.designId;
           setDesignId(saveRes.designId);
           setIsUnlocked(!!saveRes.isUnlocked);
         } catch (saveErr) {
-          // Non-fatal — still show the result, just unsaved/locked
           console.error("[save-design] Failed to save design:", saveErr);
+          p.designId = null;
           setDesignId(null);
           setIsUnlocked(false);
         }
-
-        setStep("results");
-      } catch (e) {
-        setError(
-          e instanceof Error
-            ? e.message
-            : "Something went wrong. Please try again."
-        );
-        setStep("product-selection");
       }
+
+      progressRef.current = {}; // success — clear the resume buffer
+      setStep("results");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Something went wrong. Please try again."
+      );
+      // Keep progressRef so the next attempt resumes from the failed step.
+      setCanRetry(true);
+      setStep("product-selection");
+    }
+  }, [roomAnalysis, image, mode, eventConfig, maxBudget]);
+
+  const handleProductSelection = useCallback(
+    async (selected: SuggestedProduct[]) => {
+      setSelectedItems(selected);
+      // Fresh submission → start a clean run (don't reuse stale partial work).
+      progressRef.current = { selected };
+      await runPipeline();
     },
-    [roomAnalysis, image, mode, eventConfig, maxBudget]
+    [runPipeline]
   );
+
+  // Resume a failed run from the first incomplete step (U2).
+  const retryGeneration = useCallback(async () => {
+    await runPipeline();
+  }, [runPipeline]);
 
   const handleRegenerate = useCallback(
     async (styleHint: string) => {
@@ -336,6 +381,8 @@ export function useRoomFlow() {
     setError(null);
     setStatusMessage("");
     setRestyleCount(0);
+    setCanRetry(false);
+    progressRef.current = {};
   }, []);
 
   return {
@@ -359,6 +406,8 @@ export function useRoomFlow() {
     handleImageSelected,
     handleProductSelection,
     handleRegenerate,
+    retryGeneration,
+    canRetry,
     restylesLeft: Math.max(0, MAX_RESTYLES - restyleCount),
     maxRestyles: MAX_RESTYLES,
     handleUnlocked,

@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { saveDesign, saveEventDate } from "@/lib/db";
-import { makeBlurDataUrl } from "@/lib/images";
+import { makeBlurDataUrl, makeWatermarkedPreview } from "@/lib/images";
 import { sendDesignReadyEmail } from "@/lib/email";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 
@@ -59,6 +59,29 @@ export async function POST(request: Request) {
       makeBlurDataUrl(generatedBuf).catch(() => null),
     ]);
 
+    // For locked designs, build + store a watermarked, downscaled preview. The
+    // gated image route serves this to non-entitled viewers so the full-res
+    // master is never handed out before payment (R1).
+    let previewImageUrl: string | null = null;
+    if (!isUnlocked) {
+      try {
+        const previewBuf = await makeWatermarkedPreview(generatedBuf);
+        const previewBlob = await put(
+          `designs/${ts}-preview.jpg`,
+          previewBuf,
+          {
+            access: "public",
+            contentType: "image/jpeg",
+            addRandomSuffix: true,
+            token: blobToken,
+          }
+        );
+        previewImageUrl = previewBlob.url;
+      } catch (e) {
+        console.error("[save-design] preview generation failed:", e);
+      }
+    }
+
     const designId = await saveDesign({
       mode: mode || "space",
       eventConfig: eventConfig || null,
@@ -68,6 +91,7 @@ export async function POST(request: Request) {
       designNarrative: designNarrative || "",
       originalImageUrl: originalBlob.url,
       generatedImageUrl: generatedBlob.url,
+      previewImageUrl,
       originalBlur,
       generatedBlur,
       userId,

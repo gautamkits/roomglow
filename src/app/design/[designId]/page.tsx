@@ -120,7 +120,13 @@ export default async function DesignPage({
                 products: d.products,
                 hotspots: d.hotspots,
                 design_narrative: d.design_narrative,
-                generated_image_url: d.generated_image_url,
+                // Never hand the full-res master to the client for a locked
+                // design — route through the gated endpoint, which serves the
+                // watermarked preview until the design is unlocked/approved (R1).
+                generated_image_url:
+                  d.is_unlocked || approved
+                    ? d.generated_image_url
+                    : `/api/image/${d.id}/after`,
                 is_unlocked: d.is_unlocked,
               }
             : null

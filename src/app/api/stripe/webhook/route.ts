@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { unlockDesign } from "@/lib/db";
+import { ensureHotspots } from "@/lib/hotspots";
 
 export const runtime = "nodejs";
 
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
       await unlockDesign(designId, userId).catch((e) =>
         console.error("[stripe/webhook] unlock failed:", e)
       );
+      after(() => ensureHotspots(designId).catch(() => {}));
     }
   }
 

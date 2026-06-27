@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
 import { Wand2, ArrowRight, Sofa, PartyPopper } from "lucide-react";
 import { auth } from "@/auth";
@@ -26,11 +27,21 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
 };
 
-export const dynamic = "force-dynamic";
-
 type Search = { type?: string; sort?: string; room?: string; event?: string; q?: string; page?: string };
 
 const PAGE_SIZE = 24;
+
+// The approved gallery changes infrequently (admin-gated). Cache the full
+// lightweight set so the homepage no longer issues a 200-row query on every
+// visit; refreshed every 5 min, or immediately when a design is approved via
+// revalidateTag("gallery"). Facets/filtering/paging run in JS over this cached
+// set, so they cost nothing per request (P1-a).
+const getCachedGalleryCards = (sort: string) =>
+  unstable_cache(
+    () => getGalleryCards({ sort, limit: 200 }),
+    ["gallery-cards", sort],
+    { tags: ["gallery"], revalidate: 300 }
+  )();
 
 export default async function Home({
   searchParams,
@@ -41,9 +52,10 @@ export default async function Home({
   const mode = type === "space" || type === "event" ? type : undefined;
   const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
 
-  // Fetch all approved (lightweight) so facets reflect the whole gallery; filter in JS.
+  // Fetch all approved (lightweight, cached) so facets reflect the whole
+  // gallery; filter in JS. auth() stays uncached (per-request session).
   const [allCards, session] = await Promise.all([
-    getGalleryCards({ sort, limit: 200 }),
+    getCachedGalleryCards(sort),
     auth(),
   ]);
 

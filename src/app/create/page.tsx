@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { SessionProvider, useSession } from "next-auth/react";
 import {
   Wand2,
@@ -48,6 +49,8 @@ function HomeContent() {
     handleImageSelected,
     handleProductSelection,
     handleRegenerate,
+    retryGeneration,
+    canRetry,
     restylesLeft,
     maxRestyles,
     handleUnlocked,
@@ -58,6 +61,7 @@ function HomeContent() {
     sessionStatus === "authenticated" && step === "upload"
   );
 
+  const router = useRouter();
   const { formatBudget } = useLocale();
   const [showBefore, setShowBefore] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sending" | "done">("idle");
@@ -67,6 +71,10 @@ function HomeContent() {
     step === "analyzing" || step === "generating" || step === "curating";
 
   const isEvent = mode === "event";
+
+  // Anonymous visitors get the marketing landing only at the very start; once
+  // they begin a design the flow renders for them too, up to the paywall (U1).
+  const onLandingView = sessionStatus === "unauthenticated" && step === "upload";
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
@@ -87,30 +95,60 @@ function HomeContent() {
         }
       />
 
-      <main
-        className={
-          sessionStatus === "unauthenticated" ? "" : "max-w-5xl mx-auto px-5"
-        }
-      >
+      <main className={onLandingView ? "" : "max-w-5xl mx-auto px-5"}>
         {error && (
-          <div className="mt-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300 text-sm">
-            {error}
+          <div className="mt-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300 text-sm flex flex-wrap items-center justify-between gap-3">
+            <span>{error}</span>
+            {canRetry && (
+              <button
+                onClick={retryGeneration}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-700 hover:bg-red-800 text-white text-xs font-medium transition-colors"
+              >
+                <RefreshCw size={13} />
+                Try again
+              </button>
+            )}
           </div>
         )}
 
-        {/* ─── AUTH GATE — must sign in before designing ─── */}
-        {sessionStatus === "loading" && (
+        {sessionStatus === "loading" && step === "upload" && (
           <div className="flex items-center justify-center py-32">
             <div className="w-8 h-8 border-2 border-orange-700 border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
-        {sessionStatus === "unauthenticated" && <Landing />}
-
-        {sessionStatus === "authenticated" && (
+        {/* ─── ANONYMOUS START — design first, sign in at the paywall (U1) ─── */}
+        {step === "upload" && sessionStatus === "unauthenticated" && (
           <>
+            <div id="anon-start" className="max-w-xl mx-auto px-5 pt-8 pb-2">
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 animate-fade-up">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
+                    <Wand2 size={15} className="text-white" />
+                  </span>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                    Design your space — free to try
+                  </h2>
+                </div>
+                <p className="text-xs text-zinc-500 mb-4 ml-9">
+                  No account needed to start. Sign in only when you want to save
+                  or unlock your design.
+                </p>
+                <SetupPanel onImageSelected={handleImageSelected} />
+              </div>
+            </div>
+            <Landing
+              onStart={() =>
+                document
+                  .getElementById("anon-start")
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+            />
+          </>
+        )}
+
         {/* ─── DASHBOARD (authenticated home) ─── */}
-        {step === "upload" && (
+        {step === "upload" && sessionStatus === "authenticated" && (
           <div className="py-6">
             {/* Compact header: greeting + inline stats */}
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5 animate-fade-up">
@@ -153,7 +191,7 @@ function HomeContent() {
                       </h2>
                       {designs.length > 4 && (
                         <button
-                          onClick={() => (window.location.href = "/profile")}
+                          onClick={() => router.push("/profile")}
                           className="text-sm text-orange-700 hover:text-orange-800 font-medium transition-colors"
                         >
                           View all
@@ -334,7 +372,11 @@ function HomeContent() {
               ) : (
                 <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
                   <ImageWithHotspots
-                    imageSrc={generatedImage || image!}
+                    imageSrc={
+                      !isUnlocked && designId
+                        ? `/api/image/${designId}/after`
+                        : generatedImage || image!
+                    }
                     hotspots={isUnlocked ? hotspots : []}
                     products={products}
                   />
@@ -396,7 +438,7 @@ function HomeContent() {
                 Design another
               </button>
               <button
-                onClick={() => (window.location.href = "/profile")}
+                onClick={() => router.push("/profile")}
                 className="flex items-center gap-2 px-5 py-2.5 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium text-sm rounded-lg hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
               >
                 <User size={15} />
@@ -437,8 +479,6 @@ function HomeContent() {
               </div>
             )}
           </div>
-        )}
-          </>
         )}
       </main>
       {sessionStatus === "authenticated" && <Footer />}

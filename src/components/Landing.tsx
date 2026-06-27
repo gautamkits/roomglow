@@ -97,8 +97,11 @@ const FAQS = [
   },
 ];
 
-export default function Landing() {
-  const go = () => signIn("google");
+export default function Landing({ onStart }: { onStart?: () => void } = {}) {
+  // When an onStart handler is provided, the CTAs launch the (anonymous) design
+  // flow instead of forcing sign-in up front — sign-in is deferred to the
+  // paywall (U1). Falls back to Google sign-in when no handler is given.
+  const go = onStart ?? (() => signIn("google"));
 
   // Read locale client-side (defaults to IN on the server to avoid hydration
   // mismatch, then corrects after mount) so US visitors see US events.

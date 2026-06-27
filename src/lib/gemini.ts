@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import type { RoomAnalysis } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -253,26 +254,34 @@ interface Detection {
   box_2d: number[]; // [ymin, xmin, ymax, xmax] normalized 0-1000
 }
 
+export interface DetectableProduct {
+  category: string;
+  placement: string;
+  title: string;
+  colorSuggestion: string;
+  imageUrl?: string;
+}
+
+export type HotspotBox = {
+  productIndex: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export async function generateDesignImage(
   roomImageBase64: string,
-  selectedProducts: {
-    category: string;
-    placement: string;
-    title: string;
-    colorSuggestion: string;
-    imageUrl?: string;
-  }[],
+  selectedProducts: DetectableProduct[],
   eventContext?: string,
-  styleHint?: string
+  styleHint?: string,
+  // Hotspot detection is a second Gemini call that's only useful once a design
+  // is unlocked (hotspots aren't rendered behind the paywall). Skip it on the
+  // locked create path and compute it lazily at unlock time (P1-b).
+  detect: boolean = true
 ): Promise<{
   generatedImage: string;
-  hotspots: Array<{
-    productIndex: number;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }>;
+  hotspots: HotspotBox[];
 }> {
   // Fetch selected product images in parallel
   const productImages = await Promise.allSettled(
@@ -393,7 +402,25 @@ CRITICAL TEXT RULE:
     generatedImageBase64 = roomImageBase64;
   }
 
-  // Step 2: Locate each product with real object detection (box_2d, 0-1000)
+  // Step 2 (optional): locate each product. Deferred for locked designs.
+  const hotspots = detect
+    ? await detectHotspots(generatedImageBase64, selectedProducts)
+    : [];
+
+  return { generatedImage: generatedImageBase64, hotspots };
+}
+
+/**
+ * Locate each product in a generated design via real object detection
+ * (box_2d, 0-1000). Split out from generateDesignImage so it can be deferred
+ * and run lazily only once a design is entitled to be viewed (P1-b).
+ */
+export async function detectHotspots(
+  generatedImageBase64: string,
+  selectedProducts: Pick<DetectableProduct, "category" | "placement" | "title">[]
+): Promise<HotspotBox[]> {
+  if (selectedProducts.length === 0) return [];
+
   const detectionList = selectedProducts
     .map(
       (p, i) =>
@@ -432,7 +459,7 @@ Return one detection per product, using the exact productIndex given above.`,
   );
 
   // Convert box_2d (0-1000, [ymin,xmin,ymax,xmax]) to percentage center + size
-  const hotspots = selectedProducts.map((_, i) => {
+  return selectedProducts.map((_, i) => {
     const det =
       parsed.detections.find((d) => d.productIndex === i) ??
       parsed.detections[i];
@@ -449,6 +476,110 @@ Return one detection per product, using the exact productIndex given above.`,
     // Fallback if detection missing
     return { productIndex: i, x: 50, y: 50, width: 10, height: 10 };
   });
+}
 
-  return { generatedImage: generatedImageBase64, hotspots };
+// ─── Product recommendations (design vision + product list) ───
+// (Previously in lib/claude.ts — it never used Claude; it's Gemini like the
+// rest of this module, so it now lives here.)
+const recommendationSchema = {
+  type: Type.OBJECT,
+  properties: {
+    designVision: { type: Type.STRING },
+    products: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          category: { type: Type.STRING },
+          searchQuery: { type: Type.STRING },
+          placement: { type: Type.STRING },
+          reason: { type: Type.STRING },
+          colorSuggestion: { type: Type.STRING },
+        },
+        required: [
+          "category",
+          "searchQuery",
+          "placement",
+          "reason",
+          "colorSuggestion",
+        ],
+      },
+    },
+  },
+  required: ["designVision", "products"],
+};
+
+export async function recommendProducts(
+  roomAnalysis: RoomAnalysis,
+  userAnswers: Record<string, string>,
+  selectedProductTypes: string[],
+  eventContext?: string
+): Promise<string> {
+  const productTypesList =
+    selectedProductTypes.length > 0
+      ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
+      : "";
+
+  const analysisBlock = `Space Analysis:
+- Type: ${roomAnalysis.roomType}
+- Current Style: ${roomAnalysis.currentStyle}
+- Size: ${roomAnalysis.dimensions}
+- Existing Furniture/Surfaces: ${roomAnalysis.existingFurniture.join(", ")}
+- Lighting: ${roomAnalysis.lightingCondition}
+- Current Colors: ${roomAnalysis.colorPalette.join(", ")}
+${productTypesList}`;
+
+  const spacePrompt = `You are an expert interior designer. Based on the space analysis and user preferences below, create a design vision and recommend specific products that would transform this space.
+
+${analysisBlock}
+
+Think like a professional designer:
+1. First define a clear design direction (color scheme, style, mood)
+2. Then pick products that work TOGETHER as a cohesive set
+3. Each product should complement the others AND the existing room
+
+For each product provide:
+- category: specific product type, e.g. 'geometric patterned area rug'
+- searchQuery: SHORT Amazon India search query (3-5 words max, e.g. 'geometric rug grey yellow'). Keep it generic enough to find results.
+- placement: where in the room, e.g. 'center of the room in front of the sofa'
+- reason: why this product improves the space and how it connects to the others
+- colorSuggestion: specific color/finish, e.g. 'grey with mustard yellow accents'
+
+Also write a clear 2-3 sentence designVision describing the overall color palette, style theme, and mood.`;
+
+  const eventPrompt = `You are an expert event decorator. ${eventContext}
+
+Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.
+
+${analysisBlock}
+
+Think like a professional party stylist:
+1. Define a clear decoration direction matching the occasion, theme, and colors
+2. Pick decorations that work TOGETHER as a cohesive festive set
+3. Tie each item to a zone in the space
+
+For each product provide:
+- category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
+- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
+- placement: which zone in the space, e.g. 'on the wall behind the main table'
+- reason: how this decoration supports the theme and connects to the others
+- colorSuggestion: specific colors/finish matching the theme
+
+Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: eventContext ? eventPrompt : spacePrompt }],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: recommendationSchema,
+    },
+  });
+
+  return response.text ?? "";
 }
