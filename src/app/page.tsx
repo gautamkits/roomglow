@@ -18,6 +18,7 @@ import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import LikeButton from "@/components/LikeButton";
 import ShareButton from "@/components/ShareButton";
 import GallerySearch from "@/components/GallerySearch";
+import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
@@ -267,6 +268,9 @@ export default async function Home({
                       : "Space"}
                   </span>
                   <span className="sr-only">{designAltText(d)}</span>
+                  {isAdminEmail(session?.user?.email) && (
+                    <AdminDeleteButton designId={d.id} />
+                  )}
                 </div>
                 <div className="px-3 pt-2.5">
                   <Link
