@@ -53,6 +53,7 @@ function HomeContent() {
     handleEmptyRoom,
     confirmDeclutter,
     skipDeclutter,
+    canRetryEmpty,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
@@ -247,6 +248,7 @@ function HomeContent() {
             removableObjects={roomAnalysis.removableObjects || []}
             emptiedImage={emptiedImage}
             isEmptying={isEmptying}
+            canRetryEmpty={canRetryEmpty}
             onConfirm={handleEmptyRoom}
             onContinue={confirmDeclutter}
             onSkip={skipDeclutter}

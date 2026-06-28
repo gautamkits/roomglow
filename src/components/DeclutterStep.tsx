@@ -11,6 +11,8 @@ interface DeclutterStepProps {
   removableObjects: RemovableObject[];
   emptiedImage: string | null;
   isEmptying: boolean;
+  /** Whether another clear attempt is allowed (each is a paid generation). */
+  canRetryEmpty: boolean;
   /** Empty the room, keeping the objects whose ids are passed. */
   onConfirm: (keepIds: string[]) => void;
   /** Accept the emptied preview and continue to product selection. */
@@ -24,6 +26,7 @@ export default function DeclutterStep({
   removableObjects,
   emptiedImage,
   isEmptying,
+  canRetryEmpty,
   onConfirm,
   onContinue,
   onSkip,
@@ -71,13 +74,15 @@ export default function DeclutterStep({
             <Check size={16} />
             Looks good, continue
           </button>
-          <button
-            onClick={() => onConfirm(Array.from(keepIds))}
-            disabled={isEmptying}
-            className="flex items-center gap-2 px-5 py-2.5 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium text-sm rounded-lg hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors disabled:opacity-50"
-          >
-            {isEmptying ? "Clearing…" : "Try clearing again"}
-          </button>
+          {canRetryEmpty && (
+            <button
+              onClick={() => onConfirm(Array.from(keepIds))}
+              disabled={isEmptying}
+              className="flex items-center gap-2 px-5 py-2.5 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-medium text-sm rounded-lg hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors disabled:opacity-50"
+            >
+              {isEmptying ? "Clearing…" : "Try clearing again"}
+            </button>
+          )}
           <button
             onClick={onSkip}
             className="text-sm text-zinc-500 hover:text-orange-700 transition-colors px-2"

@@ -15,6 +15,12 @@ import type {
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
 
+// Each retry/clear below is a paid image generation, so cap them to stop a user
+// (or tester) from triggering unlimited generations. These are client-side
+// guards for UX; the API routes enforce a hard per-user/IP cap server-side.
+const MAX_PIPELINE_RETRIES = 3;
+const MAX_EMPTY_ATTEMPTS = 3;
+
 function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
   const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
@@ -49,6 +55,8 @@ export function useRoomFlow() {
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [restyleCount, setRestyleCount] = useState(0);
+  const [retryCount, setRetryCount] = useState(0);
+  const [emptyAttempts, setEmptyAttempts] = useState(0);
 
   const selectMode = useCallback((m: AppMode) => {
     setMode(m);
@@ -77,6 +85,8 @@ export function useRoomFlow() {
       setImage(base64);
       setBaseImage(base64);
       setEmptiedImage(null);
+      setEmptyAttempts(0);
+      setRetryCount(0);
       setStep("analyzing");
       setError(null);
 
@@ -127,6 +137,13 @@ export function useRoomFlow() {
   const handleEmptyRoom = useCallback(
     async (keepIds: string[]) => {
       if (!image || !roomAnalysis) return;
+      if (emptyAttempts >= MAX_EMPTY_ATTEMPTS) {
+        setError(
+          `You've reached the limit of ${MAX_EMPTY_ATTEMPTS} clearing attempts. Continue with this result or keep your room as-is.`
+        );
+        return;
+      }
+      setEmptyAttempts((c) => c + 1);
       setIsEmptying(true);
       setError(null);
       try {
@@ -159,7 +176,7 @@ export function useRoomFlow() {
         setIsEmptying(false);
       }
     },
-    [image, roomAnalysis]
+    [image, roomAnalysis, emptyAttempts]
   );
 
   // User accepted the emptied room → design on the clean canvas.
@@ -356,14 +373,20 @@ export function useRoomFlow() {
       progressRef.current = {}; // success — clear the resume buffer
       setStep("results");
     } catch (e) {
+      const retriesLeft = retryCount < MAX_PIPELINE_RETRIES;
       setError(
-        e instanceof Error ? e.message : "Something went wrong. Please try again."
+        retriesLeft
+          ? e instanceof Error
+            ? e.message
+            : "Something went wrong. Please try again."
+          : "We couldn't complete your design after several tries. Please start over with a new photo."
       );
-      // Keep progressRef so the next attempt resumes from the failed step.
-      setCanRetry(true);
+      // Keep progressRef so the next attempt resumes from the failed step — but
+      // only offer a retry while attempts remain (each retry is a paid gen).
+      setCanRetry(retriesLeft);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, baseImage, mode, eventConfig, maxBudget]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, maxBudget, retryCount]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
@@ -375,10 +398,19 @@ export function useRoomFlow() {
     [runPipeline]
   );
 
-  // Resume a failed run from the first incomplete step (U2).
+  // Resume a failed run from the first incomplete step (U2). Capped so a
+  // repeatedly-failing run can't trigger unlimited paid generations.
   const retryGeneration = useCallback(async () => {
+    if (retryCount >= MAX_PIPELINE_RETRIES) {
+      setCanRetry(false);
+      setError(
+        "We couldn't complete your design after several tries. Please start over with a new photo."
+      );
+      return;
+    }
+    setRetryCount((c) => c + 1);
     await runPipeline();
-  }, [runPipeline]);
+  }, [runPipeline, retryCount]);
 
   const handleRegenerate = useCallback(
     async (styleHint: string) => {
@@ -455,6 +487,8 @@ export function useRoomFlow() {
     setError(null);
     setStatusMessage("");
     setRestyleCount(0);
+    setRetryCount(0);
+    setEmptyAttempts(0);
     setCanRetry(false);
     progressRef.current = {};
   }, []);
@@ -483,6 +517,7 @@ export function useRoomFlow() {
     handleEmptyRoom,
     confirmDeclutter,
     skipDeclutter,
+    canRetryEmpty: emptyAttempts < MAX_EMPTY_ATTEMPTS,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
