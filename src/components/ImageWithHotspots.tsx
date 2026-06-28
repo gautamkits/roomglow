@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { ExternalLink, Eye, EyeOff, Star, ShoppingBag } from "lucide-react";
 import type { Hotspot, ProductResult } from "@/lib/types";
 import ProductCard from "./ProductCard";
+import { outboundHref } from "@/lib/outbound";
 
 interface ImageWithHotspotsProps {
   imageSrc: string;
@@ -296,9 +297,9 @@ export default function ImageWithHotspots({
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
                   {ap && (
                     <a
-                      href={ap.affiliateUrl}
+                      href={outboundHref(ap.affiliateUrl)}
                       target="_blank"
-                      rel="noopener noreferrer"
+                      rel="nofollow sponsored noopener noreferrer"
                       className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-medium rounded-md transition-colors"
                     >
                       {hidePrices ? "View" : "Buy"}

@@ -8,6 +8,7 @@ import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
+import OccasionProducts from "@/components/OccasionProducts";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
 interface DesignData {
@@ -252,6 +253,14 @@ function Viewer({
               <p className="text-center text-xs text-red-600 mt-1.5">{restyleError}</p>
             )}
           </div>
+        )}
+
+        {showProducts && design.mode === "event" && design.event_config && (
+          <OccasionProducts
+            eventId={design.event_config.eventType}
+            subTheme={design.event_config.subTheme}
+            eventLabel={design.event_config.eventLabel || "event"}
+          />
         )}
 
         {canPublish && (

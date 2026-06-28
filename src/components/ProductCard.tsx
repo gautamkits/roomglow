@@ -2,6 +2,7 @@
 
 import { X, ExternalLink, Star, EyeOff } from "lucide-react";
 import type { ProductResult } from "@/lib/types";
+import { outboundHref } from "@/lib/outbound";
 
 interface ProductCardProps {
   product: ProductResult;
@@ -78,9 +79,9 @@ export default function ProductCard({
             </p>
             <div className={isSheet ? "flex items-center gap-2" : ""}>
               <a
-                href={amazonProduct.affiliateUrl}
+                href={outboundHref(amazonProduct.affiliateUrl)}
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="nofollow sponsored noopener noreferrer"
                 className={`flex items-center justify-center gap-1.5 bg-orange-700 hover:bg-orange-800 text-white font-medium rounded-lg transition-colors text-sm ${
                   isSheet ? "px-5 py-2.5" : "w-full py-2 px-3"
                 }`}

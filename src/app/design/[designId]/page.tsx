@@ -78,7 +78,9 @@ export default async function DesignPage({
             "@type": "Product",
             name: p.amazonProduct?.title || p.recommendation?.category,
             image: p.amazonProduct?.imageUrl,
-            url: p.amazonProduct?.affiliateUrl,
+            // Point at the on-site design page, never the tagged affiliate URL —
+            // keeps affiliate links out of crawlable structured data.
+            url: `${BASE}/design/${designId}`,
           },
         })),
       },

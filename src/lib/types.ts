@@ -51,6 +51,18 @@ export interface ProductResult {
   amazonProduct: AmazonProduct | null;
 }
 
+// A complementary, occasion-specific buyable shown in the "Complete the occasion"
+// grid for event designs. Not placed in the image — purely shoppable.
+export interface OccasionProduct {
+  category: string;
+  title: string;
+  price: string;
+  imageUrl: string;
+  affiliateUrl: string;
+  rating: number;
+  asin: string;
+}
+
 export interface Hotspot {
   productIndex: number;
   x: number;

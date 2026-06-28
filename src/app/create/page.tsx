@@ -25,6 +25,7 @@ import ShareButton from "@/components/ShareButton";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
+import OccasionProducts from "@/components/OccasionProducts";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -448,6 +449,14 @@ function HomeContent() {
                   </div>
                 )}
               </div>
+            )}
+
+            {isUnlocked && mode === "event" && eventConfig && (
+              <OccasionProducts
+                eventId={eventConfig.eventType}
+                subTheme={eventConfig.subTheme}
+                eventLabel={eventConfig.eventLabel}
+              />
             )}
 
             <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">
