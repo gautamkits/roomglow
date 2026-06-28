@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
+import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
@@ -19,6 +20,7 @@ interface DesignData {
   hotspots: Array<{ productIndex: number; x: number; y: number; width: number; height: number }>;
   design_narrative: string;
   generated_image_url: string;
+  original_image_url?: string;
   is_unlocked: boolean;
   like_count?: number;
 }
@@ -47,6 +49,7 @@ function Viewer({
   >(galleryStatus === "pending" ? "pending" : "idle");
   const [restyling, setRestyling] = useState<string | null>(null);
   const [restyleError, setRestyleError] = useState<string | null>(null);
+  const [showBefore, setShowBefore] = useState(false);
 
   const restyle = async (style: string) => {
     setRestyling(style);
@@ -203,7 +206,45 @@ function Viewer({
           </div>
         )}
 
+        {showProducts && design.original_image_url && (
+          <div className="flex justify-center mb-4">
+            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
+              <button
+                onClick={() => setShowBefore(false)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  !showBefore
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "text-zinc-500"
+                }`}
+              >
+                Design
+              </button>
+              <button
+                onClick={() => setShowBefore(true)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  showBefore
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "text-zinc-500"
+                }`}
+              >
+                Compare
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="relative">
+          {showProducts && showBefore && design.original_image_url ? (
+            <div className="max-w-3xl mx-auto">
+              <BeforeAfterSlider
+                beforeSrc={design.original_image_url}
+                afterSrc={design.generated_image_url}
+              />
+              <p className="text-center text-xs text-zinc-400 mt-3">
+                Drag the handle to compare the original with the new design
+              </p>
+            </div>
+          ) : (
           <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
             <ImageWithHotspots
               imageSrc={generatedSrc}
@@ -212,6 +253,7 @@ function Viewer({
               hidePrices={approved}
             />
           </div>
+          )}
 
           {!isUnlocked && !approved && (
             <PaywallOverlay

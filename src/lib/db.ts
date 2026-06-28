@@ -278,15 +278,34 @@ export async function saveEventDate(params: {
   eventDate: string;
   honoree?: string;
 }) {
+  // Don't duplicate an event the user already saved — designing the same event
+  // multiple times shouldn't add the same date again (no unique constraint, so
+  // guard at insert time).
   await sql`
     INSERT INTO event_dates (user_id, event_type, event_label, event_date, honoree)
-    VALUES (${params.userId}, ${params.eventType}, ${params.eventLabel}, ${params.eventDate}, ${params.honoree || null})
+    SELECT ${params.userId}, ${params.eventType}, ${params.eventLabel}, ${params.eventDate}, ${params.honoree || null}
+    WHERE NOT EXISTS (
+      SELECT 1 FROM event_dates
+      WHERE user_id = ${params.userId}
+        AND event_type = ${params.eventType}
+        AND event_date = ${params.eventDate}
+        AND COALESCE(honoree, '') = COALESCE(${params.honoree || null}, '')
+    )
   `;
 }
 
 export async function getUserEventDates(userId: string) {
+  // De-duplicate on read too, so events saved before the insert-time guard (or
+  // any residual dupes) collapse to one card per event/date/honoree.
   const { rows } = await sql`
-    SELECT * FROM event_dates WHERE user_id = ${userId} ORDER BY event_date ASC
+    SELECT * FROM (
+      SELECT DISTINCT ON (event_type, event_date, COALESCE(honoree, ''))
+             *
+      FROM event_dates
+      WHERE user_id = ${userId}
+      ORDER BY event_type, event_date, COALESCE(honoree, ''), id
+    ) t
+    ORDER BY event_date ASC
   `;
   return rows;
 }

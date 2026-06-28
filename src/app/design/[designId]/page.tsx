@@ -129,6 +129,10 @@ export default async function DesignPage({
                   d.is_unlocked || approved
                     ? d.generated_image_url
                     : `/api/image/${d.id}/after`,
+                // Only expose the original (for before/after compare) once
+                // entitled — never alongside a locked/paywalled design.
+                original_image_url:
+                  d.is_unlocked || approved ? d.original_image_url : undefined,
                 is_unlocked: d.is_unlocked,
               }
             : null
