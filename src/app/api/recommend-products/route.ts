@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recommendProducts } from "@/lib/gemini";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Product recommendation failed:", error);
+    await notifyAdminError({ route: "recommend-products", error });
     return NextResponse.json(
       { error: "Failed to recommend products" },
       { status: 500 }

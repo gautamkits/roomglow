@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Product curation failed:", error);
+    await notifyAdminError({ route: "curate-products", error });
     return NextResponse.json(
       { error: "Failed to curate products" },
       { status: 500 }

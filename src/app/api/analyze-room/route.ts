@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { analyzeRoom } from "@/lib/gemini";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json(analysis);
   } catch (error) {
     console.error("Room analysis failed:", error);
+    await notifyAdminError({ route: "analyze-room", error });
     return NextResponse.json(
       { error: "Failed to analyze room" },
       { status: 500 }

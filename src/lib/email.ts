@@ -1,6 +1,7 @@
 import type { AppMode, EventConfig, ProductResult } from "@/lib/types";
 import { SITE_URL } from "@/lib/site";
 import { formatAmount } from "@/lib/locale";
+import { rateLimit } from "@/lib/rateLimit";
 
 // ─── Config ───
 const ZEPTOMAIL_API_URL =
@@ -305,6 +306,116 @@ export function buildEventReminderHtml(data: EventReminderEmailData): string {
   </table>
 </body>
 </html>`;
+}
+
+// ─── Admin error alerts ───
+// Notifies admins when a user hits a failure, with enough detail to troubleshoot.
+// Best-effort (never throws) and flood-protected so a recurring error can't spam
+// the inbox.
+
+export interface AdminErrorContext {
+  /** Which route/step failed, e.g. "generate-image". */
+  route: string;
+  error: unknown;
+  userId?: string | null;
+  userEmail?: string | null;
+  locale?: string | null;
+  /** Any extra context worth troubleshooting (designId, labels, etc.). */
+  extra?: Record<string, unknown>;
+}
+
+function adminRecipients(): string[] {
+  return (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+}
+
+export async function notifyAdminError(ctx: AdminErrorContext): Promise<{ ok: boolean }> {
+  const recipients = adminRecipients();
+  if (!ZEPTOMAIL_TOKEN || recipients.length === 0) return { ok: false };
+
+  const err = ctx.error;
+  const message =
+    err instanceof Error ? err.message : typeof err === "string" ? err : "Unknown error";
+  const stack = err instanceof Error && err.stack ? err.stack : "";
+
+  // Flood protection: at most 3 alerts per route+message signature per 15 min.
+  const sig = `adminerr:${ctx.route}:${message.slice(0, 80)}`;
+  if (!rateLimit(sig, 3, 15 * 60 * 1000).ok) return { ok: false };
+
+  const when = new Date().toISOString();
+  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown";
+  const rows: [string, string][] = [
+    ["Route", ctx.route],
+    ["Error", message],
+    ["User", ctx.userEmail || ctx.userId || "anonymous"],
+    ["Locale", ctx.locale || "—"],
+    ["Environment", env],
+    ["Time (UTC)", when],
+  ];
+  if (ctx.extra) {
+    for (const [k, v] of Object.entries(ctx.extra)) {
+      rows.push([k, typeof v === "string" ? v : JSON.stringify(v)]);
+    }
+  }
+
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px;font-weight:600;color:${TEXT};vertical-align:top;white-space:nowrap;">${esc(
+          k
+        )}</td><td style="padding:6px 12px;color:${MUTED};font-family:monospace;font-size:13px;word-break:break-word;">${esc(
+          v
+        )}</td></tr>`
+    )
+    .join("");
+  const stackHtml = stack
+    ? `<pre style="background:${LINEN};border:1px solid ${BORDER};border-radius:8px;padding:12px;font-size:12px;color:${TEXT};overflow:auto;white-space:pre-wrap;">${esc(
+        stack
+      )}</pre>`
+    : "";
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;color:${LINEN};font-size:18px;font-weight:700;">⚠️ Noosho — user error</td></tr>
+    <tr><td style="padding:20px 24px;">
+      <p style="font-size:14px;color:${MUTED};margin:0 0 16px;">A user hit an issue. Details for troubleshooting:</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:10px;border-collapse:separate;">${rowsHtml}</table>
+      ${stackHtml ? `<p style="font-size:12px;font-weight:600;color:${TEXT};margin:18px 0 6px;">Stack trace</p>${stackHtml}` : ""}
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: recipients.map((address) => ({ email_address: { address, name: "Admin" } })),
+        subject: `⚠️ Noosho error in ${ctx.route}: ${message.slice(0, 80)}`,
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Admin error alert failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Admin error alert threw:", e);
+    return { ok: false };
+  }
 }
 
 export async function sendEventReminderEmail(

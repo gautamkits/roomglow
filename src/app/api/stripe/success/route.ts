@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { stripe } from "@/lib/stripe";
 import { unlockDesign, getDesign, saveEventDate, incrementCouponUse, recordStripeSale } from "@/lib/db";
-import { sendDesignReadyEmail } from "@/lib/email";
+import { sendDesignReadyEmail, notifyAdminError } from "@/lib/email";
 import { ensureHotspots } from "@/lib/hotspots";
 import type { EventConfig, ProductResult } from "@/lib/types";
 
@@ -100,6 +100,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${SITE_URL}/design/${designId}?paid=1`);
   } catch (err) {
     console.error("[stripe/success]", err);
+    await notifyAdminError({ route: "stripe/success", error: err });
     return NextResponse.redirect(`${SITE_URL}/create?payment=error`);
   }
 }

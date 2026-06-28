@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { searchProducts } from "@/lib/amazon";
 import { localeFromRequest } from "@/lib/locale";
 import type { ProductRecommendation } from "@/lib/types";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ categories, locale });
   } catch (error) {
     console.error("Product search failed:", error);
+    await notifyAdminError({ route: "search-products", error });
     return NextResponse.json(
       { error: "Failed to search products" },
       { status: 500 }

@@ -4,6 +4,7 @@ import { unlockDesign, getDesign, saveEventDate } from "@/lib/db";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
 import { ensureHotspots } from "@/lib/hotspots";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -77,6 +78,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ unlocked: true });
   } catch (error) {
     console.error("Unlock design failed:", error);
+    await notifyAdminError({ route: "unlock-design", error });
     return NextResponse.json({ error: "Failed to unlock" }, { status: 500 });
   }
 }

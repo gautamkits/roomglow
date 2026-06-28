@@ -5,6 +5,7 @@ import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ generatedImage, hotspots });
   } catch (error) {
     console.error("Image generation failed:", error);
+    await notifyAdminError({ route: "generate-image", error });
     return NextResponse.json(
       { error: "Failed to generate design" },
       { status: 500 }

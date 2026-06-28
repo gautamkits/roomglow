@@ -4,6 +4,7 @@ import { emptyRoom } from "@/lib/gemini";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
+import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ emptiedImage: emptied });
   } catch (error) {
     console.error("Room emptying failed:", error);
+    await notifyAdminError({ route: "empty-room", error });
     return NextResponse.json(
       { error: "Failed to clear your space" },
       { status: 500 }

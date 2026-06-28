@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { saveDesign, saveEventDate } from "@/lib/db";
 import { makeBlurDataUrl, makeWatermarkedPreview } from "@/lib/images";
+import { notifyAdminError } from "@/lib/email";
 import { sendDesignReadyEmail } from "@/lib/email";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ designId, isUnlocked });
   } catch (error) {
     console.error("Save design failed:", error);
+    await notifyAdminError({ route: "save-design", error });
     return NextResponse.json({ error: "Failed to save design" }, { status: 500 });
   }
 }

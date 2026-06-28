@@ -4,6 +4,7 @@ import { stripe, STRIPE_PRICES } from "@/lib/stripe";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
 import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, getDesign, recordCheckoutIntent } from "@/lib/db";
+import { notifyAdminError } from "@/lib/email";
 import { evaluateCoupon, type CouponRow } from "@/lib/coupons";
 import { sendDesignReadyEmail } from "@/lib/email";
 import type { EventConfig, ProductResult } from "@/lib/types";
@@ -109,6 +110,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ url: checkout.url });
   } catch (err) {
     console.error("[stripe/checkout]", err);
+    await notifyAdminError({ route: "stripe/checkout", error: err });
     return NextResponse.json({ error: "Failed to create checkout" }, { status: 500 });
   }
 }
