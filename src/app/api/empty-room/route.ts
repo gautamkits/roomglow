@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { emptyRoom } from "@/lib/gemini";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { recordImageGen } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,9 @@ export async function POST(request: Request) {
       Array.isArray(removeLabels) ? removeLabels : [],
       Array.isArray(keepLabels) ? keepLabels : []
     );
+
+    // Track the billed image-gen call for cost analytics (empty-room pass).
+    await recordImageGen("empty", session?.user?.id);
 
     return NextResponse.json({ emptiedImage: emptied });
   } catch (error) {

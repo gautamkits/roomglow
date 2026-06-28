@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
-import { BarChart2, Users, Zap, TrendingUp, Heart, ArrowLeft } from "lucide-react";
+import { BarChart2, Users, Zap, TrendingUp, Heart, ArrowLeft, Cpu } from "lucide-react";
 
 interface AnalyticsData {
   totals: {
@@ -32,6 +32,10 @@ interface AnalyticsData {
     total_users: string;
     users_7d: string;
     users_30d: string;
+  };
+  imageGen: {
+    daily: { day: string; total: string; design: string; restyle: string; empty: string }[];
+    totals: { total: string; calls_7d: string; calls_30d: string; empty_30d: string };
   };
 }
 
@@ -254,6 +258,79 @@ function AnalyticsContent() {
             </div>
           </div>
         </div>
+
+        {/* Image-generation calls (billed AI usage) */}
+        {data.imageGen && (() => {
+          const ig = data.imageGen;
+          const daily = ig.daily || [];
+          const maxDay = Math.max(1, ...daily.map((d) => Number(d.total)));
+          const designs30d = Number(data.totals.designs_30d) || 0;
+          const calls30d = Number(ig.totals?.calls_30d) || 0;
+          // How many billed gens it takes to produce one saved design (waste signal).
+          const callsPerDesign = designs30d > 0 ? (calls30d / designs30d).toFixed(1) : "—";
+          return (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
+              <div className="flex items-center gap-2 mb-1">
+                <Cpu size={15} className="text-zinc-400" />
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Image-gen calls (billed AI usage)
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">
+                Every billed image generation — including failed, retried, and abandoned ones that never save a design.
+              </p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{ig.totals?.calls_30d ?? 0}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Calls (30d)</div>
+                </div>
+                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{designs30d}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Saved designs (30d)</div>
+                </div>
+                <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{callsPerDesign}×</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Calls per saved design</div>
+                </div>
+                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{ig.totals?.empty_30d ?? 0}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Empty-room calls (30d)</div>
+                </div>
+              </div>
+
+              {daily.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 text-[11px] text-zinc-400 mb-1">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-700 inline-block" />Design</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-400 inline-block" />Restyle</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-400 inline-block" />Empty-room</span>
+                  </div>
+                  {daily.map((d) => {
+                    const total = Number(d.total);
+                    const design = Number(d.design);
+                    const restyle = Number(d.restyle);
+                    const empty = Number(d.empty);
+                    const w = (n: number) => `${(n / maxDay) * 100}%`;
+                    return (
+                      <div key={d.day} className="flex items-center gap-3">
+                        <span className="text-xs text-zinc-400 w-20 shrink-0 tabular-nums">{d.day.slice(5)}</span>
+                        <div className="flex-1 h-4 rounded bg-zinc-100 dark:bg-zinc-800 overflow-hidden flex">
+                          <div className="h-full bg-orange-700" style={{ width: w(design) }} />
+                          <div className="h-full bg-orange-400" style={{ width: w(restyle) }} />
+                          <div className="h-full bg-zinc-400" style={{ width: w(empty) }} />
+                        </div>
+                        <span className="text-xs text-zinc-500 w-8 text-right tabular-nums">{total}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-400">No image-gen calls recorded yet — data starts accumulating from now.</p>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Top room types */}
         {data.roomTypes.length > 0 && (

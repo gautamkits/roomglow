@@ -39,6 +39,38 @@ async function ensureDesignColumns() {
   designColumnsReady = true;
 }
 
+// Logs every paid image-generation call (design / restyle / empty-room) so cost
+// can be tracked against ACTUAL calls, not just saved designs — most calls
+// (failed/abandoned/retried) never produce a design row but are still billed.
+let imageGenSchemaReady = false;
+async function ensureImageGenSchema() {
+  if (imageGenSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS image_gen_events (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      kind TEXT NOT NULL,
+      user_id TEXT
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_image_gen_events_created ON image_gen_events (created_at)`;
+  imageGenSchemaReady = true;
+}
+
+/**
+ * Record one image-generation call. Best-effort: never throws into the caller,
+ * so logging can't break (or delay-fail) the actual generation.
+ * `kind` is one of "design" | "restyle" | "empty".
+ */
+export async function recordImageGen(kind: string, userId?: string | null) {
+  try {
+    await ensureImageGenSchema();
+    await sql`INSERT INTO image_gen_events (kind, user_id) VALUES (${kind}, ${userId ?? null})`;
+  } catch (err) {
+    console.error("[recordImageGen] failed (non-fatal):", err);
+  }
+}
+
 export async function saveDesign(params: {
   mode: string;
   eventConfig: unknown;
@@ -285,7 +317,8 @@ export async function getUpcomingEventReminders(daysAhead: number) {
 /** Analytics: aggregate stats for the admin dashboard. */
 export async function getAnalyticsStats() {
   await ensurePaymentsColumns();
-  const [totals, funnel, revenue, revenueByCurrency, roomTypes, signups] = await Promise.all([
+  await ensureImageGenSchema();
+  const [totals, funnel, revenue, revenueByCurrency, roomTypes, signups, imageGenDaily, imageGenTotals] = await Promise.all([
     sql`
       SELECT
         COUNT(*) AS total_designs,
@@ -338,6 +371,26 @@ export async function getAnalyticsStats() {
         COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS users_30d
       FROM users
     `,
+    sql`
+      SELECT
+        to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day,
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE kind = 'design') AS design,
+        COUNT(*) FILTER (WHERE kind = 'restyle') AS restyle,
+        COUNT(*) FILTER (WHERE kind = 'empty') AS empty
+      FROM image_gen_events
+      WHERE created_at >= NOW() - INTERVAL '14 days'
+      GROUP BY 1
+      ORDER BY 1 DESC
+    `,
+    sql`
+      SELECT
+        COUNT(*) AS total,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS calls_7d,
+        COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS calls_30d,
+        COUNT(*) FILTER (WHERE kind = 'empty' AND created_at >= NOW() - INTERVAL '30 days') AS empty_30d
+      FROM image_gen_events
+    `,
   ]);
 
   return {
@@ -347,6 +400,10 @@ export async function getAnalyticsStats() {
     revenueByCurrency: revenueByCurrency.rows,
     roomTypes: roomTypes.rows,
     signups: signups.rows[0],
+    imageGen: {
+      daily: imageGenDaily.rows,
+      totals: imageGenTotals.rows[0],
+    },
   };
 }
 

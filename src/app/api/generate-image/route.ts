@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { generateDesignImage } from "@/lib/gemini";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { recordImageGen } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -41,6 +42,9 @@ export async function POST(request: Request) {
       styleHint || undefined,
       detect
     );
+
+    // Track the billed image-gen call (restyle vs fresh design) for cost analytics.
+    await recordImageGen(styleHint ? "restyle" : "design", session?.user?.id);
 
     return NextResponse.json({ generatedImage, hotspots });
   } catch (error) {
