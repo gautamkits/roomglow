@@ -17,7 +17,6 @@ import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
 import ProductSelection from "@/components/ProductSelection";
-import DeclutterStep from "@/components/DeclutterStep";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import Landing from "@/components/Landing";
@@ -47,17 +46,13 @@ function HomeContent() {
     selectedItems,
     error,
     statusMessage,
-    emptiedImage,
-    isEmptying,
     handleImageSelected,
-    handleEmptyRoom,
-    confirmDeclutter,
-    skipDeclutter,
-    canRetryEmpty,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
     canRetry,
+    clearAndRedesign,
+    canClearRoom,
     restylesLeft,
     maxRestyles,
     handleUnlocked,
@@ -238,20 +233,6 @@ function HomeContent() {
             step={step as "analyzing" | "generating" | "curating"}
             isEvent={isEvent}
             statusMessage={statusMessage}
-          />
-        )}
-
-        {/* ─── DECLUTTER (clear a cluttered room before designing) ─── */}
-        {step === "declutter" && roomAnalysis && image && (
-          <DeclutterStep
-            originalImage={image}
-            removableObjects={roomAnalysis.removableObjects || []}
-            emptiedImage={emptiedImage}
-            isEmptying={isEmptying}
-            canRetryEmpty={canRetryEmpty}
-            onConfirm={handleEmptyRoom}
-            onContinue={confirmDeclutter}
-            onSkip={skipDeclutter}
           />
         )}
 
@@ -446,6 +427,25 @@ function HomeContent() {
                   <p className="text-center text-xs text-zinc-400 mt-2">
                     You&apos;ve used all {maxRestyles} restyles for this design.
                   </p>
+                )}
+
+                {canClearRoom && (
+                  <div className="mt-5 pt-5 border-t border-zinc-100 dark:border-zinc-800 text-center">
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+                      Room looks cluttered?
+                    </p>
+                    <button
+                      onClick={clearAndRedesign}
+                      disabled={restylesLeft === 0}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw size={13} />
+                      Clear the room &amp; redesign
+                    </button>
+                    <p className="text-center text-xs text-zinc-400 mt-2">
+                      Empties the existing furniture, then redesigns on a clean space · uses 1 restyle
+                    </p>
+                  </div>
                 )}
               </div>
             )}

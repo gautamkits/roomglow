@@ -19,7 +19,6 @@ const MAX_RESTYLES = 5;
 // (or tester) from triggering unlimited generations. These are client-side
 // guards for UX; the API routes enforce a hard per-user/IP cap server-side.
 const MAX_PIPELINE_RETRIES = 3;
-const MAX_EMPTY_ATTEMPTS = 3;
 
 function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
@@ -36,13 +35,11 @@ export function useRoomFlow() {
   const [mode, setMode] = useState<AppMode>("space");
   const [eventConfig, setEventConfig] = useState<EventConfig | null>(null);
   const [image, setImage] = useState<string | null>(null);
-  // The canvas the design is generated on. Equals `image` for clean rooms, or
-  // the emptied photo once the user clears a cluttered space. `image` always
-  // stays the true upload so the before/after compare and saved "original"
-  // remain the room the user actually photographed.
+  // The canvas the design is generated on. Equals `image` normally, or the
+  // emptied photo after a post-unlock "clear the room & redesign". `image`
+  // always stays the true upload so the saved "original" / before-after remain
+  // the room the user actually photographed.
   const [baseImage, setBaseImage] = useState<string | null>(null);
-  const [emptiedImage, setEmptiedImage] = useState<string | null>(null);
-  const [isEmptying, setIsEmptying] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [roomAnalysis, setRoomAnalysis] = useState<RoomAnalysis | null>(null);
   const [products, setProducts] = useState<ProductResult[]>([]);
@@ -56,7 +53,6 @@ export function useRoomFlow() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [restyleCount, setRestyleCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
-  const [emptyAttempts, setEmptyAttempts] = useState(0);
 
   const selectMode = useCallback((m: AppMode) => {
     setMode(m);
@@ -84,8 +80,6 @@ export function useRoomFlow() {
 
       setImage(base64);
       setBaseImage(base64);
-      setEmptiedImage(null);
-      setEmptyAttempts(0);
       setRetryCount(0);
       setStep("analyzing");
       setError(null);
@@ -113,13 +107,10 @@ export function useRoomFlow() {
         }
         const analysis: RoomAnalysis = await res.json();
         setRoomAnalysis(analysis);
-        // Cluttered rooms make for poor designs (products pile on top of
-        // existing furniture). Offer to clear the space first; clean rooms skip
-        // straight to product selection.
-        const hasClutter =
-          analysis.clutterLevel !== "clean" &&
-          (analysis.removableObjects?.length ?? 0) > 0;
-        setStep(hasClutter ? "declutter" : "product-selection");
+        // The first design renders on the original photo (the free, pre-paywall
+        // hook). Clearing a cluttered room is an expensive image-gen, so it's
+        // offered only post-unlock via "Clear the room & redesign".
+        setStep("product-selection");
       } catch (e) {
         setError(
           e instanceof Error
@@ -131,66 +122,6 @@ export function useRoomFlow() {
     },
     [mode, eventConfig]
   );
-
-  // Clear the space: empty out the chosen objects so the design lands on a
-  // clean canvas. `keepIds` are the removableObjects the user chose to keep.
-  const handleEmptyRoom = useCallback(
-    async (keepIds: string[]) => {
-      if (!image || !roomAnalysis) return;
-      if (emptyAttempts >= MAX_EMPTY_ATTEMPTS) {
-        setError(
-          `You've reached the limit of ${MAX_EMPTY_ATTEMPTS} clearing attempts. Continue with this result or keep your room as-is.`
-        );
-        return;
-      }
-      setEmptyAttempts((c) => c + 1);
-      setIsEmptying(true);
-      setError(null);
-      try {
-        const objects = roomAnalysis.removableObjects ?? [];
-        const keep = objects.filter((o) => keepIds.includes(o.id));
-        const remove = objects.filter((o) => !keepIds.includes(o.id));
-        const res = await fetch("/api/empty-room", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image,
-            removeLabels: remove.map((o) => o.label),
-            keepLabels: keep.map((o) => o.label),
-          }),
-        });
-        if (!res.ok) {
-          const { error: msg } = await res.json().catch(() => ({ error: "" }));
-          throw new Error(msg || "We couldn't clear your space. Please try again.");
-        }
-        const { emptiedImage: emptied } = await res.json();
-        const dataUrl = emptied.startsWith("data:")
-          ? emptied
-          : `data:image/png;base64,${emptied}`;
-        setEmptiedImage(dataUrl);
-      } catch (e) {
-        setError(
-          e instanceof Error ? e.message : "We couldn't clear your space. Please try again."
-        );
-      } finally {
-        setIsEmptying(false);
-      }
-    },
-    [image, roomAnalysis, emptyAttempts]
-  );
-
-  // User accepted the emptied room → design on the clean canvas.
-  const confirmDeclutter = useCallback(() => {
-    if (emptiedImage) setBaseImage(emptiedImage);
-    setStep("product-selection");
-  }, [emptiedImage]);
-
-  // User opted to keep their room as-is → design on the original photo.
-  const skipDeclutter = useCallback(() => {
-    setEmptiedImage(null);
-    setBaseImage(image);
-    setStep("product-selection");
-  }, [image]);
 
   // Each create-pipeline call is expensive (a paid AI step). We stash each
   // step's output here so that if a later step fails, retrying resumes from the
@@ -463,6 +394,79 @@ export function useRoomFlow() {
     [image, baseImage, products, mode, eventConfig, generatedImage, restyleCount]
   );
 
+  // Post-unlock premium action: clear the room, then re-render the same products
+  // on the emptied canvas. Gated to entitled users (called only when isUnlocked)
+  // and shares the restyle cap so the extra paid gens stay bounded. Each run is
+  // two image generations (empty-room + design), counted as one restyle.
+  const clearAndRedesign = useCallback(async () => {
+    if (!image || !products.length || !isUnlocked) return;
+    if (restyleCount >= MAX_RESTYLES) {
+      setError(
+        `You've used all ${MAX_RESTYLES} restyles for this design. Start a new design to keep exploring.`
+      );
+      return;
+    }
+    setStep("generating");
+    setError(null);
+    setStatusMessage("Clearing the room...");
+
+    const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
+
+    try {
+      // 1. Empty the original room.
+      const emptyRes = await fetch("/api/empty-room", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          removeLabels: (roomAnalysis?.removableObjects ?? []).map((o) => o.label),
+          keepLabels: [],
+        }),
+      });
+      if (!emptyRes.ok) {
+        const { error: msg } = await emptyRes.json().catch(() => ({ error: "" }));
+        throw new Error(msg || "We couldn't clear the room. Please try again.");
+      }
+      const { emptiedImage: emptied } = await emptyRes.json();
+      const clearedCanvas = emptied.startsWith("data:")
+        ? emptied
+        : `data:image/png;base64,${emptied}`;
+      setBaseImage(clearedCanvas);
+
+      // 2. Re-render the current products on the cleared canvas.
+      setStatusMessage("Redesigning your cleared room...");
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          originalImage: clearedCanvas,
+          eventContext,
+          products: products.map((p: ProductResult) => ({
+            category: p.recommendation.category,
+            placement: p.recommendation.placement,
+            title: p.amazonProduct?.title || p.recommendation.category,
+            colorSuggestion: p.recommendation.colorSuggestion,
+            imageUrl: p.amazonProduct?.imageUrl || "",
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error("Generation failed");
+      const design = await res.json();
+      const genImg = design.generatedImage
+        ? `data:image/png;base64,${design.generatedImage}`
+        : generatedImage;
+      setGeneratedImage(genImg);
+      setHotspots(design.hotspots || []);
+      setRestyleCount((c) => c + 1);
+      setStep("results");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "We couldn't clear & redesign. Please try again."
+      );
+      setStep("results");
+    }
+  }, [image, products, isUnlocked, restyleCount, mode, eventConfig, roomAnalysis, generatedImage]);
+
   const handleUnlocked = useCallback(() => {
     setIsUnlocked(true);
   }, []);
@@ -473,8 +477,6 @@ export function useRoomFlow() {
     setEventConfig(null);
     setImage(null);
     setBaseImage(null);
-    setEmptiedImage(null);
-    setIsEmptying(false);
     setGeneratedImage(null);
     setRoomAnalysis(null);
     setProducts([]);
@@ -488,7 +490,6 @@ export function useRoomFlow() {
     setStatusMessage("");
     setRestyleCount(0);
     setRetryCount(0);
-    setEmptyAttempts(0);
     setCanRetry(false);
     progressRef.current = {};
   }, []);
@@ -509,19 +510,19 @@ export function useRoomFlow() {
     isUnlocked,
     error,
     statusMessage,
-    emptiedImage,
-    isEmptying,
     selectMode,
     submitEventConfig,
     handleImageSelected,
-    handleEmptyRoom,
-    confirmDeclutter,
-    skipDeclutter,
-    canRetryEmpty: emptyAttempts < MAX_EMPTY_ATTEMPTS,
     handleProductSelection,
     handleRegenerate,
     retryGeneration,
     canRetry,
+    clearAndRedesign,
+    canClearRoom:
+      isUnlocked &&
+      mode === "space" &&
+      !!roomAnalysis &&
+      roomAnalysis.clutterLevel !== "clean",
     restylesLeft: Math.max(0, MAX_RESTYLES - restyleCount),
     maxRestyles: MAX_RESTYLES,
     handleUnlocked,

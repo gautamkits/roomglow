@@ -83,7 +83,6 @@ export type FlowStep =
   | "event-setup"
   | "upload"
   | "analyzing"
-  | "declutter"
   | "product-selection"
   | "generating"
   | "curating"
