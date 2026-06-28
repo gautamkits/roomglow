@@ -73,6 +73,10 @@ function AnalyticsContent() {
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  // Tunable ₹ rate per image-gen call (gemini-3.1-flash-image). Defaults to a
+  // rough ₹12; admin can adjust to match real billing. Excludes the cheap
+  // gemini-2.5-flash text/vision calls (~₹1-2/design total).
+  const [ratePerGen, setRatePerGen] = useState(12);
 
   const load = () =>
     fetch("/api/admin/analytics")
@@ -268,6 +272,9 @@ function AnalyticsContent() {
           const calls30d = Number(ig.totals?.calls_30d) || 0;
           // How many billed gens it takes to produce one saved design (waste signal).
           const callsPerDesign = designs30d > 0 ? (calls30d / designs30d).toFixed(1) : "—";
+          const inr = (n: number) =>
+            `₹${Math.round(n).toLocaleString("en-IN")}`;
+          const cost30d = calls30d * ratePerGen;
           return (
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
               <div className="flex items-center gap-2 mb-1">
@@ -276,9 +283,24 @@ function AnalyticsContent() {
                   Image-gen calls (billed AI usage)
                 </span>
               </div>
-              <p className="text-xs text-zinc-400 mb-4">
+              <p className="text-xs text-zinc-400 mb-3">
                 Every billed image generation — including failed, retried, and abandoned ones that never save a design.
               </p>
+
+              <div className="flex items-center gap-2 mb-4 text-xs text-zinc-500">
+                <label htmlFor="rate">Est. ₹ per image-gen call:</label>
+                <span className="text-zinc-400">₹</span>
+                <input
+                  id="rate"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={ratePerGen}
+                  onChange={(e) => setRatePerGen(Math.max(0, Number(e.target.value) || 0))}
+                  className="w-20 px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 tabular-nums"
+                />
+                <span className="text-zinc-400">— excludes minor text/vision calls (~₹1–2/design)</span>
+              </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
                 <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
@@ -289,13 +311,13 @@ function AnalyticsContent() {
                   <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{designs30d}</div>
                   <div className="text-xs text-zinc-500 mt-0.5">Saved designs (30d)</div>
                 </div>
-                <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 px-3 py-2.5">
-                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{callsPerDesign}×</div>
+                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{callsPerDesign}×</div>
                   <div className="text-xs text-zinc-500 mt-0.5">Calls per saved design</div>
                 </div>
-                <div className="rounded-lg bg-zinc-50 dark:bg-zinc-800 px-3 py-2.5">
-                  <div className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">{ig.totals?.empty_30d ?? 0}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">Empty-room calls (30d)</div>
+                <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 px-3 py-2.5">
+                  <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{inr(cost30d)}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Est. cost (30d) · {ig.totals?.empty_30d ?? 0} empty</div>
                 </div>
               </div>
 
@@ -305,6 +327,7 @@ function AnalyticsContent() {
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-700 inline-block" />Design</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-400 inline-block" />Restyle</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-400 inline-block" />Empty-room</span>
+                    <span className="ml-auto">calls · est. ₹</span>
                   </div>
                   {daily.map((d) => {
                     const total = Number(d.total);
@@ -321,6 +344,7 @@ function AnalyticsContent() {
                           <div className="h-full bg-zinc-400" style={{ width: w(empty) }} />
                         </div>
                         <span className="text-xs text-zinc-500 w-8 text-right tabular-nums">{total}</span>
+                        <span className="text-xs text-zinc-400 w-16 text-right tabular-nums">{inr(total * ratePerGen)}</span>
                       </div>
                     );
                   })}
