@@ -1,24 +1,63 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 
+// Reveal MP4 export — a faithful port of the "Noosho Commercial" concept into
+// Canvas2D + WebCodecs, per-design (its own before/after + products):
+//   logo intro → phone (upload → pick a style) → scan-line transform →
+//   shoppable pins + product cards → logo + noosho.com outro.
+// Locked to 1080×1920 so the commercial's exact composition/coordinates apply.
+// Photos are shown whole (contain) over a blurred backdrop so non-9:16 rooms
+// are never cropped. The rooms/parties montage is intentionally omitted.
+
 export type RevealAspect = "original" | "1:1" | "4:5" | "9:16";
 
 const FPS = 30;
-const HOLD_BEFORE = 24; // ~0.8s
-const WIPE = 90; // ~3.0s
-const HOLD_AFTER = 42; // ~1.4s
-const REVEAL_TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
-const PRODUCT_SEG = 78; // ~2.6s per product: animate in, then hold so it's readable
-const PRODUCT_ANIM = 30; // ~1s to fully appear; the remainder of the segment holds
-const PRODUCT_END_HOLD = 18; // ~0.6s extra hold on the final card (loop-friendly)
-const MAX_SIDE = 1920; // clamp so we stay within H.264 level limits
+const W = 1080, H = 1920;
+
+// Scene timeline (seconds) — ported from noosho-ad.jsx, montage removed, CTA pulled in.
+const T_INTRO_END = 4.0;
+const T_PHONE = [4.0, 13.3] as const;
+const T_TRANSFORM = [13.0, 19.1] as const;
+const T_SHOP = [18.9, 24.1] as const;
+const T_CTA = [24.0, 26.9] as const;
+const DURATION = 26.9;
+
+// Big image card (transform + shop) and phone, in 1080×1920 space.
+const CARD = { x: 60, y: 196, w: 960, h: 1280, rad: 40 };
+const PH = { x: 250, y: 250, w: 580, h: 1130, pad: 16, rad: 64 };
+
+// Brand system
+const BG = "#faf7f3";
+const INK = "#1c1714";
+const CLAY = "#a04525";
+const CLAY_BR = "#ce6533";
+const CLAY_LT = "#e89b6b";
+const CLAY_DP = "#7a3620";
+const CREAM = "#f7f3ee";
+const TINT = "#fcf3ed";
+const TINT2 = "#f7decb";
+const LINE = "#e9e2d8";
+const SORA = "Sora, system-ui, sans-serif";
+const UI = "Geist, system-ui, sans-serif";
+const MONO = '"Geist Mono", ui-monospace, monospace';
+
+// Easing
+const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - clamp(t), 3);
+const easeInOutCubic = (t: number) =>
+  clamp(t) < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * clamp(t) + 2, 3) / 2;
+const easeOutExpo = (t: number) => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * clamp(t)));
+const easeInOutSine = (t: number) => -(Math.cos(Math.PI * clamp(t)) - 1) / 2;
+const easeOutBack = (t: number) => {
+  const c1 = 1.70158, c3 = c1 + 1, x = clamp(t);
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
 
 export function isRevealVideoSupported(): boolean {
   return (
     typeof window !== "undefined" &&
-    typeof (window as unknown as { VideoEncoder?: unknown }).VideoEncoder !==
-      "undefined" &&
-    typeof (window as unknown as { VideoFrame?: unknown }).VideoFrame !==
-      "undefined"
+    typeof (window as unknown as { VideoEncoder?: unknown }).VideoEncoder !== "undefined" &&
+    typeof (window as unknown as { VideoFrame?: unknown }).VideoFrame !== "undefined"
   );
 }
 
@@ -31,547 +70,603 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function smoothstep(t: number): number {
-  const c = Math.min(1, Math.max(0, t));
-  return c * c * (3 - 2 * c);
+async function pickCodec(): Promise<string> {
+  const VideoEncoder = (window as unknown as { VideoEncoder: typeof globalThis.VideoEncoder })
+    .VideoEncoder;
+  for (const codec of ["avc1.640034", "avc1.4d0034", "avc1.420034", "avc1.42E01F"]) {
+    try {
+      const { supported } = await VideoEncoder.isConfigSupported({
+        codec, width: W, height: H, bitrate: 6_000_000, framerate: FPS,
+      });
+      if (supported) return codec;
+    } catch { /* next */ }
+  }
+  return "avc1.42E01F";
 }
 
-const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+// ── Geometry helpers ─────────────────────────────────────────────────────────
+type Rect = { x: number; y: number; w: number; h: number };
 
-/** Output W×H (even, longest side ≤ MAX_SIDE) for the chosen aspect. */
-function outputSize(
-  aspect: RevealAspect,
-  imgW: number,
-  imgH: number
-): { w: number; h: number } {
-  let ratio: number; // width / height
-  if (aspect === "1:1") ratio = 1;
-  else if (aspect === "4:5") ratio = 4 / 5;
-  else if (aspect === "9:16") ratio = 9 / 16;
-  else ratio = imgW / imgH; // original
-
-  if (aspect === "original") {
-    // Never upscale — base on the source so frames stay within encoder limits.
-    const scale = Math.min(1, MAX_SIDE / Math.max(imgW, imgH));
-    return { w: even(imgW * scale), h: even(imgH * scale) };
-  }
-
-  const base = 1080;
-  return ratio >= 1
-    ? { w: even(base), h: even(base / ratio) }
-    : { w: even(base * ratio), h: even(base) };
-}
-
-/** Pick the lowest-level H.264 codec string the browser accepts for W×H. */
-async function pickCodec(W: number, H: number): Promise<string> {
-  const candidates = [
-    "avc1.42E029", // baseline 4.1 (most compatible)
-    "avc1.42E033", // baseline 5.1
-    "avc1.4D4033", // main 5.1
-    "avc1.640033", // high 5.1
-    "avc1.640034", // high 5.2
-  ];
-  for (const codec of candidates) {
-    const cfg: VideoEncoderConfig = {
-      codec,
-      width: W,
-      height: H,
-      bitrate: 6_000_000,
-      framerate: FPS,
-    };
-    const { supported } = await VideoEncoder.isConfigSupported(cfg);
-    if (supported) return codec;
-  }
-  throw new Error(`This browser can't encode ${W}×${H} video.`);
+function fitContain(img: HTMLImageElement, x: number, y: number, w: number, h: number): Rect {
+  const r = Math.min(w / img.width, h / img.height);
+  const dw = img.width * r, dh = img.height * r;
+  return { x: x + (w - dw) / 2, y: y + (h - dh) / 2, w: dw, h: dh };
 }
 
 function drawCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  bw: number,
-  bh: number
+  ctx: CanvasRenderingContext2D, img: HTMLImageElement,
+  x: number, y: number, w: number, h: number, scale = 1
 ) {
-  const scale = Math.max(bw / img.width, bh / img.height);
-  const w = img.width * scale;
-  const h = img.height * scale;
-  ctx.drawImage(img, (bw - w) / 2, (bh - h) / 2, w, h);
+  const r = Math.max(w / img.width, h / img.height) * scale;
+  const dw = img.width * r, dh = img.height * r;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
 }
 
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number
-) {
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  const rr = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
 }
 
-function drawPill(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  cx: number,
-  cy: number,
-  bg: string,
-  fg: string
-) {
-  ctx.font = "600 26px Sora, system-ui, sans-serif";
-  const padX = 20;
-  const tw = ctx.measureText(text).width;
-  const w = tw + padX * 2;
-  const h = 46;
-  roundRect(ctx, cx - w / 2, cy - h / 2, w, h, h / 2);
-  ctx.fillStyle = bg;
-  ctx.fill();
-  ctx.fillStyle = fg;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, cx, cy + 1);
-}
-
-function drawWatermark(ctx: CanvasRenderingContext2D, W: number, H: number) {
-  const cx = W / 2;
-  const cy = H - 70;
-  ctx.save();
-  ctx.font = "600 34px Sora, system-ui, sans-serif";
-  const label = "noosho";
-  const tw = ctx.measureText(label).width;
-  const gap = 14;
-  const padX = 26;
-  const totalW = 36 + gap + tw + padX * 2;
-  const h = 64;
-  roundRect(ctx, cx - totalW / 2, cy - h / 2, totalW, h, h / 2);
-  ctx.fillStyle = "rgba(24,20,16,0.78)";
-  ctx.fill();
-  const rx = cx - totalW / 2 + padX + 16;
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = "#faf6f0";
-  ctx.beginPath();
-  ctx.arc(rx, cy, 14, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = "#bd6a43";
-  ctx.beginPath();
-  ctx.arc(rx + 18, cy, 14, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fillStyle = "#faf6f0";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, rx + 18 + 14 + gap, cy + 2);
-  ctx.restore();
-}
-
-function renderFrame(
-  ctx: CanvasRenderingContext2D,
-  before: HTMLImageElement,
-  after: HTMLImageElement,
-  W: number,
-  H: number,
-  revealX: number // fraction [0..1] of the width still showing "before" from left
-) {
-  ctx.clearRect(0, 0, W, H);
-
-  // Foreground = after, cover-filled edge-to-edge (no bands).
-  drawCover(ctx, after, W, H);
-
-  // Before clipped to the left reveal portion.
-  const splitW = W * revealX;
-  if (splitW > 0.5) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, splitW, H);
-    ctx.clip();
-    drawCover(ctx, before, W, H);
-    ctx.restore();
-  }
-
-  // Handle line + grip while wiping.
-  if (revealX > 0.001 && revealX < 0.999) {
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.95)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(splitW, 0);
-    ctx.lineTo(splitW, H);
-    ctx.stroke();
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(splitW, H / 2, 26, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#a04525";
-    ctx.font = "700 26px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("‹ ›", splitW, H / 2 + 1);
-    ctx.restore();
-  }
-
-  // Before / After pills near the top.
-  const pillY = 44;
-  if (revealX > 0.05) {
-    drawPill(ctx, "Before", 70, pillY, "rgba(255,255,255,0.92)", "#1c1917");
-  }
-  drawPill(ctx, "After", W - 60, pillY, "#a04525", "#ffffff");
-
-  drawWatermark(ctx, W, H);
-}
-
-/** Word-wrap text to a max width, capped to maxLines (last line ellipsized). */
-function wrapText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  maxWidth: number,
-  maxLines: number
-): string[] {
-  const words = text.split(/\s+/).filter(Boolean);
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxLines: number): string[] {
+  const words = text.split(/\s+/);
   const lines: string[] = [];
   let line = "";
-  for (let i = 0; i < words.length; i++) {
-    const test = line ? `${line} ${words[i]}` : words[i];
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
     if (ctx.measureText(test).width > maxWidth && line) {
       lines.push(line);
-      line = words[i];
-      if (lines.length === maxLines) break; // no room for more lines
+      line = w;
+      if (lines.length === maxLines - 1) break;
+    } else line = test;
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines) {
+    let last = lines[maxLines - 1];
+    while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) last = last.slice(0, -1);
+    lines[maxLines - 1] = `${last}…`;
+  }
+  return lines;
+}
+
+/** Rounded image card: blurred cover backdrop + the whole photo (contain) on top.
+ *  Returns the contained image rect (for scan line / hotspot mapping). */
+function drawImageCard(
+  ctx: CanvasRenderingContext2D, img: HTMLImageElement,
+  c: { x: number; y: number; w: number; h: number; rad: number }
+): Rect {
+  ctx.save();
+  roundRect(ctx, c.x, c.y, c.w, c.h, c.rad);
+  ctx.clip();
+  ctx.fillStyle = "#171310";
+  ctx.fillRect(c.x, c.y, c.w, c.h);
+  ctx.save();
+  ctx.filter = "blur(30px)";
+  ctx.globalAlpha = 0.6;
+  drawCover(ctx, img, c.x - 30, c.y - 30, c.w + 60, c.h + 60, 1.1);
+  ctx.restore();
+  const r = fitContain(img, c.x, c.y, c.w, c.h);
+  ctx.drawImage(img, r.x, r.y, r.w, r.h);
+  ctx.restore();
+  return r;
+}
+
+// ── Brand drawables ─────────────────────────────────────────────────────────
+function drawTwinRings(ctx: CanvasRenderingContext2D, leftX: number, cy: number, height: number, draw: number, swVB = 4) {
+  const scale = height / 28, r = 11 * scale, sw = swVB * scale;
+  const c1x = leftX + (13 - 2) * scale, c2x = leftX + (27 - 2) * scale;
+  const start = -Math.PI / 2, sweep = clamp(draw) * Math.PI * 2;
+  ctx.save();
+  ctx.lineWidth = sw;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = INK;
+  ctx.beginPath(); ctx.arc(c1x, cy, r, start, start + sweep); ctx.stroke();
+  ctx.strokeStyle = CLAY;
+  ctx.beginPath(); ctx.arc(c2x, cy, r, start, start + sweep); ctx.stroke();
+  ctx.restore();
+  return (40 - 4) * scale;
+}
+
+function drawLockup(ctx: CanvasRenderingContext2D, cy: number, markH: number, draw: number, reveal: number, scale = 1) {
+  const wordSize = markH * 0.86;
+  ctx.save();
+  ctx.font = `600 ${wordSize}px ${SORA}`;
+  const wordW = ctx.measureText("noosho").width;
+  const markW = (40 - 4) * (markH / 28);
+  const gap = markH * 0.3;
+  const totalW = (markW + gap + wordW) * scale;
+  const startX = (W - totalW) / 2;
+  ctx.translate(W / 2, cy); ctx.scale(scale, scale); ctx.translate(-W / 2, -cy);
+  drawTwinRings(ctx, startX, cy, markH, draw);
+  // wordmark with clip reveal
+  const wx = startX + markW + gap;
+  ctx.font = `600 ${wordSize}px ${SORA}`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.beginPath();
+  ctx.rect(wx, cy - wordSize, wordW * clamp(reveal) + 2, wordSize * 2);
+  ctx.clip();
+  ctx.fillStyle = INK;
+  ctx.fillText("noosho", wx, cy + wordSize * 0.02);
+  ctx.restore();
+}
+
+function drawWords(
+  ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, size: number,
+  lt: number, start: number, color: string, accent?: string, accentColor = CLAY, weight = 700
+) {
+  ctx.save();
+  ctx.font = `${weight} ${size}px ${SORA}`;
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+  const space = size * 0.26; // generous word gap so words read as separate words
+  const words = text.split(" ");
+  const widths = words.map((w) => ctx.measureText(w).width);
+  const total = widths.reduce((a, b) => a + b, 0) + space * (words.length - 1);
+  let x = cx - total / 2;
+  words.forEach((w, i) => {
+    const p = easeOutExpo(clamp((lt - (start + i * 0.075)) / 0.55));
+    const isAcc = accent && w.replace(/[.,—]/g, "").toLowerCase() === accent;
+    ctx.globalAlpha = p;
+    ctx.fillStyle = isAcc ? accentColor : color;
+    ctx.fillText(w, x, y + (1 - p) * 28);
+    x += widths[i] + space;
+  });
+  ctx.restore();
+}
+
+function drawKicker(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, size: number, p: number, color = CLAY) {
+  ctx.save();
+  ctx.globalAlpha = clamp(p);
+  ctx.font = `500 ${size}px ${MONO}`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  const label = text.toUpperCase();
+  const ls = size * 0.3;
+  const textW = [...label].reduce((a, c) => a + ctx.measureText(c).width + ls, 0);
+  const ruleW = size * 1.3, gap = size * 0.6;
+  let x = cx - (ruleW + gap + textW) / 2;
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y - 1, ruleW, 2);
+  x += ruleW + gap;
+  for (const ch of label) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; }
+  ctx.restore();
+}
+
+function drawScrim(ctx: CanvasRenderingContext2D) {
+  const g = ctx.createLinearGradient(0, H, 0, H - 820);
+  g.addColorStop(0, "rgba(20,15,11,0.82)");
+  g.addColorStop(0.4, "rgba(20,15,11,0.42)");
+  g.addColorStop(1, "rgba(20,15,11,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, H - 820, W, 820);
+}
+
+function drawBackdrop(ctx: CanvasRenderingContext2D, t: number) {
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, H);
+  const dx = Math.sin(t * 0.25) * 0.06 * W, dy = Math.cos(t * 0.2) * 0.05 * H;
+  const g1 = ctx.createRadialGradient(0.72 * W + dx, 0.18 * H + dy, 0, 0.72 * W + dx, 0.18 * H + dy, 0.5 * W);
+  g1.addColorStop(0, "rgba(160,69,37,0.10)"); g1.addColorStop(1, "rgba(160,69,37,0)");
+  ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
+  const g2 = ctx.createRadialGradient(0.16 * W - dx, 0.84 * H - dy, 0, 0.16 * W - dx, 0.84 * H - dy, 0.5 * W);
+  g2.addColorStop(0, "rgba(206,101,51,0.09)"); g2.addColorStop(1, "rgba(206,101,51,0)");
+  ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
+}
+
+function sceneAlpha(t: number, start: number, end: number, inDur = 0.5, outDur = 0.5): number {
+  if (t < start - 0.02 || t > end + 0.02) return 0;
+  let o = 1;
+  if (t < start + inDur) o = clamp((t - start) / inDur);
+  else if (t > end - outDur) o = clamp((end - t) / outDur);
+  return easeInOutCubic(o);
+}
+
+// ── Scenes ──────────────────────────────────────────────────────────────────
+
+function sceneIntro(ctx: CanvasRenderingContext2D, t: number) {
+  const a = sceneAlpha(t, 0, T_INTRO_END, 0.01, 0.5);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const draw = easeInOutCubic(clamp((t - 0.4) / 1.0));
+  const reveal = easeOutExpo(clamp((t - 1.2) / 0.7));
+  const markScale = 0.7 + easeOutBack(clamp((t - 0.2) / 1.0)) * 0.3;
+  drawLockup(ctx, H * 0.36, 120, draw, reveal, markScale);
+  // Three lines, matching the commercial: "Redesign any" / "room." / "Then shop it."
+  const size = 104, lh = 122, y0 = H * 0.5;
+  drawWords(ctx, "Redesign any", W / 2, y0, size, t, 2.0, INK);
+  drawWords(ctx, "room.", W / 2, y0 + lh, size, t, 2.3, INK);
+  drawWords(ctx, "Then shop it.", W / 2, y0 + lh * 2, size, t, 2.6, INK, "shop", CLAY);
+  ctx.restore();
+}
+
+function appHeader(ctx: CanvasRenderingContext2D, x: number, y: number, w: number) {
+  drawTwinRings(ctx, x + 30, y + 48, 26, 1);
+  ctx.fillStyle = INK;
+  ctx.font = `600 27px ${SORA}`;
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  ctx.fillText("noosho", x + 30 + 50, y + 50);
+  ctx.fillStyle = TINT;
+  ctx.beginPath();
+  ctx.arc(x + w - 30 - 19, y + 48, 19, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = TINT2; ctx.lineWidth = 1.5; ctx.stroke();
+}
+
+function ctaButton(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, p: number) {
+  if (p <= 0) return;
+  const s = lerp(0.9, 1, easeOutBack(p));
+  ctx.save();
+  ctx.globalAlpha = clamp(p);
+  ctx.translate(x + w / 2, y + h / 2);
+  ctx.scale(s, s);
+  ctx.translate(-w / 2, -h / 2);
+  ctx.fillStyle = CLAY;
+  roundRect(ctx, 0, 0, w, h, 22);
+  ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.font = `600 28px ${UI}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, w / 2, h / 2 + 1);
+  ctx.restore();
+}
+
+function scenePhone(ctx: CanvasRenderingContext2D, before: HTMLImageElement, t: number) {
+  const a = sceneAlpha(t, T_PHONE[0], T_PHONE[1], 0.4, 0.3);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+
+  const inP = easeOutCubic(clamp((t - 4.0) / 0.6));
+  const ty = (1 - inP) * 60, sc = lerp(0.94, 1, inP);
+  ctx.save();
+  ctx.globalAlpha *= inP;
+  ctx.translate(PH.x + PH.w / 2, PH.y + PH.h * 0.3);
+  ctx.scale(sc, sc);
+  ctx.translate(-(PH.x + PH.w / 2), -(PH.y + PH.h * 0.3) + ty);
+
+  // phone body + screen
+  ctx.fillStyle = "#171310";
+  roundRect(ctx, PH.x, PH.y, PH.w, PH.h, PH.rad);
+  ctx.fill();
+  const ix = PH.x + PH.pad, iy = PH.y + PH.pad, iw = PH.w - PH.pad * 2, ih = PH.h - PH.pad * 2;
+  ctx.save();
+  roundRect(ctx, ix, iy, iw, ih, PH.rad - PH.pad);
+  ctx.clip();
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(ix, iy, iw, ih);
+
+  const upOp = clamp((9.15 - t) / 0.35);
+  const stOp = clamp((t - 8.85) / 0.35);
+
+  // ── Upload screen ──
+  if (upOp > 0) {
+    ctx.save();
+    ctx.globalAlpha = upOp;
+    appHeader(ctx, ix, iy, iw);
+    const padX = 26, top = iy + 100;
+    ctx.fillStyle = CLAY;
+    ctx.font = `500 16px ${MONO}`;
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("NEW DESIGN", ix + padX, top + 6);
+    const dzY = top + 30, dzH = ih - (dzY - iy) - 120, dzX = ix + padX, dzW = iw - padX * 2;
+    const drop = easeOutBack(clamp((t - 4.9) / 0.9));
+    ctx.save();
+    roundRect(ctx, dzX, dzY, dzW, dzH, 30);
+    ctx.clip();
+    if (drop < 0.1) {
+      ctx.fillStyle = TINT; ctx.fillRect(dzX, dzY, dzW, dzH);
+      const emptyOp = clamp(1 - (t - 4.8) / 0.3);
+      ctx.globalAlpha = upOp * emptyOp;
+      ctx.fillStyle = "#fff";
+      roundRect(ctx, dzX + dzW / 2 - 36, dzY + dzH / 2 - 50, 72, 72, 22); ctx.fill();
+      ctx.strokeStyle = CLAY; ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(dzX + dzW / 2, dzY + dzH / 2 - 36); ctx.lineTo(dzX + dzW / 2, dzY + dzH / 2 + 4);
+      ctx.moveTo(dzX + dzW / 2 - 20, dzY + dzH / 2 - 16); ctx.lineTo(dzX + dzW / 2 + 20, dzY + dzH / 2 - 16);
+      ctx.stroke();
+      ctx.fillStyle = CLAY_DP; ctx.font = `500 23px ${UI}`; ctx.textAlign = "center";
+      ctx.fillText("Add a photo", dzX + dzW / 2, dzY + dzH / 2 + 56);
+      ctx.globalAlpha = upOp;
     } else {
-      line = test;
+      ctx.fillStyle = "#000"; ctx.fillRect(dzX, dzY, dzW, dzH);
+      const imgY = (1 - drop) * -90;
+      ctx.globalAlpha = upOp * clamp((t - 4.9) / 0.4);
+      drawCover(ctx, before, dzX, dzY + imgY, dzW, dzH);
+      ctx.globalAlpha = upOp;
+    }
+    ctx.restore();
+    ctaButton(ctx, dzX, iy + ih - 100, dzW, 84, "Continue", easeOutBack(clamp((t - 6.0) / 0.5)));
+    ctx.restore();
+  }
+
+  // ── Style screen ──
+  if (stOp > 0 && t > 8.6) {
+    ctx.save();
+    ctx.globalAlpha = stOp;
+    appHeader(ctx, ix, iy, iw);
+    const padX = 26, top = iy + 100, heroP = easeOutCubic(clamp((t - 9.0) / 0.5));
+    const heroH = 300;
+    ctx.save();
+    ctx.globalAlpha = stOp * heroP;
+    roundRect(ctx, ix + padX, top, iw - padX * 2, heroH, 26);
+    ctx.clip();
+    drawCover(ctx, before, ix + padX, top, iw - padX * 2, heroH);
+    ctx.restore();
+    const titleP = easeOutCubic(clamp((t - 9.3) / 0.5));
+    ctx.globalAlpha = stOp * titleP;
+    ctx.fillStyle = INK; ctx.font = `600 34px ${SORA}`; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("Choose your style", ix + padX, top + heroH + 56);
+    ctx.globalAlpha = stOp;
+    const styles = ["Modern", "Boho", "Scandi", "Japandi", "Coastal", "Minimal"];
+    let cx = ix + padX, cy = top + heroH + 96;
+    ctx.font = `500 24px ${UI}`;
+    styles.forEach((s, i) => {
+      const ap = easeOutBack(clamp((t - (9.6 + i * 0.08)) / 0.45));
+      const cw = ctx.measureText(s).width + 48, chH = 54;
+      if (cx + cw > ix + iw - padX) { cx = ix + padX; cy += chH + 13; }
+      const sel = s === "Modern";
+      const selP = sel ? easeOutBack(clamp((t - 10.7) / 0.4)) : 0;
+      ctx.save();
+      ctx.globalAlpha = stOp * ap;
+      ctx.fillStyle = sel ? `rgba(160,69,37,${selP})` : "#fff";
+      roundRect(ctx, cx, cy, cw, chH, 40); ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = sel && selP > 0.3 ? CLAY : LINE; ctx.stroke();
+      ctx.fillStyle = sel && selP > 0.5 ? "#fff" : INK;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(s, cx + cw / 2, cy + chH / 2 + 1);
+      ctx.restore();
+      cx += cw + 13;
+    });
+    ctaButton(ctx, ix + padX, iy + ih - 100, iw - padX * 2, 84, "Generate design", easeOutBack(clamp((t - 11.3) / 0.5)));
+    ctx.restore();
+  }
+
+  // notch
+  ctx.fillStyle = "#171310";
+  roundRect(ctx, ix + iw / 2 - 62, iy + 16, 124, 30, 18); ctx.fill();
+  ctx.restore(); // screen clip
+  ctx.restore(); // phone transform
+
+  // captions below phone
+  const capY = 1448;
+  if (t < 9.2) {
+    const o = clamp((9.0 - t) / 0.3);
+    ctx.globalAlpha = a * o;
+    drawKicker(ctx, "Step 01 · Upload", W / 2, capY, 25, clamp((t - 4.4) / 0.5));
+    drawWords(ctx, "Upload one photo", W / 2, capY + 70, 74, t, 4.7, INK);
+  } else {
+    const o = clamp((t - 9.0) / 0.3);
+    ctx.globalAlpha = a * o;
+    drawKicker(ctx, "Step 02 · Style", W / 2, capY, 25, clamp((t - 9.2) / 0.5));
+    drawWords(ctx, "Pick a style", W / 2, capY + 70, 74, t, 9.4, INK, "style", CLAY);
+  }
+  ctx.restore();
+}
+
+function sceneTransform(ctx: CanvasRenderingContext2D, before: HTMLImageElement, after: HTMLImageElement, t: number) {
+  const a = sceneAlpha(t, T_TRANSFORM[0], T_TRANSFORM[1], 0.4, 0.4);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const lt = t - T_TRANSFORM[0];
+  const line = easeInOutSine(clamp((lt - 0.9) / 2.3)); // 0..1 within image
+  const scanning = lt > 0.7 && line < 1;
+
+  const rect = drawImageCard(ctx, after, CARD); // after base + contained rect
+  // before clipped below the scan line, within the image rect
+  if (line < 1) {
+    const sy = rect.y + line * rect.h;
+    ctx.save();
+    ctx.beginPath();
+    roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, CARD.rad);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.rect(rect.x, sy, rect.w, rect.y + rect.h - sy);
+    ctx.clip();
+    ctx.drawImage(before, rect.x, rect.y, rect.w, rect.h);
+    if (scanning) {
+      ctx.fillStyle = "rgba(122,54,32,0.18)";
+      ctx.fillRect(rect.x, sy, rect.w, rect.y + rect.h - sy);
+      ctx.strokeStyle = "rgba(255,255,255,0.16)";
+      ctx.lineWidth = 1;
+      for (let gx = rect.x; gx < rect.x + rect.w; gx += 46) { ctx.beginPath(); ctx.moveTo(gx, sy); ctx.lineTo(gx, rect.y + rect.h); ctx.stroke(); }
+      for (let gy = Math.ceil(sy / 46) * 46; gy < rect.y + rect.h; gy += 46) { ctx.beginPath(); ctx.moveTo(rect.x, gy); ctx.lineTo(rect.x + rect.w, gy); ctx.stroke(); }
+    }
+    ctx.restore();
+    if (scanning) {
+      const glow = ctx.createLinearGradient(0, sy - 200, 0, sy);
+      glow.addColorStop(0, "rgba(206,101,51,0)"); glow.addColorStop(1, "rgba(206,101,51,0.55)");
+      ctx.fillStyle = glow; ctx.fillRect(rect.x, sy - 200, rect.w, 200);
+      ctx.fillStyle = CLAY_BR; ctx.fillRect(rect.x, sy - 3, rect.w, 6);
     }
   }
-  if (lines.length < maxLines) {
-    lines.push(line);
-    return lines;
+
+  // Designed badge
+  const doneP = easeOutBack(clamp((lt - 3.4) / 0.5));
+  if (doneP > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = a * clamp(doneP);
+    ctx.font = `600 24px ${UI}`;
+    const label = "Designed", tw = ctx.measureText(label).width;
+    const bx = CARD.x + 26, by = CARD.y + 26, bh = 52, bw = 22 + 28 + 12 + tw + 22;
+    ctx.fillStyle = "rgba(255,255,255,0.92)"; roundRect(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = CLAY; ctx.beginPath(); ctx.arc(bx + 22 + 14, by + bh / 2, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(bx + 22 + 8, by + bh / 2); ctx.lineTo(bx + 22 + 12, by + bh / 2 + 5); ctx.lineTo(bx + 22 + 20, by + bh / 2 - 5);
+    ctx.stroke();
+    ctx.fillStyle = INK; ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.fillText(label, bx + 22 + 28 + 12, by + bh / 2 + 1);
+    ctx.restore();
   }
-  // Ran out of lines — ellipsize whatever didn't fit onto the last line.
-  let last = lines[maxLines - 1];
-  if (line && line !== last) last = `${last} ${line}`;
-  while (ctx.measureText(`${last}…`).width > maxWidth && last.length > 1) {
-    last = last.slice(0, -1).trimEnd();
-  }
-  lines[maxLines - 1] = `${last}…`;
-  return lines.slice(0, maxLines);
+
+  drawScrim(ctx);
+  drawKicker(ctx, "Step 03 · Transform", W / 2, H - 230, 25, clamp((lt - 0.4) / 0.5), CLAY_LT);
+  drawWords(ctx, "Designed in seconds", W / 2, H - 150, 84, lt, 0.7, CREAM, "seconds", CLAY_LT);
+  ctx.restore();
 }
 
-/** Draw a shoppable product card over the (dimmed) after design. t: 0→1 fade-in. */
-function renderProductCard(
-  ctx: CanvasRenderingContext2D,
-  after: HTMLImageElement,
-  prodImg: HTMLImageElement | null,
-  title: string,
-  price: string,
-  W: number,
-  H: number,
-  p: number // 0→1 across the segment
-) {
-  ctx.clearRect(0, 0, W, H);
-  drawCover(ctx, after, W, H);
+type ShopCard = { img: HTMLImageElement; title: string; price: string; x?: number; y?: number };
 
-  // Dim the background so the card pops.
-  ctx.fillStyle = "rgba(20,16,12,0.55)";
+function sceneShop(ctx: CanvasRenderingContext2D, after: HTMLImageElement, cards: ShopCard[], t: number) {
+  const a = sceneAlpha(t, T_SHOP[0], T_SHOP[1], 0.4, 0.4);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const lt = t - T_SHOP[0];
+  const rect = drawImageCard(ctx, after, CARD);
+
+  // pins at hotspots
+  cards.forEach((c, i) => {
+    if (c.x == null || c.y == null) return;
+    const at = 0.5 + i * 0.3;
+    const pop = easeOutBack(clamp((lt - at) / 0.45));
+    if (pop <= 0) return;
+    const px = rect.x + (c.x / 100) * rect.w, py = rect.y + (c.y / 100) * rect.h;
+    const pulse = 0.5 + 0.5 * Math.sin((lt - at) * 4);
+    ctx.save();
+    ctx.globalAlpha = a * 0.7 * (1 - pulse);
+    ctx.strokeStyle = CLAY_BR; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(px, py, 26 * (1 + pulse * 0.8), 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(px, py, 16 * pop, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = CLAY; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(px, py, 16 * pop, 0, Math.PI * 2); ctx.stroke();
+  });
+
+  drawScrim(ctx);
+
+  // product cards stacked above the caption
+  const cardW = 620, cardH = 112, gap = 16, baseY = H - 360;
+  cards.forEach((c, i) => {
+    const p = easeOutCubic(clamp((lt - (0.8 + i * 0.2)) / 0.5));
+    if (p <= 0) return;
+    const x = 80, y = baseY - (cards.length - 1 - i) * (cardH + gap);
+    ctx.save();
+    ctx.globalAlpha = a * p;
+    ctx.translate((1 - p) * 60, 0);
+    ctx.fillStyle = "rgba(255,255,255,0.97)";
+    roundRect(ctx, x, y, cardW, cardH, 26); ctx.fill();
+    const th = 76, tx = x + 18, ty = y + (cardH - th) / 2;
+    ctx.save(); roundRect(ctx, tx, ty, th, th, 18); ctx.clip(); drawCover(ctx, c.img, tx, ty, th, th); ctx.restore();
+    const textX = tx + th + 20;
+    ctx.fillStyle = CLAY; ctx.font = `500 14px ${MONO}`; ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("SHOPPABLE", textX, y + 40);
+    ctx.fillStyle = INK; ctx.font = `600 28px ${UI}`;
+    const [ln] = wrapText(ctx, c.title, cardW - (textX - x) - 90, 1);
+    ctx.fillText(ln, textX, y + 74);
+    const bs = 56, bx = x + cardW - bs - 18, by = y + (cardH - bs) / 2;
+    ctx.fillStyle = CLAY; roundRect(ctx, bx, by, bs, bs, 16); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.arc(bx + bs * 0.4, by + bs * 0.72, 3, 0, Math.PI * 2);
+    ctx.arc(bx + bs * 0.66, by + bs * 0.72, 3, 0, Math.PI * 2);
+    ctx.moveTo(bx + bs * 0.22, by + bs * 0.26); ctx.lineTo(bx + bs * 0.32, by + bs * 0.26);
+    ctx.lineTo(bx + bs * 0.44, by + bs * 0.6); ctx.lineTo(bx + bs * 0.74, by + bs * 0.6);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  drawKicker(ctx, "Step 04 · Shop", W / 2, H - 230, 25, clamp((lt - 0.3) / 0.5), CLAY_LT);
+  drawWords(ctx, "Shop the exact look", W / 2, H - 150, 80, lt, 0.6, CREAM, "shop", CLAY_LT);
+  ctx.restore();
+}
+
+function sceneCTA(ctx: CanvasRenderingContext2D, t: number) {
+  const a = sceneAlpha(t, T_CTA[0], T_CTA[1], 0.35, 0.01);
+  if (a <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = a;
+  const lt = t - T_CTA[0];
+  drawKicker(ctx, "No skills needed", W / 2, H * 0.34, 24, clamp((lt - 0.2) / 0.5));
+  const draw = easeOutCubic(clamp((lt - 0.2) / 0.7));
+  const reveal = easeOutExpo(clamp((lt - 0.5) / 0.6));
+  const markScale = 0.8 + easeOutBack(clamp(lt / 0.8)) * 0.2;
+  drawLockup(ctx, H * 0.44, 108, draw, reveal, markScale);
+  drawWords(ctx, "Try noosho — free", W / 2, H * 0.56, 92, lt, 0.7, INK, "free", CLAY);
+  const btnP = easeOutBack(clamp((lt - 1.3) / 0.5));
+  if (btnP > 0.01) {
+    ctx.save();
+    ctx.globalAlpha = a * clamp(btnP);
+    ctx.font = `600 38px ${UI}`;
+    const label = "noosho.com", tw = ctx.measureText(label).width;
+    const bw = tw + 104, bh = 84, bx = (W - bw) / 2, by = H * 0.62;
+    ctx.fillStyle = CLAY; roundRect(ctx, bx, by, bw, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, W / 2, by + bh / 2 + 1);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function vignette(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.72);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(1, "rgba(40,22,12,0.90)");
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
-
-  const ease = smoothstep(Math.min(1, p / 0.27)); // ~0.4s fade-in
-  const slide = (1 - ease) * H * 0.06;
-  ctx.save();
-  ctx.globalAlpha = ease;
-  ctx.translate(0, slide);
-
-  // Card geometry — height derived from content so the pill never overlaps price.
-  const s = Math.min(W, H);
-  const cardW = Math.min(W * 0.84, s * 1.15);
-  const pad = s * 0.045;
-  const thumb = s * 0.26;
-
-  const titleSize = Math.round(s * 0.038);
-  const priceSize = Math.round(s * 0.05);
-  const pillSize = Math.round(s * 0.026);
-  const lineH = titleSize * 1.25;
-  const pillH = pillSize + s * 0.022;
-  const gapTitlePrice = s * 0.012;
-  const gapPricePill = s * 0.016;
-
-  const textXrel = pad + thumb + pad * 0.8; // text column relative to card left
-  const textW = cardW - pad - textXrel;
-  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
-  const titleLines = wrapText(ctx, title, textW, 2);
-
-  const textBlockH =
-    titleLines.length * lineH + gapTitlePrice + priceSize + gapPricePill + pillH;
-  const cardH = Math.max(thumb + pad * 2, textBlockH + pad * 2);
-  const cx = (W - cardW) / 2;
-  const cy = H * 0.5 - cardH / 2;
-
-  // Card background.
-  roundRect(ctx, cx, cy, cardW, cardH, s * 0.04);
-  ctx.fillStyle = "#ffffff";
-  ctx.fill();
-
-  // Product thumbnail (contain-fit on white tile, vertically centered).
-  const tileX = cx + pad;
-  const tileY = cy + (cardH - thumb) / 2;
-  roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.025);
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = "#f5f1ea";
-  ctx.fillRect(tileX, tileY, thumb, thumb);
-  if (prodImg) {
-    const scale = Math.min(thumb / prodImg.width, thumb / prodImg.height);
-    const w = prodImg.width * scale;
-    const h = prodImg.height * scale;
-    ctx.drawImage(prodImg, tileX + (thumb - w) / 2, tileY + (thumb - h) / 2, w, h);
-  }
   ctx.restore();
-
-  // Text column flows top→down, vertically centered within the card.
-  const textX = cx + textXrel;
-  let ty = cy + (cardH - textBlockH) / 2;
-  ctx.fillStyle = "#1c1917";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
-  for (const l of titleLines) {
-    ctx.fillText(l, textX, ty);
-    ty += lineH;
-  }
-  ty += gapTitlePrice;
-  ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
-  ctx.fillStyle = "#a04525";
-  ctx.fillText(price, textX, ty);
-  ty += priceSize + gapPricePill;
-
-  ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
-  const pillText = "Shop the look · noosho.com";
-  const pillPadX = s * 0.022;
-  const pillW = ctx.measureText(pillText).width + pillPadX * 2;
-  roundRect(ctx, textX, ty, pillW, pillH, pillH / 2);
-  ctx.fillStyle = "#a04525";
-  ctx.fill();
-  ctx.fillStyle = "#ffffff";
-  ctx.textBaseline = "middle";
-  ctx.fillText(pillText, textX + pillPadX, ty + pillH / 2 + 1);
-
-  ctx.restore();
-
-  drawWatermark(ctx, W, H);
 }
 
+/** Composite one frame at time `t` (seconds). Exposed for visual verification. */
+export function renderRevealFrame(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  before: HTMLImageElement,
+  after: HTMLImageElement,
+  cards: ShopCard[]
+) {
+  drawBackdrop(ctx, t);
+  sceneIntro(ctx, t);
+  scenePhone(ctx, before, t);
+  sceneTransform(ctx, before, after, t);
+  sceneShop(ctx, after, cards, t);
+  sceneCTA(ctx, t);
+  vignette(ctx);
+}
+
+export const REVEAL_DURATION = DURATION;
+
+// ── Public API ──────────────────────────────────────────────────────────────
 export interface RevealProduct {
-  imageUrl: string; // same-origin (proxied) URL
+  imageUrl: string;
   title: string;
   price: string;
-  x?: number; // hotspot center X as % of the design image
-  y?: number; // hotspot center Y as % of the design image
-}
-
-/** Map a hotspot (x%,y%) to a canvas point using the same cover transform as drawCover. */
-function mapCover(
-  img: HTMLImageElement,
-  W: number,
-  H: number,
-  xPct: number,
-  yPct: number
-): { x: number; y: number } {
-  const scale = Math.max(W / img.width, H / img.height);
-  const dw = img.width * scale;
-  const dh = img.height * scale;
-  const ox = (W - dw) / 2;
-  const oy = (H - dh) / 2;
-  return { x: ox + (xPct / 100) * dw, y: oy + (yPct / 100) * dh };
-}
-
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-
-/** Draw an animated arrow pointing to the product at (hx,hy), then a product chip. */
-function renderProductCallout(
-  ctx: CanvasRenderingContext2D,
-  after: HTMLImageElement,
-  prodImg: HTMLImageElement | null,
-  title: string,
-  price: string,
-  hx: number,
-  hy: number,
-  W: number,
-  H: number,
-  p: number // 0→1 across the segment
-) {
-  ctx.clearRect(0, 0, W, H);
-  drawCover(ctx, after, W, H);
-  // Soft dim — lighter than the full card so the room stays visible.
-  ctx.fillStyle = "rgba(20,16,12,0.32)";
-  ctx.fillRect(0, 0, W, H);
-
-  const s = Math.min(W, H);
-
-  // ── Chip content + geometry (height derived from content so nothing overlaps) ──
-  const chipW = Math.min(W * 0.62, s * 0.95);
-  const thumb = s * 0.16;
-  const chipPad = s * 0.03;
-  const margin = s * 0.05;
-
-  const titleSize = Math.round(s * 0.032);
-  const priceSize = Math.round(s * 0.04);
-  const pillSize = Math.round(s * 0.024);
-  const lineH = titleSize * 1.25;
-  const pillH = pillSize + s * 0.02;
-  const gapTitlePrice = s * 0.008;
-  const gapPricePill = s * 0.012;
-
-  const textXrel = chipPad + thumb + chipPad * 0.8; // text column, relative to chip left
-  const textW = chipW - chipPad - textXrel;
-  ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
-  const titleLines = wrapText(ctx, title, textW, 2);
-
-  const textBlockH =
-    titleLines.length * lineH + gapTitlePrice + priceSize + gapPricePill + pillH;
-  const chipH = Math.max(thumb + chipPad * 2, textBlockH + chipPad * 2);
-  const chipX = clamp(hx - chipW / 2, margin, W - chipW - margin);
-  const chipY =
-    hy < H / 2 ? H - chipH - margin * 1.4 : margin * 1.4; // opposite vertical half
-
-  // ── Phase 1: pulsing ring on the product ──
-  const ringIn = smoothstep(clamp(p / 0.25, 0, 1));
-  const pulse = 1 + 0.12 * Math.sin(p * Math.PI * 6);
-  const ringR = s * 0.035 * ringIn * pulse;
-  ctx.save();
-  ctx.globalAlpha = ringIn;
-  ctx.beginPath();
-  ctx.arc(hx, hy, ringR, 0, Math.PI * 2);
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = Math.max(3, s * 0.006);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(hx, hy, s * 0.008, 0, Math.PI * 2);
-  ctx.fillStyle = "#a04525";
-  ctx.fill();
-  ctx.restore();
-
-  // ── Phase 2: arrow draws from chip toward the dot ──
-  const arrowP = smoothstep(clamp((p - 0.2) / 0.4, 0, 1));
-  if (arrowP > 0.01) {
-    const startX = clamp(hx, chipX + chipPad, chipX + chipW - chipPad);
-    const startY = hy < H / 2 ? chipY : chipY + chipH; // leave from chip edge nearest dot
-    const endX = hx;
-    const endYFull = hy + (hy < H / 2 ? ringR + s * 0.02 : -(ringR + s * 0.02));
-    const curX = startX + (endX - startX) * arrowP;
-    const curY = startY + (endYFull - startY) * arrowP;
-    ctx.save();
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = Math.max(3, s * 0.006);
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(curX, curY);
-    ctx.stroke();
-    if (arrowP > 0.85) {
-      const ang = Math.atan2(endYFull - startY, endX - startX);
-      const head = s * 0.022;
-      ctx.beginPath();
-      ctx.moveTo(curX, curY);
-      ctx.lineTo(curX - head * Math.cos(ang - 0.4), curY - head * Math.sin(ang - 0.4));
-      ctx.moveTo(curX, curY);
-      ctx.lineTo(curX - head * Math.cos(ang + 0.4), curY - head * Math.sin(ang + 0.4));
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // ── Phase 3: product chip fades/slides in ──
-  const chipIn = smoothstep(clamp((p - 0.4) / 0.4, 0, 1));
-  if (chipIn > 0.01) {
-    ctx.save();
-    ctx.globalAlpha = chipIn;
-    ctx.translate(0, (1 - chipIn) * s * 0.03);
-
-    roundRect(ctx, chipX, chipY, chipW, chipH, s * 0.03);
-    ctx.fillStyle = "#ffffff";
-    ctx.fill();
-
-    const tileX = chipX + chipPad;
-    const tileY = chipY + (chipH - thumb) / 2;
-    roundRect(ctx, tileX, tileY, thumb, thumb, s * 0.02);
-    ctx.save();
-    ctx.clip();
-    ctx.fillStyle = "#f5f1ea";
-    ctx.fillRect(tileX, tileY, thumb, thumb);
-    if (prodImg) {
-      const sc = Math.min(thumb / prodImg.width, thumb / prodImg.height);
-      const w = prodImg.width * sc;
-      const h = prodImg.height * sc;
-      ctx.drawImage(prodImg, tileX + (thumb - w) / 2, tileY + (thumb - h) / 2, w, h);
-    }
-    ctx.restore();
-
-    // Text column flows top→down, vertically centered within the chip.
-    const textX = chipX + textXrel;
-    let ty = chipY + (chipH - textBlockH) / 2;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.font = `600 ${titleSize}px Sora, system-ui, sans-serif`;
-    ctx.fillStyle = "#1c1917";
-    for (const l of titleLines) {
-      ctx.fillText(l, textX, ty);
-      ty += lineH;
-    }
-    ty += gapTitlePrice;
-    ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
-    ctx.fillStyle = "#a04525";
-    ctx.fillText(price, textX, ty);
-    ty += priceSize + gapPricePill;
-
-    ctx.font = `600 ${pillSize}px Sora, system-ui, sans-serif`;
-    const pillText = "Shop · noosho.com";
-    const pillPadX = s * 0.02;
-    const pillW = ctx.measureText(pillText).width + pillPadX * 2;
-    roundRect(ctx, textX, ty, pillW, pillH, pillH / 2);
-    ctx.fillStyle = "#a04525";
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.textBaseline = "middle";
-    ctx.fillText(pillText, textX + pillPadX, ty + pillH / 2 + 1);
-
-    ctx.restore();
-  }
-
-  drawWatermark(ctx, W, H);
+  x?: number;
+  y?: number;
 }
 
 export interface RevealVideoInput {
   beforeUrl: string;
   afterUrl: string;
-  aspect?: RevealAspect;
+  aspect?: RevealAspect; // ignored — branded reveal is locked to 1080×1920
   products?: RevealProduct[];
 }
 
-/** Render the before→after wipe as an H.264 MP4 in the chosen aspect, in-browser. */
+/** Render the branded reveal commercial (1080×1920 H.264 MP4), in-browser. */
 export async function generateRevealVideo(
-  { beforeUrl, afterUrl, aspect = "original", products = [] }: RevealVideoInput,
+  { beforeUrl, afterUrl, products = [] }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
     throw new Error("Video export needs a Chromium browser (Chrome or Edge).");
   }
 
-  const [before, after] = await Promise.all([
-    loadImage(beforeUrl),
-    loadImage(afterUrl),
-  ]);
+  const [before, after] = await Promise.all([loadImage(beforeUrl), loadImage(afterUrl)]);
 
-  // Load product card images (same-origin/proxied). Drop any that fail so a
-  // single broken image never breaks the export.
-  type Card = {
-    img: HTMLImageElement;
-    title: string;
-    price: string;
-    x?: number;
-    y?: number;
-  };
   const cards = (
     await Promise.all(
-      products.slice(0, 2).map(async (p): Promise<Card | null> => {
+      products.slice(0, 3).map(async (p): Promise<ShopCard | null> => {
         try {
           const img = await loadImage(p.imageUrl);
           return { img, title: p.title, price: p.price, x: p.x, y: p.y };
@@ -580,16 +675,13 @@ export async function generateRevealVideo(
         }
       })
     )
-  ).filter((c): c is Card => c !== null);
+  ).filter((c): c is ShopCard => c !== null);
 
-  const TOTAL =
-    REVEAL_TOTAL + cards.length * PRODUCT_SEG + (cards.length ? PRODUCT_END_HOLD : 0);
+  try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* non-fatal */ }
 
-  const { w: W, h: H } = outputSize(aspect, after.width, after.height);
-
+  const TOTAL = Math.round(DURATION * FPS);
   const canvas = document.createElement("canvas");
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d", { alpha: false });
   if (!ctx) throw new Error("Could not get a 2D canvas context.");
 
@@ -598,74 +690,27 @@ export async function generateRevealVideo(
     video: { codec: "avc", width: W, height: H },
     fastStart: "in-memory",
   });
-
   const encoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (e) => {
-      throw e;
-    },
+    error: (e) => { throw e; },
   });
+  encoder.configure({ codec: await pickCodec(), width: W, height: H, bitrate: 6_000_000, framerate: FPS });
 
-  encoder.configure({
-    codec: await pickCodec(W, H),
-    width: W,
-    height: H,
-    bitrate: 6_000_000,
-    framerate: FPS,
-  });
-
-  const frameDur = 1_000_000 / FPS; // microseconds
+  const frameDur = 1_000_000 / FPS;
   for (let i = 0; i < TOTAL; i++) {
-    if (i < REVEAL_TOTAL) {
-      // ── Reveal phase: hold before → wipe → hold after ──
-      let revealX = 1;
-      if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
-        revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
-      } else if (i >= HOLD_BEFORE + WIPE) {
-        revealX = 0;
-      }
-      renderFrame(ctx, before, after, W, H, revealX);
-    } else {
-      // ── Product card phase ──
-      const into = i - REVEAL_TOTAL;
-      let idx = Math.floor(into / PRODUCT_SEG);
-      if (idx > cards.length - 1) idx = cards.length - 1; // end-hold on last card
-      const local = into - idx * PRODUCT_SEG;
-      const card = cards[idx];
-      const p = Math.min(1, local / PRODUCT_ANIM);
+    const t = i / FPS;
+    renderRevealFrame(ctx, t, before, after, cards);
 
-      // Use the in-scene arrow callout when the product's hotspot lands inside
-      // the frame; otherwise fall back to the centered product card.
-      let pt: { x: number; y: number } | null = null;
-      if (card.x != null && card.y != null) {
-        const m = mapCover(after, W, H, card.x, card.y);
-        if (m.x >= 0 && m.x <= W && m.y >= 0 && m.y <= H) pt = m;
-      }
-      if (pt) {
-        renderProductCallout(ctx, after, card.img, card.title, card.price, pt.x, pt.y, W, H, p);
-      } else {
-        renderProductCard(ctx, after, card.img, card.title, card.price, W, H, p);
-      }
-    }
-
-    const frame = new VideoFrame(canvas, {
-      timestamp: Math.round(i * frameDur),
-      duration: Math.round(frameDur),
-    });
+    const frame = new VideoFrame(canvas, { timestamp: Math.round(i * frameDur), duration: Math.round(frameDur) });
     encoder.encode(frame, { keyFrame: i % FPS === 0 });
     frame.close();
-
     if (onProgress) onProgress((i + 1) / TOTAL);
-
-    if (encoder.encodeQueueSize > 8) {
-      await new Promise((r) => setTimeout(r, 0));
-    }
+    if (encoder.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 0));
   }
 
   await encoder.flush();
   muxer.finalize();
   encoder.close();
-
   const { buffer } = muxer.target as ArrayBufferTarget;
   return new Blob([buffer], { type: "video/mp4" });
 }

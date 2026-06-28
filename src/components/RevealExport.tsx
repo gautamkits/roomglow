@@ -7,16 +7,8 @@ import { designTitle, designDescription, designItems } from "@/lib/admin";
 import {
   generateRevealVideo,
   isRevealVideoSupported,
-  type RevealAspect,
   type RevealProduct,
 } from "@/lib/revealVideo";
-
-const ASPECTS: { id: RevealAspect; label: string }[] = [
-  { id: "original", label: "Original" },
-  { id: "1:1", label: "1:1" },
-  { id: "4:5", label: "4:5" },
-  { id: "9:16", label: "9:16" },
-];
 
 interface ParsedProduct {
   amazonProduct?: { title?: string; price?: string; imageUrl?: string } | null;
@@ -89,11 +81,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [pct, setPct] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [aspect, setAspect] = useState<RevealAspect>("original");
-
   const allProducts = buyableProducts(design);
-  // Default to 1 shop card (clamped to what's available) to keep exports fast.
-  const [cardCount, setCardCount] = useState(Math.min(1, allProducts.length));
+  // Default to 2 shop cards (clamped to what's available) for a fuller "shop" scene.
+  const [cardCount, setCardCount] = useState(Math.min(2, allProducts.length));
 
   const supported = isRevealVideoSupported();
   const title = designTitle(design);
@@ -142,7 +132,6 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
         {
           beforeUrl: `/api/image/${design.id}/before?inline=1`,
           afterUrl: `/api/image/${design.id}/after?inline=1`,
-          aspect,
           products,
         },
         (f) => setPct(Math.round(f * 100))
@@ -150,10 +139,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `noosho-${slugify(title) || design.id.slice(0, 8)}-${aspect.replace(
-        ":",
-        "x"
-      )}.mp4`;
+      a.download = `noosho-${slugify(title) || design.id.slice(0, 8)}-reveal.mp4`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -179,27 +165,15 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800 pt-3">
       {supported ? (
         <>
-          <div className="flex items-center gap-1 mb-2 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
-            {ASPECTS.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => setAspect(a.id)}
-                disabled={busy}
-                className={`flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
-                  aspect === a.id
-                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
-                }`}
-              >
-                {a.label}
-              </button>
-            ))}
+          <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-500">
+            <Film size={13} className="text-orange-700" />
+            Branded reveal · 1080×1920 (9:16) · whole photo shown
           </div>
           {allProducts.length > 0 && (
             <div className="flex items-center gap-2 mb-2">
               <span className="text-[11px] text-zinc-400 shrink-0">Shop cards</span>
               <div className="flex items-center gap-1 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
-                {Array.from({ length: allProducts.length + 1 }, (_, n) => (
+                {Array.from({ length: Math.min(allProducts.length, 3) + 1 }, (_, n) => (
                   <button
                     key={n}
                     onClick={() => setCardCount(n)}
@@ -229,9 +203,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                 : "Export reveal MP4"}
           </button>
           <p className="mt-1.5 text-[11px] text-zinc-400">
-            {aspect === "original"
-              ? "Matches the photo — no bands, nothing cropped."
-              : "Fills the frame — no bands; edges may be trimmed."}
+            Logo intro → upload → style → reveal → shop → noosho.com. Ready for Reels/Shorts.
           </p>
         </>
       ) : (
