@@ -33,7 +33,7 @@ export default function Logo({
 }) {
   return (
     <span
-      className={`flex items-center gap-2 text-zinc-900 dark:text-zinc-50 ${className}`}
+      className={`flex items-center gap-1 text-zinc-900 dark:text-zinc-50 ${className}`}
     >
       <TwinRings size={markSize} />
       <span
