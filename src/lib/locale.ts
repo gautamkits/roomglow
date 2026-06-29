@@ -15,10 +15,8 @@ export const CURRENCY_SYMBOLS: Record<Locale, string> = {
   US: "$",
 };
 
-// Payment is only enabled for markets where we have a working gateway.
-// India stays free until Instamojo is approved.
 export const PAYMENT_ENABLED: Record<Locale, boolean> = {
-  IN: false,
+  IN: true,
   US: true,
 };
 

@@ -157,7 +157,91 @@ export default function PaywallOverlay({
     setCouponError(null);
   };
 
+  const handlePayRazorpay = async () => {
+    if (!designId) return;
+    setPaying(true);
+    setError(null);
+    try {
+      const orderRes = await fetch("/api/razorpay/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designId, couponCode: applied?.code }),
+      });
+      const orderData = await orderRes.json();
+
+      if (orderData.free) {
+        onUnlocked();
+        return;
+      }
+
+      if (!orderRes.ok || !orderData.orderId) {
+        setError(orderData.error || "Could not start checkout. Try again.");
+        return;
+      }
+
+      // Load Razorpay checkout script dynamically
+      await new Promise<void>((resolve, reject) => {
+        if ((window as { Razorpay?: unknown }).Razorpay) { resolve(); return; }
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load Razorpay"));
+        document.body.appendChild(script);
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const rzp = new (window as unknown as { Razorpay: new (opts: unknown) => { open(): void; on(e: string, cb: () => void): void } }).Razorpay({
+          key: orderData.keyId,
+          amount: orderData.amount,
+          currency: orderData.currency,
+          order_id: orderData.orderId,
+          name: "Noosho",
+          description: "Design unlock",
+          theme: { color: "#a04525" },
+          handler: async (response: {
+            razorpay_payment_id: string;
+            razorpay_order_id: string;
+            razorpay_signature: string;
+          }) => {
+            try {
+              const verifyRes = await fetch("/api/razorpay/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_signature: response.razorpay_signature,
+                  designId,
+                  couponCode: orderData.couponCode,
+                  amount: orderData.amount,
+                  currency: orderData.currency,
+                }),
+              });
+              if (verifyRes.ok) {
+                resolve();
+              } else {
+                const d = await verifyRes.json();
+                reject(new Error(d.error || "Verification failed"));
+              }
+            } catch (e) {
+              reject(e);
+            }
+          },
+        });
+        rzp.on("payment.failed", () => reject(new Error("Payment failed or cancelled")));
+        rzp.open();
+      });
+
+      onUnlocked();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    } finally {
+      setPaying(false);
+    }
+  };
+
   const handlePay = async () => {
+    if (locale === "IN") return handlePayRazorpay();
     if (!designId) return;
     setPaying(true);
     setError(null);
@@ -411,7 +495,7 @@ export default function PaywallOverlay({
                 {/* Trust signals */}
                 <div className="flex items-center justify-center gap-3 mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
                   <span className="flex items-center gap-1">
-                    <ShieldCheck size={13} /> Secure via Stripe
+                    <ShieldCheck size={13} /> Secure via {locale === "IN" ? "Razorpay" : "Stripe"}
                   </span>
                   <span className="flex items-center gap-1">
                     <Zap size={13} /> Instant access

@@ -17,7 +17,7 @@ data (price/links), the paywall, locale-aware commerce, accountability, gallery/
   recommend / curate / hotspot detection).
 - **Amazon products** via **RapidAPI** `real-time-amazon-data` (`country` = IN/US); affiliate
   tags per locale.
-- **Stripe** (US payments). **Instamojo** = legacy/India (NOT approved yet → India is free).
+- **Stripe** (US payments). **Razorpay** (India payments, approved). Instamojo replaced.
 - **ZeptoMail** (transactional email, `Zoho-enczapikey` auth).
 - PWA; **Sora** wordmark font; palette **Clay `#bd6a43` / Ink `#181410` / Linen `#faf6f0`**
   (`orange-700` ≈ clay `#a04525`). Logo = Twin Rings + lowercase "noosho" (`src/components/Logo.tsx`),
@@ -45,7 +45,7 @@ data (price/links), the paywall, locale-aware commerce, accountability, gallery/
 ## Locale & pricing (`src/lib/locale.ts`, `useLocale.ts`)
 - Locale `IN`/`US` set by `src/middleware.ts` from `x-vercel-ip-country` → cookie
   `noosho-locale`; user can override via `LocaleSwitcher`. `localeFromRequest()` server-side.
-- `PAYMENT_ENABLED` = `{ IN: false, US: true }` (India free until Instamojo).
+- `PAYMENT_ENABLED` = `{ IN: true, US: true }` (India: Razorpay; US: Stripe).
 - `AFFILIATE_TAGS`, `AMAZON_DOMAINS`, `formatAmount(amount, currency)` (amount in minor units).
 - Pricing is **DB-driven** (`pricing` table per locale: `actual_amount`, `sale_amount`,
   `currency`), admin-editable; defaults IN ₹99 (9900 paise), US $4.99 (499 cents);
@@ -150,7 +150,7 @@ checkout_intents). All money stored in **minor units** (paise/cents). Core table
 ## Key env vars
 Google Gemini key · `NEXTAUTH_URL`/secret + Google OAuth · Postgres · `newblob_READ_WRITE_TOKEN` ·
 `RAPIDAPI_KEY` · `AMAZON_PARTNER_TAG` (IN) / `AMAZON_US_PARTNER_TAG` (US, `yuaid01-20`) ·
-`STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` · `ZEPTOMAIL_TOKEN` + `MAIL_FROM_*` · `ADMIN_EMAILS` ·
+`STRIPE_SECRET_KEY` · `STRIPE_WEBHOOK_SECRET` · `RAZORPAY_KEY_ID` · `RAZORPAY_KEY_SECRET` · `RAZORPAY_WEBHOOK_SECRET` · `ZEPTOMAIL_TOKEN` + `MAIL_FROM_*` · `ADMIN_EMAILS` ·
 `CRON_SECRET` · `ABANDON_FINAL_COUPON` (default DESIGN20).
 
 ## Known issues / follow-ups
