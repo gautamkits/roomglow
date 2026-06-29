@@ -120,34 +120,9 @@ function HomeContent() {
           </div>
         )}
 
-        {/* ─── ANONYMOUS START — design first, sign in at the paywall (U1) ─── */}
+        {/* ─── ANONYMOUS — sign in required before uploading ─── */}
         {step === "upload" && sessionStatus === "unauthenticated" && (
-          <>
-            <div id="anon-start" className="max-w-xl mx-auto px-5 pt-8 pb-2">
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 animate-fade-up">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
-                    <Wand2 size={15} className="text-white" />
-                  </span>
-                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                    Design your space — free to try
-                  </h2>
-                </div>
-                <p className="text-xs text-zinc-500 mb-4 ml-9">
-                  No account needed to start. Sign in only when you want to save
-                  or unlock your design.
-                </p>
-                <SetupPanel onImageSelected={handleImageSelected} />
-              </div>
-            </div>
-            <Landing
-              onStart={() =>
-                document
-                  .getElementById("anon-start")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
-              }
-            />
-          </>
+          <Landing />
         )}
 
         {/* ─── DASHBOARD (authenticated home) ─── */}
