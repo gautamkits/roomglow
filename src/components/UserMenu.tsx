@@ -38,7 +38,7 @@ export default function UserMenu({
     return (
       <button
         onClick={() => signIn("google")}
-        className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+        className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer"
       >
         <User size={15} />
         Sign in

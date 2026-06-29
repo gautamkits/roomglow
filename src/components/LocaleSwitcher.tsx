@@ -25,7 +25,7 @@ export default function LocaleSwitcher() {
     <button
       onClick={toggle}
       title="Switch marketplace"
-      className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+      className="flex items-center gap-1 text-xs px-2 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 text-zinc-500 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors cursor-pointer"
     >
       <span>{FLAGS[locale]}</span>
       <span className="hidden sm:inline">{LABELS[locale]}</span>

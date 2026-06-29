@@ -51,7 +51,7 @@ export default function BeforeAfterSlider({
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", stop);
     window.addEventListener("touchmove", touch, { passive: true });
-    window.addEventListener("touchend", stop);
+    window.addEventListener("touchend", stop, { passive: true });
     return () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", stop);
