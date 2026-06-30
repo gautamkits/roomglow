@@ -637,6 +637,42 @@ export async function markCheckoutReminderSent(id: string, stage: number) {
   await sql`UPDATE checkout_intents SET last_reminder_stage = ${stage} WHERE id = ${id}`;
 }
 
+// ─── Feature flags ───
+
+let featuresSchemaReady = false;
+
+async function ensureFeaturesSchema() {
+  if (featuresSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS site_features (
+      key TEXT PRIMARY KEY,
+      enabled BOOLEAN NOT NULL DEFAULT false,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    )
+  `;
+  await sql`
+    INSERT INTO site_features (key, enabled) VALUES ('makeover', false)
+    ON CONFLICT (key) DO NOTHING
+  `;
+  featuresSchemaReady = true;
+}
+
+export async function getFeatures(): Promise<Record<string, boolean>> {
+  await ensureFeaturesSchema();
+  const { rows } = await sql`SELECT key, enabled FROM site_features`;
+  const result: Record<string, boolean> = { makeover: false };
+  for (const row of rows) result[row.key] = row.enabled;
+  return result;
+}
+
+export async function setFeature(key: string, enabled: boolean) {
+  await ensureFeaturesSchema();
+  await sql`
+    INSERT INTO site_features (key, enabled, updated_at) VALUES (${key}, ${enabled}, now())
+    ON CONFLICT (key) DO UPDATE SET enabled = ${enabled}, updated_at = now()
+  `;
+}
+
 // ─── Restyle lineage (save-as-new) ───
 // The restyled_from column is created by scripts/migrate.mjs.
 

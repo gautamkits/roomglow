@@ -561,6 +561,242 @@ Return one detection per product, using the exact productIndex given above.`,
   });
 }
 
+// ─── Personal Makeover ───
+
+const personAnalysisSchema = {
+  type: Type.OBJECT,
+  properties: {
+    bodyType: { type: Type.STRING },
+    skinTone: { type: Type.STRING },
+    currentStyle: { type: Type.STRING },
+    colorPalette: { type: Type.ARRAY, items: { type: Type.STRING } },
+    hairDescription: { type: Type.STRING },
+    suggestedItems: { type: Type.ARRAY, items: suggestedProductSchema },
+  },
+  required: ["bodyType", "skinTone", "currentStyle", "colorPalette", "hairDescription", "suggestedItems"],
+};
+
+const outfitRecommendationSchema = {
+  type: Type.OBJECT,
+  properties: {
+    outfitVision: { type: Type.STRING },
+    items: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          category: { type: Type.STRING },
+          searchQuery: { type: Type.STRING },
+          placement: { type: Type.STRING },
+          reason: { type: Type.STRING },
+          colorSuggestion: { type: Type.STRING },
+        },
+        required: ["category", "searchQuery", "placement", "reason", "colorSuggestion"],
+      },
+    },
+  },
+  required: ["outfitVision", "items"],
+};
+
+export async function analyzePerson(
+  imageBase64: string,
+  styleContext: string
+): Promise<string> {
+  const prompt = `You are an expert personal stylist and fashion designer — think Manish Malhotra, the trusted advisor who studies a client before designing their look.
+
+Analyze this photo carefully. The person wants a "${styleContext}" makeover.
+
+Assess:
+- bodyType: body shape and proportions (e.g. "athletic build with broad shoulders", "petite hourglass", "tall and lean")
+- skinTone: precise undertone (e.g. "warm olive with golden undertones", "deep cool brown", "fair neutral")
+- currentStyle: what their current outfit says about their personal taste
+- colorPalette: exactly 3 hex color codes that are most flattering for their skin undertone and coloring
+- hairDescription: hair color, length, and texture as context for accessories
+- suggestedItems: 4-6 clothing slots appropriate for a ${styleContext} look for this person. Each must have:
+  - id: short snake_case (e.g. "blazer", "trousers", "heels")
+  - label: human-readable (e.g. "Structured Blazer")
+  - description: why this specific silhouette or piece flatters THIS person's body type and coloring
+  - icon: single emoji
+
+Be direct, expert, and specific. Reference what you actually see in the photo.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: personAnalysisSchema,
+    },
+  });
+
+  return response.text ?? "";
+}
+
+export async function recommendOutfit(
+  personAnalysis: {
+    bodyType: string;
+    skinTone: string;
+    colorPalette: string[];
+    hairDescription: string;
+  },
+  styleType: string,
+  styleContext: string,
+  selectedItems: string[],
+  gender?: string
+): Promise<string> {
+  const genderHint = gender ? `Gender/preference: ${gender}.` : "";
+  const itemsList = selectedItems.length > 0
+    ? `The user specifically wants these items: ${selectedItems.join(", ")}.`
+    : "";
+
+  const prompt = `You are an expert personal stylist — think Manish Malhotra advising a client for their perfect ${styleType} look.
+
+Person profile:
+- Body type: ${personAnalysis.bodyType}
+- Skin tone: ${personAnalysis.skinTone}
+- Flattering color palette: ${personAnalysis.colorPalette.join(", ")}
+- Hair: ${personAnalysis.hairDescription}
+${genderHint}
+
+Style goal: ${styleContext}
+${itemsList}
+
+Create a cohesive, expert outfit. For each item provide:
+- category: specific clothing item (e.g. "wrap dress", "slim blazer", "strappy heels")
+- searchQuery: Amazon search query, 3-5 words (e.g. "women camel wrap dress", "slim fit navy blazer"). Include the gender and color.
+- placement: body zone for the virtual try-on image (e.g. "upper body / torso", "lower body / legs", "feet", "over right shoulder as a bag", "neck and ears as jewellery")
+- reason: WHY this silhouette/color flatters THIS person's specific body type and skin tone (1 sentence)
+- colorSuggestion: exact color (e.g. "camel tan", "emerald green", "ivory white")
+
+Also write a 2-3 sentence outfitVision in a stylist's voice — explain the complete look and why it was chosen for this person specifically. Sound like a fashion expert, not a product description.
+
+Ensure all items work together as a cohesive look. Choose colors from or complementary to the person's flattering palette.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: outfitRecommendationSchema,
+    },
+  });
+
+  return response.text ?? "";
+}
+
+export async function generateMakeoverImage(
+  personImageBase64: string,
+  selectedProducts: DetectableProduct[],
+  styleHint: string,
+  detect: boolean = true
+): Promise<{ generatedImage: string; hotspots: HotspotBox[] }> {
+  const productImages = await Promise.allSettled(
+    selectedProducts.map(async (p) => {
+      if (!p.imageUrl) return null;
+      const res = await fetch(p.imageUrl);
+      if (!res.ok) return null;
+      const buffer = await res.arrayBuffer();
+      return {
+        data: Buffer.from(buffer).toString("base64"),
+        mimeType: res.headers.get("content-type") || "image/jpeg",
+      };
+    })
+  );
+
+  const parts: Array<
+    { text: string } | { inlineData: { mimeType: string; data: string } }
+  > = [{ inlineData: { mimeType: "image/jpeg", data: personImageBase64 } }];
+
+  let imageIndex = 2;
+  const productDescriptions: string[] = [];
+  for (let i = 0; i < selectedProducts.length; i++) {
+    const p = selectedProducts[i];
+    const imgResult = productImages[i];
+    const hasImage = imgResult.status === "fulfilled" && imgResult.value;
+
+    if (hasImage) {
+      parts.push({
+        inlineData: {
+          mimeType: imgResult.value!.mimeType,
+          data: imgResult.value!.data,
+        },
+      });
+      productDescriptions.push(
+        `${i + 1}. "${p.title}" — shown in image ${imageIndex}. Dress the person in this EXACT product (same color, pattern, and style as shown) at: ${p.placement}`
+      );
+      imageIndex++;
+    } else {
+      productDescriptions.push(
+        `${i + 1}. "${p.title}" (${p.category}, color: ${p.colorSuggestion}) — place at: ${p.placement}`
+      );
+    }
+  }
+
+  const productList = productDescriptions.join("\n");
+
+  parts.push({
+    text: `Image 1 is a photo of a person. The following images are clothing/accessory products from Amazon. Dress this person in the outfit.
+
+MUST PRESERVE (do NOT change any of these):
+- The person's face, facial features, and expression
+- The person's skin tone and complexion
+- The person's hair (color, length, and style)
+- The person's body shape, pose, and proportions
+- The background and setting
+- The overall lighting and photo style
+
+MUST CHANGE:
+- Replace/add clothing using the EXACT products shown in the reference images
+- Each clothing item must look exactly like its reference image — same color, pattern, material, and design
+
+CLOTHING INSTRUCTIONS:
+${productList}
+
+For accessories (bags, jewellery, sunglasses): add in a natural position without obscuring the face.
+The result must look like a real photo of the same person in a new outfit. Maintain photorealism with correct scale, perspective, lighting, and fabric drape.
+
+STYLE DIRECTION: ${styleHint} aesthetic.`,
+  });
+
+  const imageResponse = await ai.models.generateContent({
+    model: "gemini-3.1-flash-image",
+    contents: [{ role: "user", parts }],
+    config: { responseModalities: ["TEXT", "IMAGE"] },
+  });
+
+  let generatedImageBase64 = "";
+  const candidates = imageResponse.candidates;
+  if (candidates && candidates.length > 0) {
+    const responseParts = candidates[0].content?.parts;
+    if (responseParts) {
+      for (const part of responseParts) {
+        if (part.inlineData?.data) {
+          generatedImageBase64 = part.inlineData.data;
+          break;
+        }
+      }
+    }
+  }
+
+  if (!generatedImageBase64) {
+    generatedImageBase64 = personImageBase64;
+  }
+
+  const hotspots = detect
+    ? await detectHotspots(generatedImageBase64, selectedProducts)
+    : [];
+
+  return { generatedImage: generatedImageBase64, hotspots };
+}
+
 // ─── Product recommendations (design vision + product list) ───
 // (Previously in lib/claude.ts — it never used Claude; it's Gemini like the
 // rest of this module, so it now lives here.)

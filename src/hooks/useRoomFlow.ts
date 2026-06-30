@@ -4,6 +4,8 @@ import { useState, useCallback, useRef } from "react";
 import type {
   AppMode,
   EventConfig,
+  MakeoverConfig,
+  PersonAnalysis,
   FlowStep,
   RoomAnalysis,
   SuggestedProduct,
@@ -34,6 +36,9 @@ export function useRoomFlow() {
   const [step, setStep] = useState<FlowStep>("upload");
   const [mode, setMode] = useState<AppMode>("space");
   const [eventConfig, setEventConfig] = useState<EventConfig | null>(null);
+  const [makeoverConfig, setMakeoverConfig] = useState<MakeoverConfig | null>(null);
+  const [personAnalysis, setPersonAnalysis] = useState<PersonAnalysis | null>(null);
+  const [outfitVision, setOutfitVision] = useState<string>("");
   const [image, setImage] = useState<string | null>(null);
   // The canvas the design is generated on. Equals `image` normally, or the
   // emptied photo after a post-unlock "clear the room & redesign". `image`
@@ -70,12 +75,15 @@ export function useRoomFlow() {
       base64: string,
       selectedMode?: AppMode,
       selectedEventConfig?: EventConfig | null,
-      selectedMaxBudget?: number
+      selectedMaxBudget?: number,
+      selectedMakeoverConfig?: MakeoverConfig | null
     ) => {
       const activeMode = selectedMode || mode;
       const activeEventConfig = selectedEventConfig !== undefined ? selectedEventConfig : eventConfig;
+      const activeMakeoverConfig = selectedMakeoverConfig !== undefined ? selectedMakeoverConfig : makeoverConfig;
       if (selectedMode) setMode(activeMode);
       if (selectedEventConfig !== undefined) setEventConfig(activeEventConfig);
+      if (selectedMakeoverConfig !== undefined) setMakeoverConfig(activeMakeoverConfig);
       setMaxBudget(selectedMaxBudget);
 
       setImage(base64);
@@ -83,6 +91,46 @@ export function useRoomFlow() {
       setRetryCount(0);
       setStep("analyzing");
       setError(null);
+
+      if (activeMode === "makeover") {
+        const styleContext = activeMakeoverConfig
+          ? `${activeMakeoverConfig.styleLabel} look`
+          : "casual";
+        setStatusMessage("Your stylist is analyzing your photo...");
+        try {
+          const res = await fetch("/api/analyze-person", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: base64, styleContext }),
+          });
+          if (!res.ok) {
+            const { error: msg } = await res.json().catch(() => ({ error: "" }));
+            throw new Error(msg || "We couldn't analyze your photo. Try a clearer, well-lit shot.");
+          }
+          const analysis: PersonAnalysis = await res.json();
+          setPersonAnalysis(analysis);
+          // Map person's suggestedItems to RoomAnalysis shape so ProductSelection renders unchanged
+          setRoomAnalysis({
+            roomType: "person",
+            currentStyle: analysis.currentStyle,
+            dimensions: "medium",
+            existingFurniture: [],
+            lightingCondition: "bright",
+            colorPalette: analysis.colorPalette,
+            suggestedProducts: analysis.suggestedItems,
+            clutterLevel: "clean",
+            removableObjects: [],
+            questions: [],
+          });
+          setStep("product-selection");
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "Failed to analyze your photo. Please try again."
+          );
+          setStep("upload");
+        }
+        return;
+      }
 
       const eventContext = buildEventContext(activeMode === "event" ? activeEventConfig : null);
       const isEvent = activeMode === "event";
@@ -107,9 +155,6 @@ export function useRoomFlow() {
         }
         const analysis: RoomAnalysis = await res.json();
         setRoomAnalysis(analysis);
-        // The first design renders on the original photo (the free, pre-paywall
-        // hook). Clearing a cluttered room is an expensive image-gen, so it's
-        // offered only post-unlock via "Clear the room & redesign".
         setStep("product-selection");
       } catch (e) {
         setError(
@@ -120,7 +165,7 @@ export function useRoomFlow() {
         setStep("upload");
       }
     },
-    [mode, eventConfig]
+    [mode, eventConfig, makeoverConfig]
   );
 
   // Each create-pipeline call is expensive (a paid AI step). We stash each
@@ -170,30 +215,55 @@ export function useRoomFlow() {
       return res.json();
     };
 
+    const isMakeover = mode === "makeover";
+
     try {
       // 1. Design vision + product recommendations
       if (!p.recs || p.designVision === undefined) {
         setStep("generating");
         setStatusMessage(
-          isEvent
+          isMakeover
+            ? "Your stylist is curating your outfit..."
+            : isEvent
             ? `Creating a ${subTheme} decoration plan...`
             : "Creating a design vision for your room..."
         );
-        const { products: recs, designVision }: {
-          products: ProductRecommendation[];
-          designVision: string;
-        } = await callStep(
-          "/api/recommend-products",
-          {
-            roomAnalysis,
-            userAnswers: {},
-            selectedProductTypes: selected.map((s) => s.label),
-            eventContext,
-          },
-          "We couldn't create a design plan. Please try again."
-        );
-        p.recs = recs;
-        p.designVision = designVision || "";
+
+        if (isMakeover && personAnalysis) {
+          const { items, outfitVision: vision }: {
+            items: ProductRecommendation[];
+            outfitVision: string;
+          } = await callStep(
+            "/api/recommend-outfit",
+            {
+              personAnalysis,
+              styleType: makeoverConfig?.styleType || "casual",
+              styleContext: makeoverConfig?.styleLabel || "casual",
+              selectedItems: selected.map((s) => s.label),
+              gender: makeoverConfig?.gender,
+            },
+            "We couldn't create an outfit plan. Please try again."
+          );
+          p.recs = items;
+          p.designVision = vision || "";
+          setOutfitVision(vision || "");
+        } else {
+          const { products: recs, designVision }: {
+            products: ProductRecommendation[];
+            designVision: string;
+          } = await callStep(
+            "/api/recommend-products",
+            {
+              roomAnalysis,
+              userAnswers: {},
+              selectedProductTypes: selected.map((s) => s.label),
+              eventContext,
+            },
+            "We couldn't create a design plan. Please try again."
+          );
+          p.recs = recs;
+          p.designVision = designVision || "";
+        }
       }
 
       // 2. Find matching products on Amazon
@@ -243,24 +313,35 @@ export function useRoomFlow() {
       if (!p.generatedImg) {
         setStep("generating");
         setStatusMessage(
-          isEvent
+          isMakeover
+            ? "Dressing you in your new look..."
+            : isEvent
             ? "Rendering your decorated venue..."
             : "Rendering your redesigned space..."
         );
+        const productPayload = curated.map((pr: ProductResult) => ({
+          category: pr.recommendation.category,
+          placement: pr.recommendation.placement,
+          title: pr.amazonProduct?.title || pr.recommendation.category,
+          colorSuggestion: pr.recommendation.colorSuggestion,
+          imageUrl: pr.amazonProduct?.imageUrl || "",
+        }));
         const design = await callStep(
-          "/api/generate-image",
-          {
-            originalImage: canvas,
-            eventContext,
-            products: curated.map((pr: ProductResult) => ({
-              category: pr.recommendation.category,
-              placement: pr.recommendation.placement,
-              title: pr.amazonProduct?.title || pr.recommendation.category,
-              colorSuggestion: pr.recommendation.colorSuggestion,
-              imageUrl: pr.amazonProduct?.imageUrl || "",
-            })),
-          },
-          "We couldn't render your room. Please try again."
+          isMakeover ? "/api/generate-makeover" : "/api/generate-image",
+          isMakeover
+            ? {
+                originalImage: canvas,
+                products: productPayload,
+                styleHint: makeoverConfig?.styleLabel || "casual",
+              }
+            : {
+                originalImage: canvas,
+                eventContext,
+                products: productPayload,
+              },
+          isMakeover
+            ? "We couldn't generate your makeover. Please try again."
+            : "We couldn't render your room. Please try again."
         );
         p.generatedImg = design.generatedImage
           ? `data:image/png;base64,${design.generatedImage}`
@@ -280,6 +361,7 @@ export function useRoomFlow() {
             {
               mode,
               eventConfig,
+              makeoverConfig,
               roomAnalysis,
               products: curated,
               hotspots: p.hotspots || [],
@@ -317,7 +399,7 @@ export function useRoomFlow() {
       setCanRetry(retriesLeft);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, baseImage, mode, eventConfig, maxBudget, retryCount]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, retryCount]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
@@ -356,24 +438,25 @@ export function useRoomFlow() {
       setError(null);
       setStatusMessage(`Applying ${styleHint} style...`);
 
+      const isMakeover = mode === "makeover";
       const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
+      const productPayload = products.map((p: ProductResult) => ({
+        category: p.recommendation.category,
+        placement: p.recommendation.placement,
+        title: p.amazonProduct?.title || p.recommendation.category,
+        colorSuggestion: p.recommendation.colorSuggestion,
+        imageUrl: p.amazonProduct?.imageUrl || "",
+      }));
 
       try {
-        const res = await fetch("/api/generate-image", {
+        const res = await fetch(isMakeover ? "/api/generate-makeover" : "/api/generate-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            originalImage: baseImage ?? image,
-            eventContext,
-            styleHint,
-            products: products.map((p: ProductResult) => ({
-              category: p.recommendation.category,
-              placement: p.recommendation.placement,
-              title: p.amazonProduct?.title || p.recommendation.category,
-              colorSuggestion: p.recommendation.colorSuggestion,
-              imageUrl: p.amazonProduct?.imageUrl || "",
-            })),
-          }),
+          body: JSON.stringify(
+            isMakeover
+              ? { originalImage: baseImage ?? image, products: productPayload, styleHint }
+              : { originalImage: baseImage ?? image, eventContext, styleHint, products: productPayload }
+          ),
         });
         if (!res.ok) throw new Error("Generation failed");
         const design = await res.json();
@@ -391,7 +474,7 @@ export function useRoomFlow() {
         setStep("results");
       }
     },
-    [image, baseImage, products, mode, eventConfig, generatedImage, restyleCount]
+    [image, baseImage, products, mode, eventConfig, makeoverConfig, generatedImage, restyleCount]
   );
 
   // Post-unlock premium action: clear the room, then re-render the same products
@@ -475,6 +558,9 @@ export function useRoomFlow() {
     setStep("upload");
     setMode("space");
     setEventConfig(null);
+    setMakeoverConfig(null);
+    setPersonAnalysis(null);
+    setOutfitVision("");
     setImage(null);
     setBaseImage(null);
     setGeneratedImage(null);
@@ -498,6 +584,9 @@ export function useRoomFlow() {
     step,
     mode,
     eventConfig,
+    makeoverConfig,
+    personAnalysis,
+    outfitVision,
     maxBudget,
     selectedItems,
     image,

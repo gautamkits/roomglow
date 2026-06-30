@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Sofa, PartyPopper, Calendar } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Sofa, PartyPopper, Calendar, Sparkles } from "lucide-react";
 import { getEvent, getEvents } from "@/lib/events";
-import type { AppMode, EventConfig } from "@/lib/types";
+import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
+import { MAKEOVER_STYLES } from "@/lib/makeover";
 import { useLocale } from "@/lib/useLocale";
 import ImageUpload from "./ImageUpload";
 
@@ -12,7 +13,8 @@ interface SetupPanelProps {
     base64: string,
     mode: AppMode,
     eventConfig: EventConfig | null,
-    maxBudget?: number
+    maxBudget?: number,
+    makeoverConfig?: MakeoverConfig | null
   ) => void;
 }
 
@@ -51,11 +53,22 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [gender, setGender] = useState<string | null>(null);
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
   const [budgetSet, setBudgetSet] = useState(false);
+  const [makeoverStyleId, setMakeoverStyleId] = useState<string | null>(null);
+  const [makeoverGender, setMakeoverGender] = useState<string | null>(null);
+  const [makeoverEnabled, setMakeoverEnabled] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/features")
+      .then((r) => r.json())
+      .then((d) => setMakeoverEnabled(!!d.makeover))
+      .catch(() => {});
+  }, []);
 
   const event = eventId ? getEvent(eventId) : undefined;
   const eventConfigReady =
     mode === "space" || (!!event && !!subTheme && !!colorScheme);
-  const eventReady = eventConfigReady && budgetSet;
+  const makeoverReady = mode !== "makeover" || !!makeoverStyleId;
+  const eventReady = eventConfigReady && makeoverReady && budgetSet;
   // Gender picker only for child-centric events (birthday, baby shower, …)
   const showGender = !!event?.gendered;
 
@@ -72,24 +85,32 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
     };
   };
 
+  const buildMakeoverConfig = (): MakeoverConfig | null => {
+    if (mode !== "makeover" || !makeoverStyleId) return null;
+    const style = MAKEOVER_STYLES.find((s) => s.id === makeoverStyleId);
+    if (!style) return null;
+    return { styleType: style.id, styleLabel: style.label, gender: makeoverGender || undefined };
+  };
+
   const handleImage = (base64: string) => {
-    onImageSelected(base64, mode, buildConfig(), maxBudget);
+    onImageSelected(base64, mode, buildConfig(), maxBudget, buildMakeoverConfig());
   };
 
   return (
     <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-4">
       {/* Mode toggle */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className={`grid gap-2 ${makeoverEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
         {(
           [
             { id: "space", Icon: Sofa, label: "Interior designer" },
             { id: "event", Icon: PartyPopper, label: "Event planner" },
+            ...(makeoverEnabled ? [{ id: "makeover", Icon: Sparkles, label: "Personal makeover" }] : []),
           ] as const
         ).map(({ id, Icon, label }) => (
           <button
             key={id}
-            onClick={() => setMode(id)}
-            className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+            onClick={() => setMode(id as AppMode)}
+            className={`flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
               mode === id
                 ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
                 : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
@@ -235,23 +256,59 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </div>
       </div>
 
+      {/* Makeover style picker */}
+      {mode === "makeover" && (
+        <div className="space-y-3 animate-fade-up">
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">Choose your look</p>
+            <div className="flex flex-wrap gap-1.5">
+              {MAKEOVER_STYLES.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setMakeoverStyleId(s.id)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
+                    makeoverStyleId === s.id
+                      ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
+                      : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                  }`}
+                >
+                  <span>{s.icon}</span>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">Style for (optional)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {["Women", "Men", "Non-binary / either"].map((g) => (
+                <Chip key={g} label={g} selected={makeoverGender === g} onClick={() => setMakeoverGender(makeoverGender === g ? null : g)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Photo tips */}
       <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-stone-100 dark:bg-zinc-800/50">
         <span className="text-xs text-zinc-400 mt-0.5 shrink-0">Tip</span>
         <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          Upload a clean, uncluttered photo with good lighting. Clear away
-          personal items for the best results.
+          {mode === "makeover"
+            ? "Upload a clear full-body or waist-up photo with good lighting. AI keeps your face, hair, and background."
+            : "Upload a clean, uncluttered photo with good lighting. Clear away personal items for the best results."}
         </p>
       </div>
 
-      {/* Upload — gated until event options are set */}
+      {/* Upload — gated until event options / makeover style are set */}
       <div className="pt-1">
         {eventReady ? (
           <ImageUpload onImageSelected={handleImage} />
         ) : (
           <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
             <p className="text-sm text-zinc-500">
-              {!eventConfigReady
+              {mode === "makeover" && !makeoverStyleId
+                ? "Pick a style look, then set your budget to upload"
+                : !eventConfigReady
                 ? "Pick an occasion, theme & colors, then set your budget to upload"
                 : "Set your max budget to upload your photo"}
             </p>

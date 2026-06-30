@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2, Tag } from "lucide-react";
+import { Check, X, BarChart2, Tag, Sparkles } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -28,6 +28,8 @@ function AdminContent() {
   const [approved, setApproved] = useState<ApprovedDesign[]>([]);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [makeoverEnabled, setMakeoverEnabled] = useState(false);
+  const [featureLoading, setFeatureLoading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +56,25 @@ function AdminContent() {
     setApproved(data.designs || []);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetch("/api/admin/features")
+      .then((r) => r.json())
+      .then((d) => setMakeoverEnabled(!!d.makeover))
+      .catch(() => {});
+  }, []);
+
+  const toggleMakeover = async () => {
+    setFeatureLoading(true);
+    const next = !makeoverEnabled;
+    setMakeoverEnabled(next);
+    await fetch("/api/admin/features", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "makeover", enabled: next }),
+    }).catch(() => setMakeoverEnabled(!next));
+    setFeatureLoading(false);
+  };
 
   useEffect(() => {
     if (status === "unauthenticated") signIn("google");
@@ -152,6 +173,33 @@ function AdminContent() {
       />
 
       <main className="max-w-5xl mx-auto px-5 py-8">
+        {/* Features */}
+        <div className="mb-6 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4">
+          <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-3">Features</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles size={15} className="text-orange-700" />
+              <div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200">Personal Makeover</p>
+                <p className="text-xs text-zinc-500">AI fashion stylist + virtual try-on (3rd mode)</p>
+              </div>
+            </div>
+            <button
+              onClick={toggleMakeover}
+              disabled={featureLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                makeoverEnabled ? "bg-orange-700" : "bg-zinc-300 dark:bg-zinc-700"
+              } ${featureLoading ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  makeoverEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         {tab === "pending" ? (
           designs.length === 0 ? (
             <p className="text-center text-zinc-500 py-20">Nothing pending review.</p>

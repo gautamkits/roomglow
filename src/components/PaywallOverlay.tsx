@@ -20,7 +20,7 @@ import { useLocale } from "@/lib/useLocale";
 
 interface PaywallOverlayProps {
   designId: string | null;
-  mode: "space" | "event";
+  mode: "space" | "event" | "makeover";
   onUnlocked: () => void;
   itemCount?: number;
   narrative?: string;

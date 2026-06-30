@@ -20,7 +20,7 @@ function toBuffer(input: string): Buffer {
 
 export async function POST(request: Request) {
   try {
-    const { mode, eventConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems } =
+    const { mode, eventConfig, makeoverConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems } =
       await request.json();
 
     if (!products || !originalImage || !generatedImage) {
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 
     const designId = await saveDesign({
       mode: mode || "space",
-      eventConfig: eventConfig || null,
+      eventConfig: eventConfig || makeoverConfig || null,
       roomAnalysis: roomAnalysis || null,
       products,
       hotspots,

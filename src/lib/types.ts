@@ -78,7 +78,30 @@ export interface SuggestedProduct {
   icon: string;
 }
 
-export type AppMode = "space" | "event";
+export type AppMode = "space" | "event" | "makeover";
+
+export interface MakeoverConfig {
+  styleType: string;
+  styleLabel: string;
+  gender?: string;
+}
+
+export interface PersonAnalysis {
+  bodyType: string;
+  skinTone: string;
+  currentStyle: string;
+  colorPalette: string[];
+  hairDescription: string;
+  suggestedItems: SuggestedProduct[];
+}
+
+export interface OutfitRecommendation {
+  category: string;
+  searchQuery: string;
+  placement: string;
+  reason: string;
+  colorSuggestion: string;
+}
 
 export interface EventConfig {
   eventType: string;
