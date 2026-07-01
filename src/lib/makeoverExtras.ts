@@ -2,6 +2,7 @@ import type { Locale } from "@/lib/locale";
 import type { OccasionProduct } from "@/lib/types";
 import { getMakeoverStyle } from "@/lib/makeover";
 import { searchProducts } from "@/lib/amazon";
+import { recommendMakeoverExtras } from "@/lib/gemini";
 
 // In-memory cache (per serverless instance, 24h TTL) so repeat views of the
 // "Complete the look" grid don't re-hit RapidAPI — same pattern as occasion.ts.
@@ -16,17 +17,28 @@ const cache = new Map<string, { at: number; products: OccasionProduct[] }>();
  */
 export async function getMakeoverExtras(
   styleId: string,
-  locale: Locale
+  locale: Locale,
+  gender?: string
 ): Promise<OccasionProduct[]> {
   const style = getMakeoverStyle(styleId);
   if (!style?.extras?.length) return [];
 
-  const key = `makeover:${styleId}:${locale}`;
+  const key = `makeover:${styleId}:${gender || ""}:${locale}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.products;
 
+  // AI-generated, gender-aware accessory queries (mirrors the main pipeline).
+  // Falls back to the style's static queries if the model call fails/empties.
+  let queries = style.extras;
+  try {
+    const { items } = await recommendMakeoverExtras(style.label, gender, locale);
+    if (items?.length) queries = items;
+  } catch (err) {
+    console.error("[getMakeoverExtras] AI query gen failed, using static:", err);
+  }
+
   const results = await Promise.all(
-    style.extras.map(async (item) => {
+    queries.map(async (item) => {
       const found = await searchProducts(item.query, 2, locale);
       return found.map((p) => ({ ...p, category: item.category }));
     })

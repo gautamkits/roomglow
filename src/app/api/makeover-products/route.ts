@@ -5,12 +5,12 @@ import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
-    const { styleId } = await request.json();
+    const { styleId, gender } = await request.json();
     if (!styleId) {
       return NextResponse.json({ error: "Missing styleId" }, { status: 400 });
     }
     const locale = localeFromRequest(request);
-    const products = await getMakeoverExtras(styleId, locale);
+    const products = await getMakeoverExtras(styleId, locale, gender);
     return NextResponse.json({ products });
   } catch (error) {
     console.error("Makeover products failed:", error);

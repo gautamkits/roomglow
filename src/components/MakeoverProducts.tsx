@@ -7,12 +7,13 @@ import { outboundHref } from "@/lib/outbound";
 
 interface MakeoverProductsProps {
   styleId: string;
+  gender?: string;
 }
 
 // Self-contained, async "Complete the look" grid for makeovers. Fetches its own
 // data after mount so it never blocks the design render. Renders nothing on
 // empty/error. Links cloaked via outboundHref (global affiliate policy).
-export default function MakeoverProducts({ styleId }: MakeoverProductsProps) {
+export default function MakeoverProducts({ styleId, gender }: MakeoverProductsProps) {
   const [products, setProducts] = useState<OccasionProduct[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -22,7 +23,7 @@ export default function MakeoverProducts({ styleId }: MakeoverProductsProps) {
     fetch("/api/makeover-products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ styleId }),
+      body: JSON.stringify({ styleId, gender }),
     })
       .then((r) => (r.ok ? r.json() : { products: [] }))
       .then((d) => {
@@ -37,7 +38,7 @@ export default function MakeoverProducts({ styleId }: MakeoverProductsProps) {
     return () => {
       active = false;
     };
-  }, [styleId]);
+  }, [styleId, gender]);
 
   if (!loading && (!products || products.length === 0)) return null;
 

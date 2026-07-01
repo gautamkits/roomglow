@@ -307,7 +307,10 @@ function Viewer({
         )}
 
         {showProducts && design.mode === "makeover" && design.event_config?.styleType && (
-          <MakeoverProducts styleId={design.event_config.styleType} />
+          <MakeoverProducts
+            styleId={design.event_config.styleType}
+            gender={design.event_config.gender}
+          />
         )}
 
         {canPublish && (

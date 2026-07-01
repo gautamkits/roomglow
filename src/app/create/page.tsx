@@ -451,7 +451,7 @@ function HomeContent() {
             )}
 
             {isUnlocked && mode === "makeover" && makeoverConfig && (
-              <MakeoverProducts styleId={makeoverConfig.styleType} />
+              <MakeoverProducts styleId={makeoverConfig.styleType} gender={makeoverConfig.gender} />
             )}
 
             <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">

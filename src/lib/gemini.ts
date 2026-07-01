@@ -698,6 +698,63 @@ Ensure all items work together as a cohesive look. Choose colors from or complem
   return response.text ?? "";
 }
 
+const makeoverExtrasSchema = {
+  type: Type.OBJECT,
+  properties: {
+    items: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          category: { type: Type.STRING },
+          query: { type: Type.STRING },
+        },
+        required: ["category", "query"],
+      },
+    },
+  },
+  required: ["items"],
+};
+
+/**
+ * Stylist-picked complementary ACCESSORIES for the makeover "Complete the look"
+ * grid. Returns 4-6 gender-appropriate Amazon search queries tailored to the
+ * style — mirrors how recommendProducts writes queries for the main pipeline.
+ */
+export async function recommendMakeoverExtras(
+  styleLabel: string,
+  gender: string | undefined,
+  locale: string
+): Promise<{ items: { category: string; query: string }[] }> {
+  const genderWord =
+    gender === "Women" ? "women's" : gender === "Men" ? "men's" : "unisex";
+  const marketplace = locale === "US" ? "Amazon US" : "Amazon India";
+
+  const prompt = `You are an expert personal stylist finishing a "${styleLabel}" look for a ${genderWord} outfit.
+
+The person already has their main garments (top, bottom, footwear). Suggest 4-6 COMPLEMENTARY ACCESSORIES that complete this look — choose from: bag, watch, sunglasses, jewellery, hat/cap, fragrance, belt, scarf, or a small style-specific extra. Do NOT suggest tops, bottoms, dresses, or footwear (already covered).
+
+For each item provide:
+- category: a short label (e.g. "Watch", "Bag", "Sunglasses")
+- query: a 3-5 word ${marketplace} search query that MUST include the gender word "${genderWord === "unisex" ? "unisex" : genderWord.replace("'s", "")}" and be specific enough to return relevant results (e.g. "men brown leather watch", "women straw beach hat").
+
+Keep every item gender-appropriate for a ${genderWord} look (do not suggest earrings or a clutch for a men's look unless unisex). Keep them cohesive with the ${styleLabel} style.`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: makeoverExtrasSchema,
+    },
+  });
+
+  return parseJson<{ items: { category: string; query: string }[] }>(
+    response.text,
+    "Makeover extras"
+  );
+}
+
 export async function generateMakeoverImage(
   personImageBase64: string,
   selectedProducts: DetectableProduct[],
