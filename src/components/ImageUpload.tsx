@@ -83,25 +83,25 @@ export default function ImageUpload({ onImageSelected }: ImageUploadProps) {
           onDragLeave={() => setDragActive(false)}
           onDrop={handleDrop}
           onClick={() => inputRef.current?.click()}
-          className={`w-full rounded-xl p-10 text-center transition-colors border border-dashed ${
+          className={`w-full rounded-xl p-10 text-center transition-colors border-2 border-dashed ${
             dragActive
-              ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30"
-              : "border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-zinc-400 dark:hover:border-zinc-600"
+              ? "border-orange-700 bg-orange-100/60 dark:bg-orange-950/40"
+              : "border-orange-300 dark:border-orange-900/60 bg-orange-50/50 dark:bg-orange-950/20 hover:border-orange-500 hover:bg-orange-50 dark:hover:border-orange-700"
           }`}
         >
           <div className="flex flex-col items-center gap-3">
             <div
-              className={`w-12 h-12 rounded-lg flex items-center justify-center border ${
+              className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${
                 dragActive
-                  ? "border-orange-700 text-orange-700"
-                  : "border-zinc-200 dark:border-zinc-700 text-zinc-500"
+                  ? "bg-orange-700 text-white"
+                  : "bg-orange-700/10 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400"
               }`}
             >
               <ImagePlus size={22} strokeWidth={1.75} />
             </div>
             <div>
-              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                Drop a room photo, or click to upload
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Drop a photo, or click to upload
               </p>
               <p className="text-xs text-zinc-500 mt-1">JPG or PNG, up to ~10MB</p>
             </div>

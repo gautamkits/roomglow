@@ -147,15 +147,20 @@ function HomeContent() {
 
             {!libraryLoading && designs.length > 0 ? (
               /* ─── Has designs: two-column layout ─── */
-              <div className="grid lg:grid-cols-[1.5fr_1fr] gap-5 items-start animate-fade-up-delay-1">
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
-                      <Wand2 size={15} className="text-white" />
+              <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5 items-start animate-fade-up-delay-1">
+                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                      <Wand2 size={18} className="text-white" />
                     </span>
-                    <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                      Start a new design
-                    </h2>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                        Start a new design
+                      </h2>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        Turn any photo into a shoppable AI design in seconds.
+                      </p>
+                    </div>
                   </div>
                   <SetupPanel onImageSelected={handleImageSelected} />
                 </div>
@@ -185,14 +190,19 @@ function HomeContent() {
             ) : (
               /* ─── No designs: centered single column ─── */
               <div className="max-w-xl mx-auto animate-fade-up-delay-1">
-                <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="w-7 h-7 rounded-lg bg-orange-700 flex items-center justify-center">
-                      <Wand2 size={15} className="text-white" />
+                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
+                  <div className="flex items-center gap-3 mb-5">
+                    <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                      <Wand2 size={18} className="text-white" />
                     </span>
-                    <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-                      Create your first design
-                    </h2>
+                    <div className="min-w-0">
+                      <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                        Create your first design
+                      </h2>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        Turn any photo into a shoppable AI design in seconds.
+                      </p>
+                    </div>
                   </div>
                   <SetupPanel onImageSelected={handleImageSelected} />
                 </div>
