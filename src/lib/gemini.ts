@@ -669,12 +669,18 @@ ${genderHint}
 Style goal: ${styleContext}
 ${itemsList}
 
-Create a cohesive, expert outfit. For each item provide:
+Create ONE cohesive, complete outfit that this person wears ALL AT ONCE. For each item provide:
 - category: specific clothing item (e.g. "wrap dress", "slim blazer", "strappy heels")
 - searchQuery: Amazon search query, 3-5 words (e.g. "women camel wrap dress", "slim fit navy blazer"). Include the gender and color.
 - placement: body zone for the virtual try-on image (e.g. "upper body / torso", "lower body / legs", "feet", "over right shoulder as a bag", "neck and ears as jewellery")
 - reason: WHY this silhouette/color flatters THIS person's specific body type and skin tone (1 sentence)
 - colorSuggestion: exact color (e.g. "camel tan", "emerald green", "ivory white")
+
+CRITICAL RULES — the outfit must be physically wearable as a single look:
+- Return EXACTLY ONE item per body zone. NEVER include two tops, two bottoms, or two pairs of footwear — a person cannot wear both a shirt and a polo, or both pants and shorts.
+- A one-piece (dress/jumpsuit) counts as BOTH top and bottom — do not add a separate top or bottom with it.
+- Include at most 5 items total: one top, one bottom (or a one-piece), one footwear, and optionally 1-2 accessories (bag, sunglasses, jewellery, hat, or scarf).
+- Every single item you return WILL be placed on the person in the generated photo, so only include items that can genuinely be worn together at the same time.
 
 Also write a 2-3 sentence outfitVision in a stylist's voice — explain the complete look and why it was chosen for this person specifically. Sound like a fashion expert, not a product description.
 
@@ -765,6 +771,11 @@ CLOTHING INSTRUCTIONS:
 ${productList}
 
 For accessories (bags, jewellery, sunglasses): add in a natural position without obscuring the face.
+
+STRICT — do NOT invent any items:
+- Dress the person ONLY in the products listed above. Do NOT add any extra garment, layer, or accessory that is not in the list — no belts, watches, ties, scarves, hats, jackets, or jewellery unless it is one of the provided products.
+- Every clothing item on the person must correspond to a provided product. Nothing shoppable should appear that isn't in the list.
+
 The result must look like a real photo of the same person in a new outfit${sceneHint ? " and setting" : ""}. Maintain photorealism with correct scale, perspective, lighting, and fabric drape.
 
 STYLE DIRECTION: ${styleHint} aesthetic.`,

@@ -26,6 +26,7 @@ import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
 import OccasionProducts from "@/components/OccasionProducts";
+import MakeoverProducts from "@/components/MakeoverProducts";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -35,6 +36,7 @@ function HomeContent() {
     step,
     mode,
     eventConfig,
+    makeoverConfig,
     image,
     generatedImage,
     roomAnalysis,
@@ -432,6 +434,10 @@ function HomeContent() {
                 subTheme={eventConfig.subTheme}
                 eventLabel={eventConfig.eventLabel}
               />
+            )}
+
+            {isUnlocked && mode === "makeover" && makeoverConfig && (
+              <MakeoverProducts styleId={makeoverConfig.styleType} />
             )}
 
             <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">

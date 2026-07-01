@@ -10,6 +10,7 @@ import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
+import MakeoverProducts from "@/components/MakeoverProducts";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
 interface DesignData {
@@ -303,6 +304,10 @@ function Viewer({
             subTheme={design.event_config.subTheme}
             eventLabel={design.event_config.eventLabel || "event"}
           />
+        )}
+
+        {showProducts && design.mode === "makeover" && design.event_config?.styleType && (
+          <MakeoverProducts styleId={design.event_config.styleType} />
         )}
 
         {canPublish && (
