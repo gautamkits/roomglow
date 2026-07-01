@@ -303,7 +303,11 @@ export function useRoomFlow() {
             "We couldn't finalize the product selection. Please try again."
           );
         p.curatedProducts = curatedProducts;
-        p.narrative = narrative || "";
+        // For makeover, the stylist's outfitVision (stored in designVision) is
+        // the note we want to show — not the room-worded curate narrative.
+        p.narrative = isMakeover
+          ? p.designVision || narrative || ""
+          : narrative || "";
       }
       const curated = p.curatedProducts ?? [];
       setProducts(curated);

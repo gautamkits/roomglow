@@ -221,13 +221,21 @@ function HomeContent() {
               <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-1.5">
                 {mode === "event"
                   ? "Which decorations should we add?"
+                  : mode === "makeover"
+                  ? "Which items should we find you?"
                   : "What should we add?"}
               </h2>
               <p className="text-sm text-zinc-500">
-                We analyzed your {roomAnalysis.dimensions} {roomAnalysis.roomType}.
-                {mode === "event"
-                  ? " Pick the decorations you'd like for the event."
-                  : " Pick the pieces you'd like our designer to source."}
+                {mode === "makeover"
+                  ? "Your stylist analyzed your photo. Pick the pieces you'd like us to source."
+                  : (
+                    <>
+                      We analyzed your {roomAnalysis.dimensions} {roomAnalysis.roomType}.
+                      {mode === "event"
+                        ? " Pick the decorations you'd like for the event."
+                        : " Pick the pieces you'd like our designer to source."}
+                    </>
+                  )}
               </p>
             </div>
             <div className="animate-fade-up-delay-1">
@@ -247,7 +255,11 @@ function HomeContent() {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 text-xs font-medium">
                     <Sparkles size={12} />
-                    {mode === "event" ? "Event design" : "Interior design"}
+                    {mode === "event"
+                      ? "Event design"
+                      : mode === "makeover"
+                      ? "Personal makeover"
+                      : "Interior design"}
                   </span>
                   {maxBudget && (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-xs font-medium">
@@ -258,6 +270,8 @@ function HomeContent() {
                 <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                   {mode === "event" && eventConfig
                     ? `Your ${eventConfig.eventLabel} setup`
+                    : mode === "makeover"
+                    ? "Your new look"
                     : "Your redesigned space"}
                 </h2>
               </div>
