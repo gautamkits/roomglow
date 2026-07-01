@@ -52,7 +52,10 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
-  const [budgetSet, setBudgetSet] = useState(false);
+  // Budget starts pre-set to a sensible default so the uploader is visible
+  // immediately — users can still adjust the slider. Gating upload behind a
+  // manual slider touch made the upload box appear only "sometimes".
+  const [budgetSet, setBudgetSet] = useState(true);
   const [makeoverStyleId, setMakeoverStyleId] = useState<string | null>(null);
   const [makeoverGender, setMakeoverGender] = useState<string | null>(null);
   const [makeoverEnabled, setMakeoverEnabled] = useState(false);
