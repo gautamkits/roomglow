@@ -123,6 +123,8 @@ function Viewer({
   const modeLabel =
     design.mode === "event"
       ? `${design.event_config?.eventLabel || "Event"} decoration`
+      : design.mode === "makeover"
+      ? `${design.event_config?.styleLabel || "Personal"} makeover`
       : "Room redesign";
 
   const showProducts = isUnlocked || approved;

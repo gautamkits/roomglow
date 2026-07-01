@@ -45,6 +45,12 @@ export function designAltText(d: DesignLike): string {
       ? `${base} featuring ${names.join(", ")} — designed with Noosho`
       : `${base} — designed with Noosho`;
   }
+  if (d.mode === "makeover" && ec) {
+    const base = `AI ${ec.styleLabel || "personal"} makeover outfit`.trim();
+    return names.length
+      ? `${base} featuring ${names.join(", ")} — styled with Noosho`
+      : `${base} — styled with Noosho`;
+  }
   const style = ra?.currentStyle ? `${ra.currentStyle} ` : "";
   const room = ra?.roomType || "room";
   const base = `AI interior design of a ${style}${room}`.trim();
@@ -91,6 +97,9 @@ export function designTitle(d: {
   const ec = parseJsonish(d.event_config) as Record<string, string> | null;
   if (d.mode === "event" && ec) {
     return `${ec.subTheme ? ec.subTheme + " " : ""}${ec.eventLabel || "Event"} decoration`;
+  }
+  if (d.mode === "makeover" && ec) {
+    return `${ec.styleLabel || "Personal"} makeover`;
   }
   const style = ra?.currentStyle ? `${ra.currentStyle} ` : "";
   const room = ra?.roomType || "room";

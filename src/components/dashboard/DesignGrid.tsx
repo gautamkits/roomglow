@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Sofa, PartyPopper, Lock } from "lucide-react";
+import { Sofa, PartyPopper, Sparkles, Lock } from "lucide-react";
 import type { SavedDesign } from "@/lib/useUserLibrary";
 
 interface DesignGridProps {
@@ -53,12 +53,22 @@ export default function DesignGrid({ designs, limit, cols }: DesignGridProps) {
               className={`absolute top-2 left-2 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${
                 d.mode === "event"
                   ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                  : d.mode === "makeover"
+                  ? "bg-pink-100/90 text-pink-700 dark:bg-pink-950/70 dark:text-pink-300"
                   : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
               }`}
             >
-              {d.mode === "event" ? <PartyPopper size={10} /> : <Sofa size={10} />}
+              {d.mode === "event" ? (
+                <PartyPopper size={10} />
+              ) : d.mode === "makeover" ? (
+                <Sparkles size={10} />
+              ) : (
+                <Sofa size={10} />
+              )}
               {d.mode === "event"
                 ? d.event_config?.eventLabel || "Event"
+                : d.mode === "makeover"
+                ? "Makeover"
                 : "Space"}
             </span>
           </div>
@@ -66,6 +76,8 @@ export default function DesignGrid({ designs, limit, cols }: DesignGridProps) {
             <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 line-clamp-1">
               {d.mode === "event"
                 ? d.event_config?.subTheme || "Decoration"
+                : d.mode === "makeover"
+                ? d.event_config?.styleLabel || "New look"
                 : "Room redesign"}
             </p>
             <p className="text-xs text-zinc-400 mt-0.5">
