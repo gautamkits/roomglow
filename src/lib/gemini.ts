@@ -696,6 +696,7 @@ export async function generateMakeoverImage(
   personImageBase64: string,
   selectedProducts: DetectableProduct[],
   styleHint: string,
+  sceneHint?: string,
   detect: boolean = true
 ): Promise<{ generatedImage: string; hotspots: HotspotBox[] }> {
   const productImages = await Promise.allSettled(
@@ -750,18 +751,21 @@ MUST PRESERVE (do NOT change any of these):
 - The person's skin tone and complexion
 - The person's hair (color, length, and style)
 - The person's body shape, pose, and proportions
-- The background and setting
-- The overall lighting and photo style
 
 MUST CHANGE:
 - Replace/add clothing using the EXACT products shown in the reference images
-- Each clothing item must look exactly like its reference image — same color, pattern, material, and design
+- Each clothing item must look exactly like its reference image — same color, pattern, material, and design${
+      sceneHint
+        ? `
+- Replace the background/setting with ${sceneHint}. The person must be naturally composited into this new scene with matching lighting, shadows, and perspective — as if the photo was really taken there.`
+        : ""
+    }
 
 CLOTHING INSTRUCTIONS:
 ${productList}
 
 For accessories (bags, jewellery, sunglasses): add in a natural position without obscuring the face.
-The result must look like a real photo of the same person in a new outfit. Maintain photorealism with correct scale, perspective, lighting, and fabric drape.
+The result must look like a real photo of the same person in a new outfit${sceneHint ? " and setting" : ""}. Maintain photorealism with correct scale, perspective, lighting, and fabric drape.
 
 STYLE DIRECTION: ${styleHint} aesthetic.`,
   });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { generateMakeoverImage } from "@/lib/gemini";
+import { getMakeoverStyleByLabel } from "@/lib/makeover";
 import { getFeatures, recordImageGen } from "@/lib/db";
 import { rateLimit } from "@/lib/rateLimit";
 import { isAdminEmail } from "@/lib/admin";
@@ -36,7 +37,8 @@ export async function POST(request: Request) {
 
     await recordImageGen("design", session.user.id);
 
-    const result = await generateMakeoverImage(base64, products, styleHint || "", detect ?? false);
+    const scene = getMakeoverStyleByLabel(styleHint || "")?.scene;
+    const result = await generateMakeoverImage(base64, products, styleHint || "", scene, detect ?? false);
 
     return NextResponse.json(result);
   } catch (error) {
