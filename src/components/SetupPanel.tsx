@@ -69,7 +69,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
 
   const event = eventId ? getEvent(eventId) : undefined;
   const eventConfigReady =
-    mode === "space" || (!!event && !!subTheme && !!colorScheme);
+    mode !== "event" || (!!event && !!subTheme && !!colorScheme);
   const makeoverReady = mode !== "makeover" || !!makeoverStyleId;
   const eventReady = eventConfigReady && makeoverReady && budgetSet;
   // Gender picker only for child-centric events (birthday, baby shower, …)
