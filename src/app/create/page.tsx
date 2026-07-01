@@ -147,44 +147,56 @@ function HomeContent() {
 
             {!libraryLoading && designs.length > 0 ? (
               /* ─── Has designs: two-column layout ─── */
-              <div className="grid lg:grid-cols-[1.6fr_1fr] gap-5 items-start animate-fade-up-delay-1">
-                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
-                  <div className="flex items-center gap-3 mb-5">
-                    <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
-                      <Wand2 size={18} className="text-white" />
-                    </span>
+              <div className="space-y-8 animate-fade-up-delay-1">
+                {/* Hero: Start a new design (full-width split) */}
+                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-7 shadow-lg shadow-orange-900/5">
+                  <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-6 lg:gap-8 items-center">
                     <div className="min-w-0">
-                      <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                      <span className="inline-flex w-11 h-11 rounded-xl bg-orange-700 items-center justify-center shadow-sm shadow-orange-900/30 mb-4">
+                        <Wand2 size={20} className="text-white" />
+                      </span>
+                      <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                         Start a new design
                       </h2>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-2">
                         Turn any photo into a shoppable AI design in seconds.
                       </p>
+                      <ul className="mt-4 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+                        <li className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-orange-700 shrink-0" />
+                          Interior, event &amp; personal makeover
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Sparkles size={14} className="text-orange-700 shrink-0" />
+                          Real, shoppable Amazon products
+                        </li>
+                      </ul>
                     </div>
+                    <SetupPanel onImageSelected={handleImageSelected} />
                   </div>
-                  <SetupPanel onImageSelected={handleImageSelected} />
                 </div>
 
-                <div className="space-y-5">
-                  {eventDates.length > 0 && (
-                    <UpcomingEvents eventDates={eventDates} />
-                  )}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
-                        Recent designs
-                      </h2>
-                      {designs.length > 4 && (
-                        <button
-                          onClick={() => router.push("/profile")}
-                          className="text-sm text-orange-700 hover:text-orange-800 font-medium transition-colors"
-                        >
-                          View all
-                        </button>
-                      )}
-                    </div>
-                    <DesignGrid designs={designs} limit={4} />
+                {/* Upcoming events */}
+                {eventDates.length > 0 && (
+                  <UpcomingEvents eventDates={eventDates} />
+                )}
+
+                {/* Recent designs */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
+                      Recent designs
+                    </h2>
+                    {designs.length > 6 && (
+                      <button
+                        onClick={() => router.push("/profile")}
+                        className="text-sm text-orange-700 hover:text-orange-800 font-medium transition-colors"
+                      >
+                        View all
+                      </button>
+                    )}
                   </div>
+                  <DesignGrid designs={designs} limit={6} />
                 </div>
               </div>
             ) : (
