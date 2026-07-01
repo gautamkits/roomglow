@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Rate limit reached. Try again later." }, { status: 429 });
     }
 
-    const { originalImage, products, styleHint, detect } = await request.json();
+    const { originalImage, products, styleHint } = await request.json();
     if (!originalImage || !products) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
@@ -38,7 +38,10 @@ export async function POST(request: Request) {
     await recordImageGen("design", session.user.id);
 
     const scene = getMakeoverStyleByLabel(styleHint || "")?.scene;
-    const result = await generateMakeoverImage(base64, products, styleHint || "", scene, detect ?? false);
+    // Always detect hotspots for makeover — it's a cheap gemini-2.5-flash call
+    // and the numbered pins are core to the shoppable experience. (Unlike room
+    // designs, there's no separate ensureHotspots wiring for the free/admin path.)
+    const result = await generateMakeoverImage(base64, products, styleHint || "", scene, true);
 
     return NextResponse.json(result);
   } catch (error) {
