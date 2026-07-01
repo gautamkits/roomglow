@@ -145,8 +145,10 @@ function HomeContent() {
               )}
             </div>
 
-            {!libraryLoading && designs.length > 0 ? (
-              /* ─── Has designs: two-column layout ─── */
+            {libraryLoading || designs.length > 0 ? (
+              /* ─── Has designs (or still loading): two-column layout ─── */
+              /* Render the grid during load too so the create card holds its
+                 final position — avoids the centered→two-column layout shift. */
               <div className="grid lg:grid-cols-[1.55fr_1fr] gap-6 items-start animate-fade-up-delay-1">
                 {/* Left: prominent create card */}
                 <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
@@ -168,25 +170,49 @@ function HomeContent() {
 
                 {/* Right: live activity sidebar */}
                 <div className="space-y-6 lg:sticky lg:top-6">
-                  {eventDates.length > 0 && (
-                    <UpcomingEvents eventDates={eventDates} variant="list" />
-                  )}
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
-                        Recent designs
-                      </h2>
-                      {designs.length > 4 && (
-                        <button
-                          onClick={() => router.push("/profile")}
-                          className="text-sm text-orange-700 hover:text-orange-800 font-medium transition-colors"
-                        >
-                          View all
-                        </button>
+                  {libraryLoading ? (
+                    /* Skeleton keeps the sidebar's footprint while data loads */
+                    <>
+                      <div>
+                        <div className="h-3.5 w-28 bg-zinc-100 dark:bg-zinc-800 rounded mb-3" />
+                        <div className="space-y-2">
+                          {[0, 1, 2].map((i) => (
+                            <div key={i} className="h-[58px] rounded-xl bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="h-3.5 w-24 bg-zinc-100 dark:bg-zinc-800 rounded mb-3" />
+                        <div className="grid grid-cols-2 gap-3">
+                          {[0, 1, 2, 3].map((i) => (
+                            <div key={i} className="aspect-[4/3] rounded-xl bg-zinc-100 dark:bg-zinc-800 animate-pulse" />
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {eventDates.length > 0 && (
+                        <UpcomingEvents eventDates={eventDates} variant="list" />
                       )}
-                    </div>
-                    <DesignGrid designs={designs} limit={4} cols={2} />
-                  </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h2 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
+                            Recent designs
+                          </h2>
+                          {designs.length > 4 && (
+                            <button
+                              onClick={() => router.push("/profile")}
+                              className="text-sm text-orange-700 hover:text-orange-800 font-medium transition-colors"
+                            >
+                              View all
+                            </button>
+                          )}
+                        </div>
+                        <DesignGrid designs={designs} limit={4} cols={2} />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             ) : (
