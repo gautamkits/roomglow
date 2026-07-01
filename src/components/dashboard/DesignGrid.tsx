@@ -8,14 +8,18 @@ import type { SavedDesign } from "@/lib/useUserLibrary";
 interface DesignGridProps {
   designs: SavedDesign[];
   limit?: number;
+  /** Fixed 2-column layout (e.g. in a narrow sidebar); default is responsive. */
+  cols?: 2;
 }
 
-export default function DesignGrid({ designs, limit }: DesignGridProps) {
+export default function DesignGrid({ designs, limit, cols }: DesignGridProps) {
   const router = useRouter();
   const shown = limit ? designs.slice(0, limit) : designs;
+  const gridCls =
+    cols === 2 ? "grid grid-cols-2 gap-3" : "grid grid-cols-2 sm:grid-cols-3 gap-4";
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+    <div className={gridCls}>
       {shown.map((d) => (
         <button
           key={d.id}
