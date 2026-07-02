@@ -248,6 +248,7 @@ function HomeContent() {
             image={image}
             step={step as "analyzing" | "generating" | "curating"}
             isEvent={isEvent}
+            mode={mode}
             statusMessage={statusMessage}
           />
         )}

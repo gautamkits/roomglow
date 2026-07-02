@@ -70,12 +70,46 @@ button, [role="button"], a {
   animation: glow-drift 9s ease-in-out infinite;
 }
 
+/* Processing screen: themed icons pop in one-by-one, hold, then loop. */
+@keyframes icon-pop {
+  0% { opacity: 0; transform: scale(0) rotate(-8deg); }
+  10% { opacity: 1; transform: scale(1.15) rotate(2deg); }
+  14% { transform: scale(1); }
+  78% { opacity: 1; transform: scale(1); }
+  92%, 100% { opacity: 0; transform: scale(0.6); }
+}
+
+.animate-icon-pop {
+  animation: icon-pop 3.2s cubic-bezier(0.2, 0.7, 0.3, 1) infinite both;
+}
+
+/* Shopping cart rolls across the strip toward the store. */
+@keyframes cart-run {
+  0% { opacity: 0; transform: translateX(-110px); }
+  12% { opacity: 1; }
+  55% { transform: translateX(0); }
+  62% { transform: translateX(-6px); }
+  68% { transform: translateX(0); }
+  86% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(8px); }
+}
+
+.animate-cart-run {
+  animation: cart-run 2.6s ease-in-out infinite both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-card-in,
   .animate-glow-drift {
     animation: none !important;
   }
   .tilt-card {
+    transform: none !important;
+  }
+  .animate-icon-pop,
+  .animate-cart-run {
+    animation: none !important;
+    opacity: 1 !important;
     transform: none !important;
   }
 }

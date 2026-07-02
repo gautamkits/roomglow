@@ -1,37 +1,133 @@
 "use client";
 
-import { Check, Sparkles } from "lucide-react";
+import {
+  Check,
+  Sparkles,
+  Camera,
+  ScanLine,
+  Ruler,
+  Search,
+  Lightbulb,
+  Sofa,
+  Armchair,
+  Lamp,
+  Bed,
+  Flower2,
+  PartyPopper,
+  Gift,
+  Cake,
+  Music,
+  Shirt,
+  Glasses,
+  Watch,
+  Gem,
+  ShoppingBag,
+  ShoppingCart,
+  Store,
+  Tag,
+  type LucideIcon,
+} from "lucide-react";
 
 interface ProcessingViewProps {
   image: string | null;
   step: "analyzing" | "generating" | "curating";
   isEvent: boolean;
+  mode?: "space" | "event" | "makeover";
   statusMessage?: string;
+}
+
+// Themed icons that pop in one-by-one while each pipeline step runs — makes the
+// wait feel alive (sofa → chair → lamp arriving; cart rolling to the store).
+const GENERATING_ICONS: Record<"space" | "event" | "makeover", LucideIcon[]> = {
+  space: [Sofa, Armchair, Lamp, Bed, Flower2],
+  event: [PartyPopper, Gift, Cake, Music, Sparkles],
+  makeover: [Shirt, Glasses, Watch, Gem, ShoppingBag],
+};
+
+const ANALYZING_ICONS: LucideIcon[] = [Camera, ScanLine, Ruler, Search, Lightbulb];
+
+function IconParade({
+  step,
+  mode,
+}: {
+  step: "analyzing" | "generating" | "curating";
+  mode: "space" | "event" | "makeover";
+}) {
+  const tile =
+    "w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 flex items-center justify-center text-orange-700 dark:text-orange-400";
+
+  if (step === "curating") {
+    // Shopping scene: bag + tag pop in, the cart rolls up to the store.
+    return (
+      <div className="flex items-center justify-center gap-3 mt-5" aria-hidden>
+        {[Tag, ShoppingBag].map((Icon, i) => (
+          <div
+            key={i}
+            className={`${tile} animate-icon-pop`}
+            style={{ animationDelay: `${i * 0.35}s` }}
+          >
+            <Icon size={18} strokeWidth={1.75} />
+          </div>
+        ))}
+        <div className={`${tile} animate-cart-run`}>
+          <ShoppingCart size={18} strokeWidth={1.75} />
+        </div>
+        <div className={tile}>
+          <Store size={18} strokeWidth={1.75} />
+        </div>
+      </div>
+    );
+  }
+
+  const icons = step === "analyzing" ? ANALYZING_ICONS : GENERATING_ICONS[mode];
+  return (
+    <div className="flex items-center justify-center gap-3 mt-5" aria-hidden>
+      {icons.map((Icon, i) => (
+        <div
+          key={i}
+          className={`${tile} animate-icon-pop`}
+          style={{ animationDelay: `${i * 0.35}s` }}
+        >
+          <Icon size={18} strokeWidth={1.75} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function ProcessingView({
   image,
   step,
   isEvent,
+  mode,
   statusMessage,
 }: ProcessingViewProps) {
+  const activeMode: "space" | "event" | "makeover" =
+    mode ?? (isEvent ? "event" : "space");
   const loadingIndex =
     step === "analyzing" ? 0 : step === "generating" ? 1 : 2;
 
   const headline =
     step === "analyzing"
-      ? isEvent
+      ? activeMode === "event"
         ? "Studying your venue"
-        : "Studying your space"
+        : activeMode === "makeover"
+          ? "Studying your photo"
+          : "Studying your space"
       : step === "generating"
-        ? isEvent
+        ? activeMode === "event"
           ? "Designing the decorations"
-          : "Designing your room"
+          : activeMode === "makeover"
+            ? "Styling your new look"
+            : "Designing your room"
         : "Hand-picking the products";
 
-  const labels = isEvent
-    ? ["Understanding", "Planning", "Sourcing", "Staging"]
-    : ["Understanding", "Designing", "Sourcing", "Rendering"];
+  const labels =
+    activeMode === "event"
+      ? ["Understanding", "Planning", "Sourcing", "Staging"]
+      : activeMode === "makeover"
+        ? ["Understanding", "Styling", "Sourcing", "Rendering"]
+        : ["Understanding", "Designing", "Sourcing", "Rendering"];
 
   return (
     <div className="flex flex-col items-center justify-center py-10 sm:py-16 px-1">
@@ -68,8 +164,11 @@ export default function ProcessingView({
           </div>
         </div>
 
+        {/* themed icon parade */}
+        <IconParade step={step} mode={activeMode} />
+
         {/* progress bar */}
-        <div className="relative h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden progress-bar mt-6 mb-5" />
+        <div className="relative h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden progress-bar mt-5 mb-5" />
 
         {/* stepper */}
         <div className="flex items-center justify-between">
