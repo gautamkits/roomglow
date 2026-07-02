@@ -113,7 +113,7 @@ export default function Landing({ onStart }: { onStart?: () => void } = {}) {
     <div className="flex flex-col">
       {/* ─── HERO ─── */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 -z-10 bg-hero-glow" />
+        <div className="absolute inset-0 -z-10 bg-hero-glow animate-glow-drift" />
         <div className="max-w-5xl mx-auto px-5 pt-14 pb-16 md:pt-20 md:pb-24 grid md:grid-cols-2 gap-12 items-center">
           <div className="animate-fade-up">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-600 dark:text-zinc-300 mb-5 backdrop-blur-sm">

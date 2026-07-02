@@ -50,6 +50,36 @@ button, [role="button"], a {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Depth-staged card entrance: rises with a slight 3D pitch. */
+@keyframes card-in {
+  from { opacity: 0; transform: perspective(900px) translateY(16px) rotateX(5deg) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-card-in {
+  animation: card-in 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Gentle vertical drift for hero glow layers. */
+@keyframes glow-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+
+.animate-glow-drift {
+  animation: glow-drift 9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-card-in,
+  .animate-glow-drift {
+    animation: none !important;
+  }
+  .tilt-card {
+    transform: none !important;
+  }
+}
+
 @keyframes progress-indeterminate {
   0% { left: -40%; }
   100% { left: 100%; }

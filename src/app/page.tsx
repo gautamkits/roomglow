@@ -20,6 +20,7 @@ import ShareButton from "@/components/ShareButton";
 import GallerySearch from "@/components/GallerySearch";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
+import TiltCard from "@/components/TiltCard";
 
 export const metadata: Metadata = {
   title: "Noosho — AI room & event designs from one photo",
@@ -137,7 +138,7 @@ export default async function Home({
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
         {/* Hero */}
         <div className="relative mb-7">
-          <div className="absolute -inset-x-10 -top-10 bottom-0 -z-10 bg-hero-glow" />
+          <div className="absolute -inset-x-10 -top-10 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
           <div className="flex flex-wrap items-end justify-between gap-5">
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-3 backdrop-blur-sm">
@@ -259,9 +260,13 @@ export default async function Home({
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {pageDesigns.map((d, i) => (
-              <article
+              <TiltCard
                 key={d.id}
-                className="group rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-orange-200 dark:hover:border-orange-900/50 hover:shadow-xl hover:shadow-orange-900/5 hover:-translate-y-0.5 transition-all duration-200"
+                className="animate-card-in"
+                style={{ animationDelay: `${Math.min(i, 11) * 45}ms` }}
+              >
+              <article
+                className="group rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-orange-200 dark:hover:border-orange-900/50 hover:shadow-xl hover:shadow-orange-900/5 transition-all duration-200"
               >
                 <div className="relative">
                   <BeforeAfterSlider
@@ -315,6 +320,7 @@ export default async function Home({
                   <ShareButton designId={d.id} variant="ghost" />
                 </div>
               </article>
+              </TiltCard>
             ))}
           </div>
         )}
