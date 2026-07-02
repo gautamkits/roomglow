@@ -80,7 +80,7 @@ export default function BeforeAfterSlider({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full select-none overflow-hidden ${
+      className={`relative w-full select-none overflow-hidden touch-pan-y ${
         rounded ? "rounded-2xl" : ""
       } ${aspect || ""} border border-zinc-200 dark:border-zinc-800 shadow-lg cursor-ew-resize`}
       onMouseDown={(e) => startDrag(e.clientX)}
