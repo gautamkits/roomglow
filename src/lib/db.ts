@@ -396,7 +396,8 @@ export async function getAnalyticsStats() {
         COUNT(*) AS total,
         COUNT(*) FILTER (WHERE kind = 'design') AS design,
         COUNT(*) FILTER (WHERE kind = 'restyle') AS restyle,
-        COUNT(*) FILTER (WHERE kind = 'empty') AS empty
+        COUNT(*) FILTER (WHERE kind = 'empty') AS empty,
+        COUNT(*) FILTER (WHERE kind = 'makeover') AS makeover
       FROM image_gen_events
       WHERE created_at >= NOW() - INTERVAL '14 days'
       GROUP BY 1

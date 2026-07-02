@@ -6,6 +6,7 @@ import {
   saveDesign,
   countRestyles,
   setRestyledFrom,
+  recordImageGen,
 } from "@/lib/db";
 import { generateDesignImage } from "@/lib/gemini";
 import { makeBlurDataUrl } from "@/lib/images";
@@ -86,6 +87,9 @@ export async function POST(request: Request) {
       undefined,
       styleHint
     );
+
+    // Track the billed image-gen call for cost analytics (same as generate-image).
+    await recordImageGen("restyle", session.user.id);
 
     // Upload the new render; reuse the original room photo URL as-is.
     const genBuf = Buffer.from(generatedImage, "base64");

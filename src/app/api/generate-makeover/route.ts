@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
 
-    await recordImageGen("design", session.user.id);
+    await recordImageGen("makeover", session.user.id);
 
     const scene = getMakeoverStyleByLabel(styleHint || "")?.scene;
     // Always detect hotspots for makeover — it's a cheap gemini-2.5-flash call
