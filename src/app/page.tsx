@@ -135,14 +135,33 @@ export default async function Home({
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
-        <div className="mb-5">
-          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            See your room redesigned — then buy the look
-          </h1>
-          <p className="text-zinc-500 mt-1">
-            Snap one photo. Noosho restyles your space and finds every piece to
-            shop. Free to try.
-          </p>
+        {/* Hero */}
+        <div className="relative mb-7">
+          <div className="absolute -inset-x-10 -top-10 bottom-0 -z-10 bg-hero-glow" />
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-3 backdrop-blur-sm">
+                <Sparkles size={13} className="text-orange-700" />
+                Real designs from real photos
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
+                See your room redesigned —{" "}
+                <span className="text-orange-700">then buy the look</span>
+              </h1>
+              <p className="text-zinc-500 mt-2 text-base sm:text-lg">
+                Snap one photo. Noosho restyles your space and finds every piece
+                to shop. Free to try.
+              </p>
+            </div>
+            <Link
+              href="/create"
+              className="group hidden sm:inline-flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-all shadow-lg shadow-orange-700/20 hover:shadow-orange-700/30"
+            >
+              <Wand2 size={16} />
+              Design your own — free
+              <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+          </div>
         </div>
 
         {/* Filters — one compact row; category chips only for the active tab */}
@@ -242,7 +261,7 @@ export default async function Home({
             {pageDesigns.map((d, i) => (
               <article
                 key={d.id}
-                className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all"
+                className="group rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-orange-200 dark:hover:border-orange-900/50 hover:shadow-xl hover:shadow-orange-900/5 hover:-translate-y-0.5 transition-all duration-200"
               >
                 <div className="relative">
                   <BeforeAfterSlider
@@ -329,6 +348,29 @@ export default async function Home({
                 Next
               </span>
             )}
+          </div>
+        )}
+
+        {/* Closing CTA */}
+        {designs.length > 0 && (
+          <div className="relative overflow-hidden rounded-3xl bg-zinc-900 dark:bg-zinc-800 px-8 py-12 text-center mt-12">
+            <div className="absolute inset-0 -z-0 bg-cta-glow opacity-80" />
+            <div className="relative z-10">
+              <h2 className="text-xl sm:text-2xl font-semibold tracking-tight text-white mb-2">
+                Your room could be next
+              </h2>
+              <p className="text-zinc-300 mb-6 max-w-md mx-auto text-sm sm:text-base">
+                Upload one photo and get a designer-quality redesign with every
+                product ready to shop.
+              </p>
+              <Link
+                href="/create"
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-medium text-zinc-900 bg-white hover:bg-zinc-100 transition-colors"
+              >
+                <Wand2 size={16} />
+                Design your own — free
+              </Link>
+            </div>
           </div>
         )}
       </main>
