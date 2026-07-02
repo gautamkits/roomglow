@@ -239,7 +239,7 @@ export default async function Home({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-            {pageDesigns.map((d) => (
+            {pageDesigns.map((d, i) => (
               <article
                 key={d.id}
                 className="rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md transition-all"
@@ -253,6 +253,7 @@ export default async function Home({
                     aspect="aspect-[4/3]"
                     rounded={false}
                     showLabels={false}
+                    priority={i < 4}
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   />
                   <span

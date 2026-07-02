@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   turbopack: {},
   images: {
     formats: ["image/avif", "image/webp"],
+    // Cache optimized variants for a day so warm loads skip re-optimization.
+    minimumCacheTTL: 86400,
     remotePatterns: [
       { protocol: "https", hostname: "*.public.blob.vercel-storage.com" },
       { protocol: "https", hostname: "m.media-amazon.com" },

@@ -17,6 +17,8 @@ interface BeforeAfterSliderProps {
   blurBefore?: string | null;
   blurAfter?: string | null;
   sizes?: string;
+  /** Eager-load + high fetch priority — set on above-the-fold cards for LCP. */
+  priority?: boolean;
 }
 
 export default function BeforeAfterSlider({
@@ -30,10 +32,12 @@ export default function BeforeAfterSlider({
   blurBefore,
   blurAfter,
   sizes = "(max-width: 640px) 50vw, 25vw",
+  priority = false,
 }: BeforeAfterSliderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState(50);
-  const dragging = useRef(false);
+  // Holds the teardown for the current drag session's window listeners, if any.
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const setFromClientX = useCallback((clientX: number) => {
     const el = containerRef.current;
@@ -43,22 +47,33 @@ export default function BeforeAfterSlider({
     setPos(Math.max(0, Math.min(100, pct)));
   }, []);
 
-  useEffect(() => {
-    const move = (e: MouseEvent) => dragging.current && setFromClientX(e.clientX);
-    const touch = (e: TouchEvent) =>
-      dragging.current && e.touches[0] && setFromClientX(e.touches[0].clientX);
-    const stop = () => (dragging.current = false);
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", stop);
-    window.addEventListener("touchmove", touch, { passive: true });
-    window.addEventListener("touchend", stop, { passive: true });
-    return () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", stop);
-      window.removeEventListener("touchmove", touch);
-      window.removeEventListener("touchend", stop);
-    };
-  }, [setFromClientX]);
+  // Attach move/end listeners ONLY while dragging (added on pointer-down, removed
+  // on release). Avoids ~4 always-on window listeners per instance — critical on
+  // the gallery where dozens of sliders mount at once (TBT/INP win).
+  const startDrag = useCallback(
+    (clientX: number) => {
+      setFromClientX(clientX);
+      const move = (e: MouseEvent) => setFromClientX(e.clientX);
+      const touch = (e: TouchEvent) =>
+        e.touches[0] && setFromClientX(e.touches[0].clientX);
+      const stop = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", stop);
+        window.removeEventListener("touchmove", touch);
+        window.removeEventListener("touchend", stop);
+        cleanupRef.current = null;
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", stop);
+      window.addEventListener("touchmove", touch, { passive: true });
+      window.addEventListener("touchend", stop, { passive: true });
+      cleanupRef.current = stop;
+    },
+    [setFromClientX]
+  );
+
+  // Clean up if unmounted mid-drag.
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const beforeClip = { clipPath: `inset(0 ${100 - pos}% 0 0)` };
 
@@ -68,14 +83,8 @@ export default function BeforeAfterSlider({
       className={`relative w-full select-none overflow-hidden ${
         rounded ? "rounded-2xl" : ""
       } ${aspect || ""} border border-zinc-200 dark:border-zinc-800 shadow-lg cursor-ew-resize`}
-      onMouseDown={(e) => {
-        dragging.current = true;
-        setFromClientX(e.clientX);
-      }}
-      onTouchStart={(e) => {
-        dragging.current = true;
-        if (e.touches[0]) setFromClientX(e.touches[0].clientX);
-      }}
+      onMouseDown={(e) => startDrag(e.clientX)}
+      onTouchStart={(e) => e.touches[0] && startDrag(e.touches[0].clientX)}
     >
       {aspect ? (
         <>
@@ -85,6 +94,7 @@ export default function BeforeAfterSlider({
             fill
             sizes={sizes}
             draggable={false}
+            priority={priority}
             className="object-cover"
             {...(blurAfter ? { placeholder: "blur" as const, blurDataURL: blurAfter } : {})}
           />
