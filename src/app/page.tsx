@@ -310,9 +310,15 @@ export default async function Home({
                 <div className="px-3 pt-2.5">
                   <Link
                     href={`/design/${d.id}`}
-                    className="text-sm font-medium text-zinc-900 dark:text-zinc-100 hover:text-orange-700 transition-colors line-clamp-1 block"
+                    className="group/link flex items-center justify-between gap-2"
                   >
-                    {designTitle(d)}
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100 group-hover/link:text-orange-700 transition-colors line-clamp-1 min-w-0">
+                      {designTitle(d)}
+                    </span>
+                    <span className="shrink-0 inline-flex items-center gap-0.5 text-xs font-medium text-orange-700">
+                      View
+                      <ArrowRight size={12} className="group-hover/link:translate-x-0.5 transition-transform" />
+                    </span>
                   </Link>
                 </div>
                 <div className="flex items-center justify-between px-3 pb-2.5 pt-1.5">
