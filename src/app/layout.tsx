@@ -37,9 +37,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${sora.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${geistSans.variable} ${sora.variable} h-full antialiased overflow-x-clip`} suppressHydrationWarning>
       <body
-        className="min-h-full flex flex-col font-[family-name:var(--font-geist-sans)] bg-stone-50 dark:bg-zinc-950"
+        className="min-h-full flex flex-col font-[family-name:var(--font-geist-sans)] bg-stone-50 dark:bg-zinc-950 overflow-x-clip"
         suppressHydrationWarning
       >
         {children}
