@@ -11,6 +11,7 @@ import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
 import MakeoverProducts from "@/components/MakeoverProducts";
+import InstallPrompt from "@/components/InstallPrompt";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
 interface DesignData {
@@ -338,6 +339,8 @@ function Viewer({
             )}
           </div>
         )}
+
+        {isUnlocked && !approved && <InstallPrompt />}
 
         {approved && (
           <div className="mt-10 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 text-center">

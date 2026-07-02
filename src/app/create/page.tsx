@@ -27,6 +27,7 @@ import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
 import OccasionProducts from "@/components/OccasionProducts";
 import MakeoverProducts from "@/components/MakeoverProducts";
+import InstallPrompt from "@/components/InstallPrompt";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -542,6 +543,8 @@ function HomeContent() {
                 )}
               </div>
             )}
+
+            {isUnlocked && <InstallPrompt />}
           </div>
         )}
       </main>

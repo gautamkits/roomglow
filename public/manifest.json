@@ -1,7 +1,10 @@
 {
   "name": "Noosho - AI Interior Design",
   "short_name": "Noosho",
-  "start_url": "/",
+  "description": "Upload a photo and get an AI room, event, or personal makeover design — every item shoppable.",
+  "id": "/",
+  "scope": "/",
+  "start_url": "/create",
   "display": "standalone",
   "background_color": "#faf6f0",
   "theme_color": "#bd6a43",
@@ -15,6 +18,12 @@
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
