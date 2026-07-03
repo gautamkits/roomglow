@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sofa, PartyPopper, Calendar, Sparkles } from "lucide-react";
+import { Sofa, PartyPopper, Calendar, Sparkles, Camera, Check } from "lucide-react";
 import { getEvent, getEvents } from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
@@ -292,14 +292,38 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </div>
       )}
 
-      {/* Photo tips */}
-      <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-stone-100 dark:bg-zinc-800/50">
-        <span className="text-xs text-zinc-400 mt-0.5 shrink-0">Tip</span>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed">
-          {mode === "makeover"
-            ? "Upload a clear full-body or waist-up photo with good lighting. AI keeps your face, hair, and background."
-            : "Upload a clean, uncluttered photo with good lighting. Clear away personal items for the best results."}
-        </p>
+      {/* Photo tips — prominent, since photo quality drives output quality */}
+      <div className="rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="w-7 h-7 rounded-lg bg-amber-400/30 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+            <Camera size={15} className="text-amber-700 dark:text-amber-400" />
+          </span>
+          <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+            For the best result
+          </p>
+        </div>
+        <ul className="space-y-1">
+          {(mode === "makeover"
+            ? [
+                "Full-body or waist-up, facing the camera",
+                "Good, even lighting — a plain background works best",
+                "Keep your face clearly visible",
+              ]
+            : [
+                "Declutter first — remove clothes, boxes & personal items",
+                "Good, even lighting (daytime is best)",
+                "Fit the whole space in one frame",
+              ]
+          ).map((tip) => (
+            <li
+              key={tip}
+              className="flex items-start gap-1.5 text-xs text-amber-900/90 dark:text-amber-200/80 leading-relaxed"
+            >
+              <Check size={13} className="text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+              {tip}
+            </li>
+          ))}
+        </ul>
       </div>
 
       {/* Upload — gated until event options / makeover style are set */}
