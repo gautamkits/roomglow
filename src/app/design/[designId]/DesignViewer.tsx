@@ -143,7 +143,18 @@ function Viewer({
       <header className="border-b border-zinc-200 dark:border-zinc-800 bg-stone-50/80 dark:bg-zinc-950/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
-            onClick={() => router.push(approved ? "/explore" : "/")}
+            onClick={() => {
+              // Real back-navigation so the user returns to where they came
+              // from (dashboard, profile, gallery — including scroll/filters).
+              // Fresh tabs from shared links have no history → fall back to
+              // the gallery. (No referrer check: client-side Next navigations
+              // leave document.referrer empty.)
+              if (window.history.length > 1) {
+                router.back();
+              } else {
+                router.push(approved ? "/explore" : "/");
+              }
+            }}
             className="flex items-center gap-2 text-zinc-500 hover:text-zinc-700 transition-colors"
           >
             <ArrowLeft size={18} />
