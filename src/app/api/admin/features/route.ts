@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getFeatures, setFeature } from "@/lib/db";
+import { countPromoSignups, FREE_PROMO_USER_CAP } from "@/lib/promo";
 import { revalidatePath } from "next/cache";
 
 async function guardAdmin() {
@@ -15,7 +16,8 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const features = await getFeatures();
-  return NextResponse.json(features);
+  const promoSignups = await countPromoSignups().catch(() => 0);
+  return NextResponse.json({ ...features, promoSignups, promoCap: FREE_PROMO_USER_CAP });
 }
 
 export async function PUT(request: Request) {

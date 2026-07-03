@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2, Tag, Sparkles } from "lucide-react";
+import { Check, X, BarChart2, Tag, Sparkles, Gift } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -30,6 +30,9 @@ function AdminContent() {
   const [forbidden, setForbidden] = useState(false);
   const [makeoverEnabled, setMakeoverEnabled] = useState(false);
   const [featureLoading, setFeatureLoading] = useState(false);
+  const [firstFreeEnabled, setFirstFreeEnabled] = useState(false);
+  const [promoSignups, setPromoSignups] = useState(0);
+  const [promoCap, setPromoCap] = useState(500);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,21 +63,34 @@ function AdminContent() {
   useEffect(() => {
     fetch("/api/admin/features")
       .then((r) => r.json())
-      .then((d) => setMakeoverEnabled(!!d.makeover))
+      .then((d) => {
+        setMakeoverEnabled(!!d.makeover);
+        setFirstFreeEnabled(!!d.first_design_free);
+        setPromoSignups(d.promoSignups ?? 0);
+        setPromoCap(d.promoCap ?? 500);
+      })
       .catch(() => {});
   }, []);
 
-  const toggleMakeover = async () => {
+  const toggleFeature = async (
+    key: string,
+    current: boolean,
+    set: (v: boolean) => void
+  ) => {
     setFeatureLoading(true);
-    const next = !makeoverEnabled;
-    setMakeoverEnabled(next);
+    const next = !current;
+    set(next);
     await fetch("/api/admin/features", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: "makeover", enabled: next }),
-    }).catch(() => setMakeoverEnabled(!next));
+      body: JSON.stringify({ key, enabled: next }),
+    }).catch(() => set(!next));
     setFeatureLoading(false);
   };
+
+  const toggleMakeover = () => toggleFeature("makeover", makeoverEnabled, setMakeoverEnabled);
+  const toggleFirstFree = () =>
+    toggleFeature("first_design_free", firstFreeEnabled, setFirstFreeEnabled);
 
   useEffect(() => {
     if (status === "unauthenticated") signIn("google");
@@ -194,6 +210,31 @@ function AdminContent() {
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
                   makeoverEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Gift size={15} className="text-orange-700" />
+              <div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200">First design free</p>
+                <p className="text-xs text-zinc-500">
+                  Next {promoCap} signups get 1 free design · {promoSignups} of {promoCap} signups so far
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleFirstFree}
+              disabled={featureLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                firstFreeEnabled ? "bg-orange-700" : "bg-zinc-300 dark:bg-zinc-700"
+              } ${featureLoading ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  firstFreeEnabled ? "translate-x-6" : "translate-x-1"
                 }`}
               />
             </button>

@@ -28,6 +28,7 @@ import ProcessingView from "@/components/ProcessingView";
 import OccasionProducts from "@/components/OccasionProducts";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
+import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
 
@@ -46,6 +47,7 @@ function HomeContent() {
     designNarrative,
     designId,
     isUnlocked,
+    promoApplied,
     maxBudget,
     selectedItems,
     error,
@@ -355,6 +357,12 @@ function HomeContent() {
               </div>
             </div>
 
+            {promoApplied && (
+              <div className="mb-4 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-orange-200/70 dark:border-orange-900/40 bg-orange-50/70 dark:bg-orange-950/20 text-sm text-zinc-800 dark:text-zinc-200 animate-fade-up">
+                🎁 Your first design is on us — enjoy! Future designs use normal pricing.
+              </div>
+            )}
+
             {designNarrative && isUnlocked && (
               <div className="mb-4 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl animate-fade-up">
                 <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
@@ -430,7 +438,7 @@ function HomeContent() {
               )}
             </div>
 
-            {isUnlocked && mode === "space" && (
+            {RESTYLE_UI_ENABLED && isUnlocked && mode === "space" && (
               <div className="mt-8 animate-fade-up-delay-2">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
                   Try a different style

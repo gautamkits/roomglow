@@ -6,6 +6,7 @@ import { makeBlurDataUrl, makeWatermarkedPreview } from "@/lib/images";
 import { notifyAdminError } from "@/lib/email";
 import { sendDesignReadyEmail } from "@/lib/email";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
+import { isFreeFirstDesignEligible } from "@/lib/promo";
 
 export const runtime = "nodejs";
 
@@ -29,11 +30,13 @@ export async function POST(request: Request) {
 
     const session = await auth();
     const userId = session?.user?.id ?? null;
-    // In markets without payment (India, until Instamojo is approved), a
-    // signed-in user's design unlocks immediately. Where payment is enabled
-    // (US/Stripe), it stays locked until paid.
+    // Unlock immediately when the market has no payment, or when the user is
+    // in the launch promo (first 500 signups get their first design free).
     const locale = localeFromRequest(request);
-    const isUnlocked = !!userId && !PAYMENT_ENABLED[locale];
+    const freeMarket = !!userId && !PAYMENT_ENABLED[locale];
+    const promoApplied =
+      !!userId && !freeMarket && (await isFreeFirstDesignEligible(userId));
+    const isUnlocked = freeMarket || promoApplied;
 
     const ts = Date.now();
     const originalBuf = toBuffer(originalImage);
@@ -130,7 +133,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ designId, isUnlocked });
+    return NextResponse.json({ designId, isUnlocked, promoApplied });
   } catch (error) {
     console.error("Save design failed:", error);
     await notifyAdminError({ route: "save-design", error });

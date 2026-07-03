@@ -52,6 +52,7 @@ export function useRoomFlow() {
   const [designNarrative, setDesignNarrative] = useState<string>("");
   const [designId, setDesignId] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [promoApplied, setPromoApplied] = useState(false);
   const [maxBudget, setMaxBudget] = useState<number | undefined>(undefined);
   const [selectedItems, setSelectedItems] = useState<SuggestedProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -379,11 +380,13 @@ export function useRoomFlow() {
           p.designId = saveRes.designId;
           setDesignId(saveRes.designId);
           setIsUnlocked(!!saveRes.isUnlocked);
+          setPromoApplied(!!saveRes.promoApplied);
         } catch (saveErr) {
           console.error("[save-design] Failed to save design:", saveErr);
           p.designId = null;
           setDesignId(null);
           setIsUnlocked(false);
+          setPromoApplied(false);
         }
       }
 
@@ -574,6 +577,7 @@ export function useRoomFlow() {
     setDesignNarrative("");
     setDesignId(null);
     setIsUnlocked(false);
+    setPromoApplied(false);
     setMaxBudget(undefined);
     setSelectedItems([]);
     setError(null);
@@ -601,6 +605,7 @@ export function useRoomFlow() {
     designNarrative,
     designId,
     isUnlocked,
+    promoApplied,
     error,
     statusMessage,
     selectMode,

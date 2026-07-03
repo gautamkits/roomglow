@@ -12,6 +12,7 @@ import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
+import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
 interface DesignData {
@@ -283,7 +284,7 @@ function Viewer({
           )}
         </div>
 
-        {isUnlocked && !approved && design.mode === "space" && (
+        {RESTYLE_UI_ENABLED && isUnlocked && !approved && design.mode === "space" && (
           <div className="mt-8">
             <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
               {restyling ? `Rendering ${restyling} style…` : "Try a different style"}

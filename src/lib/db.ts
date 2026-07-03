@@ -655,13 +655,17 @@ async function ensureFeaturesSchema() {
     INSERT INTO site_features (key, enabled) VALUES ('makeover', false)
     ON CONFLICT (key) DO NOTHING
   `;
+  await sql`
+    INSERT INTO site_features (key, enabled) VALUES ('first_design_free', true)
+    ON CONFLICT (key) DO NOTHING
+  `;
   featuresSchemaReady = true;
 }
 
 export async function getFeatures(): Promise<Record<string, boolean>> {
   await ensureFeaturesSchema();
   const { rows } = await sql`SELECT key, enabled FROM site_features`;
-  const result: Record<string, boolean> = { makeover: false };
+  const result: Record<string, boolean> = { makeover: false, first_design_free: false };
   for (const row of rows) result[row.key] = row.enabled;
   return result;
 }
