@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { SessionProvider, useSession } from "next-auth/react";
 import {
@@ -11,6 +11,7 @@ import {
   Download,
   Share2,
   RefreshCw,
+  ImageOff,
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { useUserLibrary } from "@/lib/useUserLibrary";
@@ -72,6 +73,10 @@ function HomeContent() {
   const router = useRouter();
   const { formatBudget } = useLocale();
   const [showBefore, setShowBefore] = useState(false);
+  const [clutterDismissed, setClutterDismissed] = useState(false);
+  // Reset the clutter nudge whenever a fresh photo is uploaded, so a new
+  // cluttered photo re-triggers the warning even after a prior dismiss.
+  useEffect(() => setClutterDismissed(false), [image]);
   const [shareState, setShareState] = useState<"idle" | "sending" | "done">("idle");
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
@@ -259,6 +264,39 @@ function HomeContent() {
         {/* ─── PRODUCT SELECTION ─── */}
         {step === "product-selection" && roomAnalysis && (
           <div className="py-10 max-w-2xl mx-auto">
+            {mode !== "makeover" &&
+              roomAnalysis.clutterLevel === "cluttered" &&
+              !clutterDismissed && (
+                <div className="mb-6 rounded-xl border border-amber-300 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/20 p-4 animate-fade-up">
+                  <div className="flex items-start gap-2.5">
+                    <ImageOff size={18} className="text-amber-700 dark:text-amber-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                        This photo looks a bit busy
+                      </p>
+                      <p className="text-xs text-amber-900/80 dark:text-amber-200/80 leading-relaxed mt-0.5">
+                        A tidier, well-lit photo gives noticeably cleaner results. You can
+                        upload a different one, or continue with this.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <button
+                          onClick={reset}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors"
+                        >
+                          <RotateCcw size={13} />
+                          Upload a cleaner photo
+                        </button>
+                        <button
+                          onClick={() => setClutterDismissed(true)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                        >
+                          Continue anyway
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             <div className="mb-7 animate-fade-up">
               <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-1.5">
                 {mode === "event"
