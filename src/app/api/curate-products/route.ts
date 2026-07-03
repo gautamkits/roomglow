@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+    }
+
     const { originalImage, designVision, categories, budgetInstruction } =
       (await request.json()) as {
         originalImage: string;

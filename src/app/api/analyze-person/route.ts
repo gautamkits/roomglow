@@ -19,7 +19,10 @@ export async function POST(request: Request) {
     }
 
     const session = await auth();
-    const isAdmin = !!session?.user?.email && isAdminEmail(session.user.email);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+    }
+    const isAdmin = !!session.user.email && isAdminEmail(session.user.email);
     const { ok, retryAfterMs } = uploadRateLimit({
       key: "analyze-person",
       ip: clientIp(request),

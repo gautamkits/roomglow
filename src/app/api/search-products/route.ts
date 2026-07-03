@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { searchProducts } from "@/lib/amazon";
 import { localeFromRequest } from "@/lib/locale";
 import type { ProductRecommendation } from "@/lib/types";
@@ -6,6 +7,11 @@ import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+    }
+
     const body = await request.json() as { products: ProductRecommendation[] };
     const { products } = body;
     if (!products?.length) {

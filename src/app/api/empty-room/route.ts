@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { emptyRoom } from "@/lib/gemini";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { rateLimit } from "@/lib/rateLimit";
 import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
 import { notifyAdminError } from "@/lib/email";
@@ -13,24 +13,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
 
-    // Emptying the room is a paid image-generation step — cap it, mirroring
-    // /api/generate-image. Anonymous: tight per-IP cap. Signed-in: a generous
-    // per-user hourly cap so a "try clearing again" loop / refresh can't rack up
-    // paid gens. Admins get a higher cap, not a free pass.
+    // Emptying the room is a paid image-generation step — sign-in required,
+    // then a per-user hourly cap so a "try clearing again" loop / refresh can't
+    // rack up paid gens. Admins get a higher cap, not a free pass.
     const session = await auth();
     if (!session?.user?.id) {
-      const { ok, retryAfterMs } = rateLimit(
-        `emptyroom:${clientIp(request)}`,
-        6,
-        60 * 60 * 1000
-      );
-      if (!ok) {
-        return NextResponse.json(
-          { error: "You've reached the free limit. Sign in to keep designing." },
-          { status: 429, headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } }
-        );
-      }
-    } else {
+      return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+    }
+    {
       const limit = isAdminEmail(session.user.email) ? 100 : 30;
       const { ok, retryAfterMs } = rateLimit(
         `emptyroom:user:${session.user.id}`,

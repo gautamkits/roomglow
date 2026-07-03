@@ -15,7 +15,10 @@ export async function POST(request: Request) {
     // Front-door of the design funnel — cap uploads per IP and per user so
     // bots (anonymous OR signed-in) can't flood the analyze/generation pipeline.
     const session = await auth();
-    const isAdmin = !!session?.user?.email && isAdminEmail(session.user.email);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to design." }, { status: 401 });
+    }
+    const isAdmin = !!session.user.email && isAdminEmail(session.user.email);
     const { ok, retryAfterMs } = uploadRateLimit({
       key: "analyze",
       ip: clientIp(request),

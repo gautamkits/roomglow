@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { generateDesignImage } from "@/lib/gemini";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
-import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { rateLimit } from "@/lib/rateLimit";
 import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
 import { notifyAdminError } from "@/lib/email";
@@ -20,20 +20,14 @@ export async function POST(request: Request) {
     // detection to unlock time (P1-b).
     const session = await auth();
 
-    // Image generation is the costliest step — cap it to stop runaway spend.
-    // Anonymous: tight per-IP cap up to the paywall (U1). Signed-in: a generous
-    // per-user hourly cap so a retry loop / page-refresh can't rack up paid gens
-    // (client-side caps reset on refresh). Admins get a higher cap, not a free
-    // pass — unbounded admin/testing is what inflated the bill.
+    // Image generation is the costliest step — sign-in required, then a
+    // per-user hourly cap so a retry loop / page-refresh can't rack up paid
+    // gens (client-side caps reset on refresh). Admins get a higher cap, not a
+    // free pass — unbounded admin/testing is what inflated the bill.
     if (!session?.user?.id) {
-      const { ok, retryAfterMs } = rateLimit(`genimg:${clientIp(request)}`, 6, 60 * 60 * 1000);
-      if (!ok) {
-        return NextResponse.json(
-          { error: "You've reached the free limit. Sign in to keep designing." },
-          { status: 429, headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) } }
-        );
-      }
-    } else {
+      return NextResponse.json({ error: "Please sign in to generate a design." }, { status: 401 });
+    }
+    {
       const limit = isAdminEmail(session.user.email) ? 100 : 30;
       const { ok, retryAfterMs } = rateLimit(`genimg:user:${session.user.id}`, limit, 60 * 60 * 1000);
       if (!ok) {

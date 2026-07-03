@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import { recommendProducts } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
+    }
+
     const { roomAnalysis, userAnswers, selectedProductTypes, eventContext } =
       await request.json();
     if (!roomAnalysis || !userAnswers) {

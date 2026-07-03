@@ -29,11 +29,14 @@ export async function POST(request: Request) {
     }
 
     const session = await auth();
-    const userId = session?.user?.id ?? null;
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Please sign in to save your design." }, { status: 401 });
+    }
+    const userId = session.user.id;
     // Unlock immediately when the market has no payment, or when the user is
     // in the launch promo (first 500 signups get their first design free).
     const locale = localeFromRequest(request);
-    const freeMarket = !!userId && !PAYMENT_ENABLED[locale];
+    const freeMarket = !PAYMENT_ENABLED[locale];
     const promoApplied =
       !!userId && !freeMarket && (await isFreeFirstDesignEligible(userId));
     const isUnlocked = freeMarket || promoApplied;
