@@ -63,15 +63,34 @@ button, [role="button"], a {
   animation: card-in 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-/* Attention pulse for the primary CTA — expanding clay ring that fades out. */
-@keyframes cta-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(160, 69, 37, 0.5); }
-  70% { box-shadow: 0 0 0 9px rgba(160, 69, 37, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(160, 69, 37, 0); }
+/* Attention sweep for the primary CTA — a light band wipes across the button
+   (like the DesignCafe "Get Free Estimate" fill). Content stays above the band. */
+@keyframes cta-sweep {
+  0% { transform: translateX(-130%) skewX(-12deg); }
+  55%, 100% { transform: translateX(130%) skewX(-12deg); }
 }
 
-.animate-cta-pulse {
-  animation: cta-pulse 2.2s ease-out infinite;
+.cta-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-sweep::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 55%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.38),
+    transparent
+  );
+  transform: translateX(-130%) skewX(-12deg);
+  animation: cta-sweep 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* Gentle vertical drift for hero glow layers. */
@@ -114,9 +133,12 @@ button, [role="button"], a {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-card-in,
-  .animate-glow-drift,
-  .animate-cta-pulse {
+  .animate-glow-drift {
     animation: none !important;
+  }
+  .cta-sweep::before {
+    animation: none !important;
+    display: none;
   }
   .tilt-card {
     transform: none !important;

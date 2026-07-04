@@ -40,7 +40,7 @@ export default function SiteHeader({
           {showDesignCta && (
             <Link
               href="/create"
-              className="animate-cta-pulse inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white font-medium transition-colors"
+              className="cta-sweep inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white font-medium transition-colors"
             >
               <Sparkles size={14} />
               <span className="hidden sm:inline">Design your own</span>
