@@ -662,11 +662,22 @@ async function ensureFeaturesSchema() {
   featuresSchemaReady = true;
 }
 
+// Feature flags change rarely (admin toggles) but are read on every dashboard
+// mount + every makeover API call. Cache in-module (per serverless instance,
+// 60s TTL) so it's one DB round-trip per instance, not per request — kills the
+// occasional cold-DB latency spike on /api/features.
+let featuresCache: { at: number; value: Record<string, boolean> } | null = null;
+const FEATURES_TTL_MS = 60 * 1000;
+
 export async function getFeatures(): Promise<Record<string, boolean>> {
+  if (featuresCache && Date.now() - featuresCache.at < FEATURES_TTL_MS) {
+    return featuresCache.value;
+  }
   await ensureFeaturesSchema();
   const { rows } = await sql`SELECT key, enabled FROM site_features`;
   const result: Record<string, boolean> = { makeover: false, first_design_free: false };
   for (const row of rows) result[row.key] = row.enabled;
+  featuresCache = { at: Date.now(), value: result };
   return result;
 }
 
@@ -676,6 +687,7 @@ export async function setFeature(key: string, enabled: boolean) {
     INSERT INTO site_features (key, enabled, updated_at) VALUES (${key}, ${enabled}, now())
     ON CONFLICT (key) DO UPDATE SET enabled = ${enabled}, updated_at = now()
   `;
+  featuresCache = null; // invalidate so the admin toggle takes effect immediately
 }
 
 // ─── Restyle lineage (save-as-new) ───
