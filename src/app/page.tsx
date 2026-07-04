@@ -135,20 +135,20 @@ export default async function Home({
         </Suspense>
       </div>
 
-      <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
+      <main className="flex-1 max-w-6xl mx-auto px-5 py-5 w-full">
         {/* Hero — centered */}
-        <div className="relative mb-8">
-          <div className="absolute inset-x-0 -top-10 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
-          <div className="max-w-2xl mx-auto text-center py-4 sm:py-6">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-4 backdrop-blur-sm">
+        <div className="relative mb-6">
+          <div className="absolute inset-x-0 -top-8 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
+          <div className="max-w-2xl mx-auto text-center">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-3 backdrop-blur-sm">
               <Sparkles size={13} className="text-orange-700" />
               Real designs from real photos
             </div>
-            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.12]">
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
               See your room redesigned —{" "}
               <span className="text-orange-700">then buy the look</span>
             </h1>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-3 text-base sm:text-lg">
+            <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm sm:text-base">
               Snap one photo. Noosho restyles it and finds every piece to shop.
             </p>
           </div>
