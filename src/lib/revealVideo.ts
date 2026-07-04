@@ -28,9 +28,9 @@ const PH = { x: 250, y: 250, w: 580, h: 1130, pad: 16, rad: 64 };
 // Brand system
 const BG = "#faf7f3";
 const INK = "#1c1714";
-const CLAY = "#a04525";
-const CLAY_BR = "#ce6533";
-const CLAY_LT = "#e89b6b";
+const CLAY = "#f41c5e";
+const CLAY_BR = "#f75a86";
+const CLAY_LT = "#f98caa";
 const CLAY_DP = "#7a3620";
 const CREAM = "#f7f3ee";
 const TINT = "#fcf3ed";
@@ -252,10 +252,10 @@ function drawBackdrop(ctx: CanvasRenderingContext2D, t: number) {
   ctx.fillRect(0, 0, W, H);
   const dx = Math.sin(t * 0.25) * 0.06 * W, dy = Math.cos(t * 0.2) * 0.05 * H;
   const g1 = ctx.createRadialGradient(0.72 * W + dx, 0.18 * H + dy, 0, 0.72 * W + dx, 0.18 * H + dy, 0.5 * W);
-  g1.addColorStop(0, "rgba(160,69,37,0.10)"); g1.addColorStop(1, "rgba(160,69,37,0)");
+  g1.addColorStop(0, "rgba(244,28,94,0.10)"); g1.addColorStop(1, "rgba(244,28,94,0)");
   ctx.fillStyle = g1; ctx.fillRect(0, 0, W, H);
   const g2 = ctx.createRadialGradient(0.16 * W - dx, 0.84 * H - dy, 0, 0.16 * W - dx, 0.84 * H - dy, 0.5 * W);
-  g2.addColorStop(0, "rgba(206,101,51,0.09)"); g2.addColorStop(1, "rgba(206,101,51,0)");
+  g2.addColorStop(0, "rgba(246,88,127,0.09)"); g2.addColorStop(1, "rgba(246,88,127,0)");
   ctx.fillStyle = g2; ctx.fillRect(0, 0, W, H);
 }
 
@@ -417,7 +417,7 @@ function scenePhone(ctx: CanvasRenderingContext2D, before: HTMLImageElement, t: 
       const selP = sel ? easeOutBack(clamp((t - 10.7) / 0.4)) : 0;
       ctx.save();
       ctx.globalAlpha = stOp * ap;
-      ctx.fillStyle = sel ? `rgba(160,69,37,${selP})` : "#fff";
+      ctx.fillStyle = sel ? `rgba(244,28,94,${selP})` : "#fff";
       roundRect(ctx, cx, cy, cw, chH, 40); ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = sel && selP > 0.3 ? CLAY : LINE; ctx.stroke();
       ctx.fillStyle = sel && selP > 0.5 ? "#fff" : INK;
@@ -484,7 +484,7 @@ function sceneTransform(ctx: CanvasRenderingContext2D, before: HTMLImageElement,
     ctx.restore();
     if (scanning) {
       const glow = ctx.createLinearGradient(0, sy - 200, 0, sy);
-      glow.addColorStop(0, "rgba(206,101,51,0)"); glow.addColorStop(1, "rgba(206,101,51,0.55)");
+      glow.addColorStop(0, "rgba(246,88,127,0)"); glow.addColorStop(1, "rgba(246,88,127,0.55)");
       ctx.fillStyle = glow; ctx.fillRect(rect.x, sy - 200, rect.w, 200);
       ctx.fillStyle = CLAY_BR; ctx.fillRect(rect.x, sy - 3, rect.w, 6);
     }

@@ -15,17 +15,17 @@
 /* Brand palette — the "orange" ramp is remapped to Noosho Clay (terracotta)
    so every CTA, tint, and accent across the app shares the new identity. */
 @theme {
-  --color-orange-50: #fcf3ed;
-  --color-orange-100: #f7decb;
-  --color-orange-200: #efbc9b;
-  --color-orange-300: #e59a6b;
-  --color-orange-400: #da7b44;
-  --color-orange-500: #ce6533;
-  --color-orange-600: #b85129;
-  --color-orange-700: #a04525;
-  --color-orange-800: #823922;
-  --color-orange-900: #5f2b1b;
-  --color-orange-950: #371810;
+  --color-orange-50: #fef1f6;
+  --color-orange-100: #fddde7;
+  --color-orange-200: #fcb8cd;
+  --color-orange-300: #f98caa;
+  --color-orange-400: #f75a86;
+  --color-orange-500: #f53a6e;
+  --color-orange-600: #f42763;
+  --color-orange-700: #f41c5e;
+  --color-orange-800: #d4104f;
+  --color-orange-900: #9d0c3d;
+  --color-orange-950: #5c0724;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -174,14 +174,14 @@ button, [role="button"], a {
 
 .bg-hero-glow {
   background:
-    radial-gradient(60% 50% at 75% 20%, rgba(160, 69, 37, 0.10), transparent 70%),
-    radial-gradient(50% 45% at 15% 80%, rgba(206, 101, 51, 0.08), transparent 70%);
+    radial-gradient(60% 50% at 75% 20%, rgba(244, 28, 94, 0.10), transparent 70%),
+    radial-gradient(50% 45% at 15% 80%, rgba(246, 88, 127, 0.08), transparent 70%);
 }
 
 .bg-cta-glow {
   background:
-    radial-gradient(50% 80% at 80% 30%, rgba(160, 69, 37, 0.45), transparent 70%),
-    radial-gradient(45% 70% at 10% 90%, rgba(95, 43, 27, 0.4), transparent 70%);
+    radial-gradient(50% 80% at 80% 30%, rgba(244, 28, 94, 0.45), transparent 70%),
+    radial-gradient(45% 70% at 10% 90%, rgba(157, 12, 61, 0.4), transparent 70%);
 }
 
 @keyframes scan-sweep {
@@ -198,10 +198,10 @@ button, [role="button"], a {
   background: linear-gradient(
     to bottom,
     transparent,
-    rgba(160, 69, 37, 0.35) 70%,
-    rgba(218, 123, 68, 0.6)
+    rgba(244, 28, 94, 0.35) 70%,
+    rgba(249, 127, 160, 0.6)
   );
-  box-shadow: 0 2px 14px 2px rgba(160, 69, 37, 0.5);
+  box-shadow: 0 2px 14px 2px rgba(244, 28, 94, 0.5);
   animation: scan-sweep 2.1s ease-in-out infinite;
 }
 
@@ -218,7 +218,7 @@ button, [role="button"], a {
   top: 0;
   bottom: 0;
   width: 40%;
-  background: #a04525;
+  background: #f41c5e;
   border-radius: 9999px;
   animation: progress-indeterminate 1.1s ease-in-out infinite;
 }

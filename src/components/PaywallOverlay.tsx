@@ -197,7 +197,7 @@ export default function PaywallOverlay({
           order_id: orderData.orderId,
           name: "Noosho",
           description: "Design unlock",
-          theme: { color: "#a04525" },
+          theme: { color: "#f41c5e" },
           handler: async (response: {
             razorpay_payment_id: string;
             razorpay_order_id: string;
