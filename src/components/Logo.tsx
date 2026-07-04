@@ -17,7 +17,7 @@ export function TwinRings({ size = 22, className = "" }: MarkProps) {
       className={className}
     >
       <circle cx="13" cy="14" r="11" stroke="currentColor" strokeWidth="4" />
-      <circle cx="27" cy="14" r="11" stroke="#F41C5E" strokeWidth="4" />
+      <circle cx="27" cy="14" r="11" stroke="#BD6A43" strokeWidth="4" />
     </svg>
   );
 }

@@ -17,8 +17,8 @@ const AFFILIATE_DISCLOSURE =
 
 // ─── Brand palette (Clay / Ink / Linen) ───
 const INK = "#181410";
-const CLAY = "#f41c5e";
-const CLAY_CTA = "#d4104f";
+const CLAY = "#bd6a43";
+const CLAY_CTA = "#a04525";
 const LINEN = "#faf6f0";
 const TEXT = "#1c1917";
 const MUTED = "#78716c";
