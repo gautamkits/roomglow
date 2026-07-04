@@ -17,14 +17,18 @@ export default function RotatingHeadline() {
   }, []);
 
   return (
-    <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
-      See your{" "}
+    // Fixed three-line structure so the rotating word (which varies in length)
+    // never reflows "redesigned" onto another line — no vertical jump.
+    <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.08]">
+      See your
+      <br />
       <span
         key={i}
-        className="inline-block text-orange-700 bg-orange-50 dark:bg-orange-950/30 rounded-xl px-2.5 animate-fade-up"
+        className="inline-block align-baseline text-orange-700 bg-orange-50 dark:bg-orange-950/30 rounded-xl px-2.5 my-0.5 animate-fade-up"
       >
         {WORDS[i]}
-      </span>{" "}
+      </span>
+      <br />
       redesigned
     </h1>
   );
