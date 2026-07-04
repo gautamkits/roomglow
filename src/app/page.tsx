@@ -21,7 +21,6 @@ import GallerySearch from "@/components/GallerySearch";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
 import TiltCard from "@/components/TiltCard";
-import RotatingHeadline from "@/components/RotatingHeadline";
 
 export const metadata: Metadata = {
   title: "Noosho — AI room & event designs from one photo",
@@ -137,18 +136,20 @@ export default async function Home({
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
-        {/* Hero */}
-        <div className="relative mb-7">
+        {/* Hero — centered */}
+        <div className="relative mb-8">
           <div className="absolute inset-x-0 -top-10 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
-          <div className="max-w-2xl">
+          <div className="max-w-2xl mx-auto text-center py-4 sm:py-6">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-4 backdrop-blur-sm">
               <Sparkles size={13} className="text-orange-700" />
               Real designs from real photos
             </div>
-            <RotatingHeadline />
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.12]">
+              See your room redesigned —{" "}
+              <span className="text-orange-700">then buy the look</span>
+            </h1>
             <p className="text-zinc-500 dark:text-zinc-400 mt-3 text-base sm:text-lg">
-              Bedroom, patio, living room — Noosho restyles any space and finds
-              every piece to shop. Free to try.
+              Snap one photo. Noosho restyles it and finds every piece to shop.
             </p>
           </div>
         </div>
