@@ -139,29 +139,19 @@ export default async function Home({
         {/* Hero */}
         <div className="relative mb-7">
           <div className="absolute inset-x-0 -top-10 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-3 backdrop-blur-sm">
-                <Sparkles size={13} className="text-orange-700" />
-                Real designs from real photos
-              </div>
-              <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
-                See your room redesigned —{" "}
-                <span className="text-orange-700">then buy the look</span>
-              </h1>
-              <p className="text-zinc-500 mt-2 text-base sm:text-lg">
-                Snap one photo. Noosho restyles your space and finds every piece
-                to shop. Free to try.
-              </p>
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-3 backdrop-blur-sm">
+              <Sparkles size={13} className="text-orange-700" />
+              Real designs from real photos
             </div>
-            <Link
-              href="/create"
-              className="group hidden sm:inline-flex items-center gap-2 px-5 py-3 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-all shadow-lg shadow-orange-700/20 hover:shadow-orange-700/30"
-            >
-              <Wand2 size={16} />
-              Design your own — free
-              <ArrowRight size={15} className="group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
+              See your room redesigned —{" "}
+              <span className="text-orange-700">then buy the look</span>
+            </h1>
+            <p className="text-zinc-500 mt-2 text-base sm:text-lg">
+              Snap one photo. Noosho restyles your space and finds every piece
+              to shop. Free to try.
+            </p>
           </div>
         </div>
 
