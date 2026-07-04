@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
-import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles, Shirt } from "lucide-react";
+import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles } from "lucide-react";
 import { auth } from "@/auth";
-import { getGalleryCards, getFeatures } from "@/lib/db";
+import { getGalleryCards } from "@/lib/db";
 import {
   designTitle,
   designAltText,
@@ -21,6 +21,7 @@ import GallerySearch from "@/components/GallerySearch";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
 import TiltCard from "@/components/TiltCard";
+import RotatingHeadline from "@/components/RotatingHeadline";
 
 export const metadata: Metadata = {
   title: "Noosho — AI room & event designs from one photo",
@@ -56,10 +57,9 @@ export default async function Home({
 
   // Fetch all approved (lightweight, cached) so facets reflect the whole
   // gallery; filter in JS. auth() stays uncached (per-request session).
-  const [allCards, session, features] = await Promise.all([
+  const [allCards, session] = await Promise.all([
     getCachedGalleryCards(sort),
     auth(),
-    getFeatures().catch(() => ({ makeover: false })),
   ]);
 
   // Facets from the full approved set
@@ -137,44 +137,19 @@ export default async function Home({
       </div>
 
       <main className="flex-1 max-w-6xl mx-auto px-5 py-7 w-full">
-        {/* Hero — pick a mode, each routes into the create flow */}
-        <div className="relative mb-8">
+        {/* Hero */}
+        <div className="relative mb-7">
           <div className="absolute inset-x-0 -top-10 bottom-0 -z-10 bg-hero-glow animate-glow-drift" />
-          <div className="max-w-3xl">
-            <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
-              What would you like to design?
-            </h1>
-            <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-base sm:text-lg">
-              One photo. AI does the rest — every item shoppable. Free to try.
-            </p>
-            <div
-              className={`grid gap-3 mt-5 ${features.makeover ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
-            >
-              {[
-                { href: "/create?mode=space", Icon: Sofa, label: "Interior", sub: "Redesign a room" },
-                { href: "/create?mode=event", Icon: PartyPopper, label: "Event", sub: "Decorate a venue" },
-                ...(features.makeover
-                  ? [{ href: "/create?mode=makeover", Icon: Shirt, label: "Makeover", sub: "Restyle your look" }]
-                  : []),
-              ].map(({ href, Icon, label, sub }) => (
-                <Link
-                  key={label}
-                  href={href}
-                  className="group rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 transition-all hover:border-orange-300 dark:hover:border-orange-900/50 hover:shadow-lg hover:shadow-orange-900/5 hover:-translate-y-0.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-950/30 flex items-center justify-center text-orange-700 dark:text-orange-400">
-                      <Icon size={20} strokeWidth={1.75} />
-                    </span>
-                    <ArrowRight size={16} className="text-zinc-300 dark:text-zinc-600 group-hover:text-orange-700 group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                  <p className="text-base font-semibold text-zinc-900 dark:text-zinc-50 mt-3">
-                    {label}
-                  </p>
-                  <p className="text-sm text-zinc-500">{sub}</p>
-                </Link>
-              ))}
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/70 dark:bg-zinc-900/70 border border-orange-200/60 dark:border-orange-900/40 text-xs font-medium text-orange-800 dark:text-orange-300 mb-4 backdrop-blur-sm">
+              <Sparkles size={13} className="text-orange-700" />
+              Real designs from real photos
             </div>
+            <RotatingHeadline />
+            <p className="text-zinc-500 dark:text-zinc-400 mt-3 text-base sm:text-lg">
+              Bedroom, patio, living room — Noosho restyles any space and finds
+              every piece to shop. Free to try.
+            </p>
           </div>
         </div>
 
