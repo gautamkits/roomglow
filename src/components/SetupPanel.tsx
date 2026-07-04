@@ -67,6 +67,12 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
       .catch(() => {});
   }, []);
 
+  // Honor a ?mode= deep-link from the homepage mode tiles (space/event/makeover).
+  useEffect(() => {
+    const m = new URLSearchParams(window.location.search).get("mode");
+    if (m === "space" || m === "event" || m === "makeover") setMode(m);
+  }, []);
+
   const event = eventId ? getEvent(eventId) : undefined;
   const eventConfigReady =
     mode !== "event" || (!!event && !!subTheme && !!colorScheme);
