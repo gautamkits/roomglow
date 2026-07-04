@@ -145,11 +145,12 @@ export default async function Home({
               Real designs from real photos
             </div>
             <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1]">
-              See your room redesigned —{" "}
+              Design your room or event —{" "}
               <span className="text-orange-700">then buy the look</span>
             </h1>
             <p className="text-zinc-500 dark:text-zinc-400 mt-2 text-sm sm:text-base">
-              Snap one photo. Noosho restyles it and finds every piece to shop.
+              Snap one photo. Noosho restyles any space and finds every piece to
+              shop.
             </p>
           </div>
         </div>
