@@ -8,6 +8,9 @@ export interface EventDefinition {
   colorSchemes: string[];
   markets: Locale[]; // which marketplaces show this event
   gendered?: boolean; // show the boy/girl/neutral picker (child-centric events)
+  // One-off life events (not annually recurring). Excluded from the recurring
+  // "Upcoming events" reminders — see isOneTimeEvent / UpcomingEvents.
+  oneTime?: boolean;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
@@ -51,6 +54,7 @@ export const EVENTS: EventDefinition[] = [
     id: "baby_shower",
     label: "Baby shower",
     icon: "🍼",
+    oneTime: true,
     subThemes: ["Boy blue", "Girl pink", "Neutral", "Woodland", "Cloud & stars"],
     colorSchemes: ["Blue & white", "Pink & white", "Sage & cream", "Pastel mix"],
     markets: ["IN", "US"],
@@ -101,6 +105,7 @@ export const EVENTS: EventDefinition[] = [
     id: "housewarming",
     label: "Housewarming",
     icon: "🏡",
+    oneTime: true,
     subThemes: ["Traditional", "Floral", "Modern minimal", "Festive"],
     colorSchemes: ["Marigold & red", "Pastel", "Gold & white", "Green & yellow"],
     markets: ["IN", "US"],
@@ -244,4 +249,9 @@ export function getEvents(locale: Locale): EventDefinition[] {
 
 export function getEvent(id: string): EventDefinition | undefined {
   return EVENTS.find((e) => e.id === id);
+}
+
+/** One-off life events (baby shower, housewarming) that don't recur annually. */
+export function isOneTimeEvent(id: string): boolean {
+  return getEvent(id)?.oneTime === true;
 }

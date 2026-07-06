@@ -2,6 +2,7 @@
 
 import { Calendar } from "lucide-react";
 import { daysUntil, type EventDate } from "@/lib/useUserLibrary";
+import { isOneTimeEvent } from "@/lib/events";
 
 interface UpcomingEventsProps {
   eventDates: EventDate[];
@@ -10,7 +11,10 @@ interface UpcomingEventsProps {
 }
 
 export default function UpcomingEvents({ eventDates, variant = "row" }: UpcomingEventsProps) {
-  if (eventDates.length === 0) return null;
+  // One-off life events (baby shower, housewarming) don't recur annually, so
+  // they'd otherwise reappear as "upcoming" next year via daysUntil's roll-over.
+  const events = eventDates.filter((ed) => !isOneTimeEvent(ed.event_type));
+  if (events.length === 0) return null;
 
   const Card = ({ ed }: { ed: EventDate }) => {
     const days = daysUntil(ed.event_date);
@@ -42,13 +46,13 @@ export default function UpcomingEvents({ eventDates, variant = "row" }: Upcoming
       </h2>
       {variant === "list" ? (
         <div className="space-y-2">
-          {eventDates.slice(0, 4).map((ed, i) => (
+          {events.slice(0, 4).map((ed, i) => (
             <Card key={i} ed={ed} />
           ))}
         </div>
       ) : (
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {eventDates.map((ed, i) => (
+          {events.map((ed, i) => (
             <Card key={i} ed={ed} />
           ))}
         </div>

@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import { isOneTimeEvent } from "@/lib/events";
 
 export async function findUserByGoogleId(googleId: string) {
   const { rows } = await sql`
@@ -310,7 +311,35 @@ export async function getUserEventDates(userId: string) {
   return rows;
 }
 
-/** Returns upcoming events (within daysAhead days) with the user's email/name for reminder emails. */
+/** Next occurrence (YYYY-MM-DD) of a saved event, or null if it has passed and doesn't recur.
+ *  Recurring events roll to their next annual anniversary (matching the dashboard's daysUntil);
+ *  one-time events (baby shower, housewarming) only ever fire on their actual stored date. */
+function nextEventOccurrence(eventType: string, eventDate: string): string | null {
+  const stored = new Date(eventDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const asDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  if (isOneTimeEvent(eventType)) {
+    return stored >= today ? asDate(stored) : null;
+  }
+
+  // Recurring: next anniversary on/after today. Clamp Feb 29 → Feb 28 in non-leap years.
+  const month = stored.getMonth();
+  const day = stored.getDate();
+  const makeOccurrence = (year: number) => {
+    const d = new Date(year, month, day);
+    if (d.getMonth() !== month) d.setDate(0); // day overflowed the month (e.g. Feb 29) → last day
+    return d;
+  };
+  let occ = makeOccurrence(today.getFullYear());
+  if (occ < today) occ = makeOccurrence(today.getFullYear() + 1);
+  return asDate(occ);
+}
+
+/** Returns upcoming events (within daysAhead days) with the user's email/name for reminder emails.
+ *  Recurring events use their next annual occurrence; one-time events only fire once. */
 export async function getUpcomingEventReminders(daysAhead: number) {
   const { rows } = await sql`
     SELECT
@@ -318,11 +347,13 @@ export async function getUpcomingEventReminders(daysAhead: number) {
       u.email, u.name
     FROM event_dates ed
     JOIN users u ON u.id = ed.user_id
-    WHERE ed.event_date >= CURRENT_DATE
-      AND ed.event_date <= CURRENT_DATE + (${daysAhead} || ' days')::interval
-    ORDER BY ed.event_date ASC
   `;
-  return rows as {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const horizon = new Date(today);
+  horizon.setDate(horizon.getDate() + daysAhead);
+
+  return (rows as {
     id: string;
     event_type: string;
     event_label: string;
@@ -330,7 +361,17 @@ export async function getUpcomingEventReminders(daysAhead: number) {
     honoree: string | null;
     email: string;
     name: string | null;
-  }[];
+  }[])
+    .map((r) => {
+      const next = nextEventOccurrence(r.event_type, r.event_date);
+      return next ? { ...r, event_date: next } : null;
+    })
+    .filter((r): r is NonNullable<typeof r> => {
+      if (!r) return false;
+      const d = new Date(r.event_date);
+      return d >= today && d <= horizon;
+    })
+    .sort((a, b) => a.event_date.localeCompare(b.event_date));
 }
 
 /** Analytics: aggregate stats for the admin dashboard. */
