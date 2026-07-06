@@ -2,7 +2,17 @@
 
 import { Calendar } from "lucide-react";
 import { daysUntil, type EventDate } from "@/lib/useUserLibrary";
-import { isOneTimeEvent } from "@/lib/events";
+import { getEvent, isOneTimeEvent } from "@/lib/events";
+
+/** Natural card title. Older rows stored the honoree name as event_label, so we
+ *  rebuild from event_type + honoree: "Dad's Birthday" rather than a bare "dad". */
+function eventTitle(ed: EventDate): string {
+  const typeLabel = getEvent(ed.event_type)?.label ?? ed.event_label;
+  const honoree = ed.honoree?.trim();
+  if (!honoree) return typeLabel;
+  const name = honoree.charAt(0).toUpperCase() + honoree.slice(1);
+  return `${name}'s ${typeLabel}`;
+}
 
 interface UpcomingEventsProps {
   eventDates: EventDate[];
@@ -29,7 +39,7 @@ export default function UpcomingEvents({ eventDates, variant = "row" }: Upcoming
         </div>
         <div className="min-w-0">
           <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100 truncate">
-            {ed.event_label}
+            {eventTitle(ed)}
           </p>
           <p className="text-xs text-zinc-500">
             {days === 0 ? "Today!" : `in ${days} day${days === 1 ? "" : "s"}`}

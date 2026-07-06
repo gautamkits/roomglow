@@ -17,6 +17,7 @@ export interface EventDate {
   event_type: string;
   event_label: string;
   event_date: string;
+  honoree?: string | null;
 }
 
 export function useUserLibrary(enabled: boolean) {

@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       await saveEventDate({
         userId,
         eventType: eventConfig.eventType,
-        eventLabel: eventConfig.honoree || eventConfig.eventLabel,
+        eventLabel: eventConfig.eventLabel,
         eventDate: eventConfig.eventDate,
         honoree: eventConfig.honoree,
       });

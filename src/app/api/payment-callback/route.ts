@@ -32,7 +32,7 @@ export async function GET(request: Request) {
           await saveEventDate({
             userId: session.user.id,
             eventType: cfg.eventType,
-            eventLabel: cfg.honoree || cfg.eventLabel,
+            eventLabel: cfg.eventLabel,
             eventDate: cfg.eventDate,
             honoree: cfg.honoree,
           });
