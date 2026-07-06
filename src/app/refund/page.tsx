@@ -19,9 +19,8 @@ export default function RefundPage() {
       <h2>When we&apos;ll make it right</h2>
       <p>
         If a generation fails, you were charged in error, or the result did not
-        deliver, email{" "}
-        <a href="mailto:hello@noosho.com">hello@noosho.com</a> within 7 days
-        with your account email and we&apos;ll refund or re-credit you.
+        deliver, contact us via our <a href="/contact">contact page</a> within 7
+        days with your account email and we&apos;ll refund or re-credit you.
       </p>
       <h2>Product purchases</h2>
       <p>

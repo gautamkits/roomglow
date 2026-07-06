@@ -418,6 +418,75 @@ export async function notifyAdminError(ctx: AdminErrorContext): Promise<{ ok: bo
   }
 }
 
+/** Delivers a contact-form message to the team inbox, with reply-to set to the
+ *  sender so a reply goes straight back to them. Spam defenses (honeypot, rate
+ *  limit) live in the /api/contact route. */
+export async function sendContactMessage(data: {
+  name: string;
+  email: string;
+  message: string;
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN) return { ok: false };
+  const recipients = adminRecipients();
+  const to = recipients.length ? recipients : [FROM_ADDRESS];
+
+  const rows: [string, string][] = [
+    ["Name", data.name],
+    ["Email", data.email],
+  ];
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px;font-weight:600;color:${TEXT};white-space:nowrap;">${esc(
+          k
+        )}</td><td style="padding:6px 12px;color:${MUTED};">${esc(v)}</td></tr>`
+    )
+    .join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;color:${LINEN};font-size:18px;font-weight:700;">✉️ Noosho — contact form</td></tr>
+    <tr><td style="padding:20px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:10px;border-collapse:separate;margin-bottom:16px;">${rowsHtml}</table>
+      <p style="font-size:12px;font-weight:600;color:${TEXT};margin:0 0 6px;">Message</p>
+      <pre style="background:${LINEN};border:1px solid ${BORDER};border-radius:8px;padding:12px;font-size:14px;color:${TEXT};white-space:pre-wrap;font-family:inherit;margin:0;">${esc(
+        data.message
+      )}</pre>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: to.map((address) => ({ email_address: { address, name: "Noosho" } })),
+        reply_to: [{ address: data.email, name: data.name }],
+        subject: `New contact message from ${data.name}`,
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Contact send failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Contact send threw:", e);
+    return { ok: false };
+  }
+}
+
 export async function sendEventReminderEmail(
   data: EventReminderEmailData
 ): Promise<{ ok: boolean }> {

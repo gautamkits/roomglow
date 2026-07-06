@@ -30,9 +30,9 @@ export default function PrivacyPage() {
       </p>
       <h2>Your choices</h2>
       <p>
-        You can delete a saved design at any time, or email{" "}
-        <a href="mailto:hello@noosho.com">hello@noosho.com</a> to request
-        deletion of your account and data.
+        You can delete a saved design at any time, or use our{" "}
+        <a href="/contact">contact page</a> to request deletion of your account
+        and data.
       </p>
       <h2>Security</h2>
       <p>

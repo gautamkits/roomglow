@@ -26,8 +26,8 @@ export default function AboutPage() {
       </p>
       <h2>Get in touch</h2>
       <p>
-        Questions or feedback? Reach us any time at{" "}
-        <a href="mailto:hello@noosho.com">hello@noosho.com</a>.
+        Questions or feedback? Reach us any time via our{" "}
+        <a href="/contact">contact page</a>.
       </p>
     </LegalLayout>
   );

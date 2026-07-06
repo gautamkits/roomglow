@@ -35,7 +35,7 @@ export default function TermsPage() {
       </p>
       <h2>Contact</h2>
       <p>
-        Questions? <a href="mailto:hello@noosho.com">hello@noosho.com</a>
+        Questions? Reach us via our <a href="/contact">contact page</a>.
       </p>
     </LegalLayout>
   );
