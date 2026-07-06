@@ -11,6 +11,14 @@ export interface EventDefinition {
   // One-off life events (not annually recurring). Excluded from the recurring
   // "Upcoming events" reminders — see isOneTimeEvent / UpcomingEvents.
   oneTime?: boolean;
+  // Approximate calendar anchor (month 1-12, day) for seasonal festivals. Its
+  // presence means the event is only offered when its next occurrence is within
+  // LEAD_MONTHS (see getEvents / isSeasonalEventNear). Events WITHOUT a season
+  // are evergreen (birthdays, anniversaries, life events) and always shown.
+  // For movable festivals (Holi, Diwali, Eid…) this is a representative date
+  // used only for visibility gating — the actual reminder date is whatever the
+  // user picks in SetupPanel.
+  season?: { month: number; day: number };
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
@@ -92,6 +100,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Traditional diya", "Rangoli", "Royal", "Modern minimal", "Floral"],
     colorSchemes: ["Marigold & red", "Gold & maroon", "Purple & gold", "Pink & orange"],
     markets: ["IN"],
+    season: { month: 10, day: 31 }, // movable (Oct–Nov)
     completionItems: [
       { category: "Sweets", query: "diwali sweets box" },
       { category: "Diyas", query: "diya set decorative" },
@@ -99,6 +108,166 @@ export const EVENTS: EventDefinition[] = [
       { category: "Gift hamper", query: "diwali gift hamper" },
       { category: "Pooja thali", query: "pooja thali set" },
       { category: "Lights", query: "led string lights" },
+    ],
+  },
+  {
+    id: "makar_sankranti",
+    label: "Makar Sankranti",
+    icon: "🪁",
+    subThemes: ["Kite theme", "Traditional", "Floral marigold", "Rustic harvest"],
+    colorSchemes: ["Yellow & orange", "Marigold & red", "Green & yellow", "Pastel"],
+    markets: ["IN"],
+    season: { month: 1, day: 14 },
+    completionItems: [
+      { category: "Kites", query: "kite set with manjha" },
+      { category: "Sweets", query: "til gud chikki gift box" },
+      { category: "Sesame treats", query: "tilkut sweets" },
+      { category: "Rangoli", query: "rangoli stencil kit" },
+      { category: "Return gifts", query: "festival return gifts" },
+    ],
+  },
+  {
+    id: "republic_day",
+    label: "Republic Day",
+    icon: "🇮🇳",
+    subThemes: ["Tricolour", "Patriotic", "Modern minimal", "Floral"],
+    colorSchemes: ["Saffron, white & green", "Tricolour & gold", "Navy & white"],
+    markets: ["IN"],
+    season: { month: 1, day: 26 },
+    completionItems: [
+      { category: "Flags", query: "indian flag tricolour" },
+      { category: "Decorations", query: "tricolour party decorations" },
+      { category: "Balloons", query: "tricolour balloons" },
+      { category: "Badges", query: "tricolour flag badges" },
+      { category: "Sweets", query: "indian sweets gift box" },
+    ],
+  },
+  {
+    id: "holi",
+    label: "Holi",
+    icon: "🎨",
+    subThemes: ["Colour splash", "Floral", "Traditional", "Modern minimal", "Rustic"],
+    colorSchemes: ["Rainbow", "Pink & yellow", "Bright & bold", "Pastel mix"],
+    markets: ["IN"],
+    season: { month: 3, day: 10 }, // movable (March)
+    completionItems: [
+      { category: "Colours", query: "herbal holi gulal colours" },
+      { category: "Water guns", query: "holi pichkari water gun" },
+      { category: "Sweets", query: "gujiya sweets gift box" },
+      { category: "Thandai", query: "thandai mix" },
+      { category: "Return gifts", query: "holi return gifts" },
+    ],
+  },
+  {
+    id: "eid",
+    label: "Eid al-Fitr",
+    icon: "🌙",
+    subThemes: ["Crescent & lantern", "Royal", "Floral", "Modern minimal", "Traditional"],
+    colorSchemes: ["Green & gold", "Teal & gold", "Royal blue & silver", "Ivory & gold"],
+    markets: ["IN"],
+    season: { month: 3, day: 20 }, // movable (shifts ~11 days earlier each year)
+    completionItems: [
+      { category: "Gift", query: "eid gift set" },
+      { category: "Sweets", query: "eid sweets gift box" },
+      { category: "Dates", query: "premium dates gift pack" },
+      { category: "Lantern", query: "ramadan lantern decor" },
+      { category: "Dry fruits", query: "dry fruits gift pack" },
+    ],
+  },
+  {
+    id: "raksha_bandhan",
+    label: "Raksha Bandhan",
+    icon: "🪢",
+    subThemes: ["Traditional", "Floral", "Royal", "Modern minimal"],
+    colorSchemes: ["Marigold & red", "Pink & gold", "Gold & maroon", "Pastel"],
+    markets: ["IN"],
+    season: { month: 8, day: 19 }, // movable (August)
+    completionItems: [
+      { category: "Rakhi", query: "designer rakhi set" },
+      { category: "Gift for sister", query: "rakhi gift for sister" },
+      { category: "Gift for brother", query: "rakhi gift for brother" },
+      { category: "Sweets", query: "indian sweets gift box" },
+      { category: "Chocolates", query: "chocolate gift box" },
+    ],
+  },
+  {
+    id: "independence_day_in",
+    label: "Independence Day",
+    icon: "🇮🇳",
+    subThemes: ["Tricolour", "Patriotic", "Modern minimal", "Floral"],
+    colorSchemes: ["Saffron, white & green", "Tricolour & gold", "Navy & white"],
+    markets: ["IN"],
+    season: { month: 8, day: 15 },
+    completionItems: [
+      { category: "Flags", query: "indian flag tricolour" },
+      { category: "Decorations", query: "tricolour party decorations" },
+      { category: "Balloons", query: "tricolour balloons" },
+      { category: "Badges", query: "tricolour flag badges" },
+      { category: "Sweets", query: "indian sweets gift box" },
+    ],
+  },
+  {
+    id: "janmashtami",
+    label: "Janmashtami",
+    icon: "🦚",
+    subThemes: ["Traditional", "Floral", "Royal", "Jhula / cradle"],
+    colorSchemes: ["Peacock blue & gold", "Marigold & red", "Yellow & green", "Gold & maroon"],
+    markets: ["IN"],
+    season: { month: 8, day: 26 }, // movable (Aug–Sep)
+    completionItems: [
+      { category: "Krishna idol", query: "laddu gopal idol" },
+      { category: "Jhula", query: "krishna jhula cradle" },
+      { category: "Flute", query: "decorative bansuri flute" },
+      { category: "Sweets", query: "makhan mishri sweets" },
+      { category: "Decorations", query: "janmashtami decoration items" },
+    ],
+  },
+  {
+    id: "ganesh_chaturthi",
+    label: "Ganesh Chaturthi",
+    icon: "🐘",
+    subThemes: ["Traditional", "Floral marigold", "Royal", "Modern minimal", "Eco-friendly"],
+    colorSchemes: ["Marigold & red", "Gold & maroon", "Red & yellow", "Green & gold"],
+    markets: ["IN"],
+    season: { month: 9, day: 5 }, // movable (Aug–Sep)
+    completionItems: [
+      { category: "Ganesh idol", query: "eco friendly ganesh idol" },
+      { category: "Decorations", query: "ganpati decoration items" },
+      { category: "Modak mould", query: "modak mould" },
+      { category: "Sweets", query: "modak sweets box" },
+      { category: "Pooja kit", query: "pooja samagri kit" },
+    ],
+  },
+  {
+    id: "navratri",
+    label: "Navratri / Durga Puja",
+    icon: "🪘",
+    subThemes: ["Garba / dandiya", "Traditional", "Floral", "Royal", "Modern minimal"],
+    colorSchemes: ["Marigold & red", "Bright & bold", "Rainbow", "Gold & maroon"],
+    markets: ["IN"],
+    season: { month: 9, day: 29 }, // movable (Sep–Oct)
+    completionItems: [
+      { category: "Dandiya", query: "dandiya sticks decorated" },
+      { category: "Decorations", query: "navratri decoration items" },
+      { category: "Torans", query: "marigold toran door hanging" },
+      { category: "Sweets", query: "indian sweets gift box" },
+      { category: "Pooja kit", query: "pooja samagri kit" },
+    ],
+  },
+  {
+    id: "dussehra",
+    label: "Dussehra",
+    icon: "🏹",
+    subThemes: ["Traditional", "Floral marigold", "Royal", "Modern minimal"],
+    colorSchemes: ["Marigold & red", "Gold & maroon", "Red & yellow", "Green & gold"],
+    markets: ["IN"],
+    season: { month: 10, day: 11 }, // movable (October)
+    completionItems: [
+      { category: "Decorations", query: "dussehra decoration items" },
+      { category: "Torans", query: "marigold toran door hanging" },
+      { category: "Sweets", query: "indian sweets gift box" },
+      { category: "Pooja kit", query: "pooja samagri kit" },
+      { category: "Return gifts", query: "festival return gifts" },
     ],
   },
   {
@@ -126,6 +295,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Spooky", "Haunted house", "Pumpkin patch", "Witch", "Cute / kids"],
     colorSchemes: ["Orange & black", "Purple & green", "Black & gold", "Neon"],
     markets: ["US"],
+    season: { month: 10, day: 31 },
     completionItems: [
       { category: "Candy", query: "halloween candy" },
       { category: "Costume", query: "halloween costume" },
@@ -141,6 +311,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Rustic harvest", "Modern fall", "Farmhouse", "Floral autumn"],
     colorSchemes: ["Burnt orange & brown", "Gold & cream", "Deep red & amber", "Sage & wheat"],
     markets: ["US"],
+    season: { month: 11, day: 26 }, // 4th Thursday of November
     completionItems: [
       { category: "Serveware", query: "thanksgiving serving platter" },
       { category: "Table linens", query: "fall table runner" },
@@ -155,7 +326,8 @@ export const EVENTS: EventDefinition[] = [
     icon: "🎄",
     subThemes: ["Classic red & green", "Winter wonderland", "Rustic", "Modern minimal", "Nordic"],
     colorSchemes: ["Red & green", "Gold & white", "Silver & blue", "Frosted neutral"],
-    markets: ["US"],
+    markets: ["IN", "US"],
+    season: { month: 12, day: 25 },
     completionItems: [
       { category: "Gifts", query: "christmas gift" },
       { category: "Ornaments", query: "christmas ornaments" },
@@ -172,6 +344,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Pastel spring", "Floral", "Bunny & eggs", "Garden brunch"],
     colorSchemes: ["Pastel mix", "Lavender & mint", "Pink & yellow", "Blue & white"],
     markets: ["US"],
+    season: { month: 4, day: 5 }, // movable (late Mar–Apr)
     completionItems: [
       { category: "Easter basket", query: "easter basket" },
       { category: "Candy", query: "easter candy" },
@@ -187,6 +360,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Classic patriotic", "Backyard BBQ", "Modern stars & stripes", "Rustic"],
     colorSchemes: ["Red, white & blue", "Navy & gold", "Vintage Americana"],
     markets: ["US"],
+    season: { month: 7, day: 4 },
     completionItems: [
       { category: "Party tableware", query: "4th of july party tableware" },
       { category: "Flags", query: "american flags" },
@@ -202,6 +376,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Romantic", "Floral", "Modern minimal", "Galentine's"],
     colorSchemes: ["Red & pink", "Blush & gold", "Burgundy", "White & rose"],
     markets: ["US"],
+    season: { month: 2, day: 14 },
     completionItems: [
       { category: "Gift", query: "valentine gift" },
       { category: "Flowers", query: "red roses bouquet" },
@@ -217,6 +392,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Gold glam", "Black tie", "Confetti party", "Minimal chic"],
     colorSchemes: ["Black & gold", "Silver & white", "Rose gold", "Midnight blue"],
     markets: ["US"],
+    season: { month: 12, day: 31 },
     completionItems: [
       { category: "Party supplies", query: "new years eve party supplies" },
       { category: "Champagne flutes", query: "champagne flutes set" },
@@ -242,9 +418,30 @@ export const EVENTS: EventDefinition[] = [
   },
 ];
 
-/** Events available for a given marketplace. */
-export function getEvents(locale: Locale): EventDefinition[] {
-  return EVENTS.filter((e) => e.markets.includes(locale));
+/** How many months ahead of a festival it starts being offered. */
+export const EVENT_LEAD_MONTHS = 3;
+
+/** Whether a seasonal festival's next occurrence is close enough to offer now.
+ *  Evergreen events (no `season`) are always available. */
+export function isSeasonalEventNear(
+  ev: EventDefinition,
+  now: Date = new Date()
+): boolean {
+  if (!ev.season) return true; // evergreen — birthdays, anniversaries, life events
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const { month, day } = ev.season;
+  let occ = new Date(today.getFullYear(), month - 1, day);
+  if (occ < today) occ = new Date(today.getFullYear() + 1, month - 1, day);
+  const horizon = new Date(today);
+  horizon.setMonth(horizon.getMonth() + EVENT_LEAD_MONTHS);
+  return occ <= horizon;
+}
+
+/** Events available for a given marketplace, in season (or evergreen) as of `now`. */
+export function getEvents(locale: Locale, now: Date = new Date()): EventDefinition[] {
+  return EVENTS.filter(
+    (e) => e.markets.includes(locale) && isSeasonalEventNear(e, now)
+  );
 }
 
 export function getEvent(id: string): EventDefinition | undefined {
