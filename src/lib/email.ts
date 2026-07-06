@@ -427,8 +427,9 @@ export async function sendContactMessage(data: {
   message: string;
 }): Promise<{ ok: boolean }> {
   if (!ZEPTOMAIL_TOKEN) return { ok: false };
-  const recipients = adminRecipients();
-  const to = recipients.length ? recipients : [FROM_ADDRESS];
+  // Contact-form messages route to the shared inbox (which forwards to Gmail),
+  // overridable via CONTACT_TO.
+  const to = [process.env.CONTACT_TO || "designs@noosho.com"];
 
   const rows: [string, string][] = [
     ["Name", data.name],
