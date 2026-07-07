@@ -14,7 +14,8 @@ interface SetupPanelProps {
     mode: AppMode,
     eventConfig: EventConfig | null,
     maxBudget?: number,
-    makeoverConfig?: MakeoverConfig | null
+    makeoverConfig?: MakeoverConfig | null,
+    noBudget?: boolean
   ) => void;
 }
 
@@ -56,7 +57,9 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   // real Amazon prices (see smartBudgetInstruction) so users never under-set it
   // and end up with a sparse, compromised design. They can still set a manual
   // cap, which is floored at the cheapest complete set.
-  const [budgetMode, setBudgetMode] = useState<"auto" | "custom">("auto");
+  const [budgetMode, setBudgetMode] = useState<"auto" | "unlimited" | "custom">(
+    "auto"
+  );
   const [makeoverStyleId, setMakeoverStyleId] = useState<string | null>(null);
   const [makeoverGender, setMakeoverGender] = useState<string | null>(null);
   const [makeoverEnabled, setMakeoverEnabled] = useState(false);
@@ -82,10 +85,11 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   // Gender picker only for child-centric events (birthday, baby shower, …)
   const showGender = !!event?.gendered;
   // Festivals (events with a fixed calendar season — Diwali, Independence Day,
-  // Christmas…) aren't "for" a person and their date is set by the calendar, so
-  // only personal life events (birthday, anniversary, housewarming, graduation…)
-  // ask for a honoree and a date.
-  const isPersonalEvent = !!event && !event.season;
+  // Christmas…) don't have a user-chosen date, so only personal life events ask
+  // for one. The honoree ("who's it for?") shows for personal events plus the
+  // relationship festivals (Raksha Bandhan, Valentine's) via askHonoree.
+  const showDate = !!event && !event.season;
+  const showHonoree = !!event && (!event.season || !!event.askHonoree);
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -94,7 +98,10 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
       eventLabel: event.label,
       subTheme,
       colorScheme,
-      honoree: !event.season && honoree.trim() ? honoree.trim() : undefined,
+      honoree:
+        (!event.season || event.askHonoree) && honoree.trim()
+          ? honoree.trim()
+          : undefined,
       eventDate: !event.season && eventDate ? eventDate : undefined,
       gender: showGender && gender ? gender : undefined,
     };
@@ -108,9 +115,18 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   };
 
   const handleImage = (base64: string) => {
-    // Auto mode → no cap; the pipeline sizes the budget from real product prices.
+    // custom → cap; auto → pipeline sizes from real prices; unlimited → no cap,
+    // AI picks whatever best suits the design.
     const budget = budgetMode === "custom" ? maxBudget : undefined;
-    onImageSelected(base64, mode, buildConfig(), budget, buildMakeoverConfig());
+    const noBudget = budgetMode === "unlimited";
+    onImageSelected(
+      base64,
+      mode,
+      buildConfig(),
+      budget,
+      buildMakeoverConfig(),
+      noBudget
+    );
   };
 
   return (
@@ -215,26 +231,26 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                   </div>
                 </div>
               )}
-              {isPersonalEvent && (
-                <>
+              {showHonoree && (
+                <input
+                  type="text"
+                  value={honoree}
+                  onChange={(e) => setHonoree(e.target.value)}
+                  placeholder="Who's it for? (optional)"
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                />
+              )}
+              {showDate && (
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
                   <input
-                    type="text"
-                    value={honoree}
-                    onChange={(e) => setHonoree(e.target.value)}
-                    placeholder="Who's it for? (optional)"
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                    type="date"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                    placeholder="Event date (optional)"
                   />
-                  <div className="relative">
-                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
-                      placeholder="Event date (optional)"
-                    />
-                  </div>
-                </>
+                </div>
               )}
             </div>
           )}
@@ -251,6 +267,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
             {(
               [
                 { id: "auto", label: "Auto" },
+                { id: "unlimited", label: "No limit" },
                 { id: "custom", label: "Set max" },
               ] as const
             ).map(({ id, label }) => (
@@ -274,6 +291,11 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           <p className="text-xs text-zinc-500">
             Recommended — we pick the best value for a full, great-looking design
             based on real product prices.
+          </p>
+        ) : budgetMode === "unlimited" ? (
+          <p className="text-xs text-zinc-500">
+            No cap — the AI chooses whatever best suits the design, regardless of
+            price.
           </p>
         ) : (
           <>

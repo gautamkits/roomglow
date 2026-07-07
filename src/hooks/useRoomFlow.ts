@@ -55,6 +55,9 @@ export function useRoomFlow() {
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [promoApplied, setPromoApplied] = useState(false);
   const [maxBudget, setMaxBudget] = useState<number | undefined>(undefined);
+  // When true, curation gets no budget constraint — the AI picks whatever best
+  // suits the design regardless of price.
+  const [noBudget, setNoBudget] = useState(false);
   const [selectedItems, setSelectedItems] = useState<SuggestedProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
@@ -78,7 +81,8 @@ export function useRoomFlow() {
       selectedMode?: AppMode,
       selectedEventConfig?: EventConfig | null,
       selectedMaxBudget?: number,
-      selectedMakeoverConfig?: MakeoverConfig | null
+      selectedMakeoverConfig?: MakeoverConfig | null,
+      selectedNoBudget?: boolean
     ) => {
       const activeMode = selectedMode || mode;
       const activeEventConfig = selectedEventConfig !== undefined ? selectedEventConfig : eventConfig;
@@ -87,6 +91,7 @@ export function useRoomFlow() {
       if (selectedEventConfig !== undefined) setEventConfig(activeEventConfig);
       if (selectedMakeoverConfig !== undefined) setMakeoverConfig(activeMakeoverConfig);
       setMaxBudget(selectedMaxBudget);
+      setNoBudget(!!selectedNoBudget);
 
       setImage(base64);
       setBaseImage(base64);
@@ -298,10 +303,12 @@ export function useRoomFlow() {
               originalImage: canvas,
               designVision: p.designVision || "Create a cohesive, stylish design",
               categories: p.categories,
-              budgetInstruction: smartBudgetInstruction(
-                maxBudget,
-                (p.categories as SearchCategory[]) ?? []
-              ),
+              budgetInstruction: noBudget
+                ? undefined
+                : smartBudgetInstruction(
+                    maxBudget,
+                    (p.categories as SearchCategory[]) ?? []
+                  ),
             },
             "We couldn't finalize the product selection. Please try again."
           );
@@ -408,7 +415,7 @@ export function useRoomFlow() {
       setCanRetry(retriesLeft);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, retryCount]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, noBudget, retryCount]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
@@ -581,6 +588,7 @@ export function useRoomFlow() {
     setIsUnlocked(false);
     setPromoApplied(false);
     setMaxBudget(undefined);
+    setNoBudget(false);
     setSelectedItems([]);
     setError(null);
     setStatusMessage("");

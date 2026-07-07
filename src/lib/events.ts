@@ -19,6 +19,10 @@ export interface EventDefinition {
   // used only for visibility gating — the actual reminder date is whatever the
   // user picks in SetupPanel.
   season?: { month: number; day: number };
+  // Relationship festivals (Raksha Bandhan, Valentine's) are calendar events but
+  // are centered on a person, so they still ask "who's it for?" — but not a date
+  // (that's set by the calendar). Personal events imply this via `!season`.
+  askHonoree?: boolean;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
@@ -182,6 +186,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Marigold & red", "Pink & gold", "Gold & maroon", "Pastel"],
     markets: ["IN"],
     season: { month: 8, day: 19 }, // movable (August)
+    askHonoree: true, // rakhi is for a sibling
     completionItems: [
       { category: "Rakhi", query: "designer rakhi set" },
       { category: "Gift for sister", query: "rakhi gift for sister" },
@@ -377,6 +382,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Red & pink", "Blush & gold", "Burgundy", "White & rose"],
     markets: ["US"],
     season: { month: 2, day: 14 },
+    askHonoree: true, // Valentine's is for a partner
     completionItems: [
       { category: "Gift", query: "valentine gift" },
       { category: "Flowers", query: "red roses bouquet" },
