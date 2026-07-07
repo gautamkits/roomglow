@@ -13,6 +13,7 @@ import type {
   ProductResult,
   Hotspot,
 } from "@/lib/types";
+import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
@@ -297,9 +298,10 @@ export function useRoomFlow() {
               originalImage: canvas,
               designVision: p.designVision || "Create a cohesive, stylish design",
               categories: p.categories,
-              budgetInstruction: maxBudget
-                ? `BUDGET CONSTRAINT: Keep the COMBINED total of all chosen products at or under ₹${maxBudget.toLocaleString("en-IN")}. Prefer cheaper suitable options to stay within budget while keeping the design cohesive. Only exceed the cap for a category if it has no cheaper viable option.`
-                : undefined,
+              budgetInstruction: smartBudgetInstruction(
+                maxBudget,
+                (p.categories as SearchCategory[]) ?? []
+              ),
             },
             "We couldn't finalize the product selection. Please try again."
           );
