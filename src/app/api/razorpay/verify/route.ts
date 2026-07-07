@@ -1,4 +1,4 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { verifyPaymentSignature } from "@/lib/razorpay";
 import {
@@ -9,7 +9,7 @@ import {
   recordStripeSale,
 } from "@/lib/db";
 import { sendDesignReadyEmail, notifyAdminError } from "@/lib/email";
-import { ensureHotspots } from "@/lib/hotspots";
+import { onDesignUnlocked } from "@/lib/unlock";
 import type { EventConfig, ProductResult } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       await incrementCouponUse(String(couponCode).toUpperCase().trim()).catch(() => {});
     }
 
-    after(() => ensureHotspots(designId).catch(() => {}));
+    onDesignUnlocked(designId);
 
     const design = await getDesign(designId);
     if (design) {

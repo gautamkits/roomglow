@@ -1,7 +1,7 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { verifyWebhookSignature } from "@/lib/razorpay";
 import { unlockDesign } from "@/lib/db";
-import { ensureHotspots } from "@/lib/hotspots";
+import { onDesignUnlocked } from "@/lib/unlock";
 
 export const runtime = "nodejs";
 
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         await unlockDesign(designId, userId).catch((e) =>
           console.error("[razorpay/webhook] unlockDesign failed:", e)
         );
-        after(() => ensureHotspots(designId).catch(() => {}));
+        onDesignUnlocked(designId);
       }
     }
 

@@ -1,9 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { stripe } from "@/lib/stripe";
 import { unlockDesign, getDesign, saveEventDate, incrementCouponUse, recordStripeSale } from "@/lib/db";
 import { sendDesignReadyEmail, notifyAdminError } from "@/lib/email";
-import { ensureHotspots } from "@/lib/hotspots";
+import { onDesignUnlocked } from "@/lib/unlock";
 import type { EventConfig, ProductResult } from "@/lib/types";
 
 const SITE_URL = process.env.NEXTAUTH_URL || "https://noosho.com";
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       }
 
       // Fill in deferred hotspots now that the design is paid/entitled (P1-b).
-      after(() => ensureHotspots(designId).catch(() => {}));
+      onDesignUnlocked(designId);
 
       // Record coupon usage on successful payment.
       const usedCoupon = session.metadata?.couponCode;

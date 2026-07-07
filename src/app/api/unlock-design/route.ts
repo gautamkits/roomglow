@@ -1,9 +1,9 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { unlockDesign, getDesign, saveEventDate } from "@/lib/db";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
-import { ensureHotspots } from "@/lib/hotspots";
+import { onDesignUnlocked } from "@/lib/unlock";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     // Hotspot detection was deferred for the locked design — fill it in now that
     // it's entitled to be viewed (non-blocking; P1-b).
-    after(() => ensureHotspots(designId).catch(() => {}));
+    onDesignUnlocked(designId);
 
     // Capture event date for future re-engagement
     if (design.mode === "event" && design.event_config) {

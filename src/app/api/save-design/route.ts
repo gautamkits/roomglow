@@ -7,7 +7,7 @@ import { notifyAdminError } from "@/lib/email";
 import { sendDesignReadyEmail } from "@/lib/email";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isFreeFirstDesignEligible } from "@/lib/promo";
-import { ensureHotspots } from "@/lib/hotspots";
+import { onDesignUnlocked } from "@/lib/unlock";
 
 export const runtime = "nodejs";
 
@@ -108,11 +108,11 @@ export async function POST(request: Request) {
     });
 
     // Designs unlocked at save time (free markets, or the free-first-design promo
-    // in a paid market) skip the unlock endpoints that normally fill hotspots, so
-    // generate-image left the hotspots empty and the shoppable pins wouldn't show.
-    // Detect them now. Idempotent: ensureHotspots no-ops if hotspots already exist.
+    // in a paid market) skip the payment unlock endpoints, so run the shared
+    // post-unlock hook here too — otherwise their hotspots stay empty and the
+    // shoppable pins don't show.
     if (isUnlocked && designId) {
-      after(() => ensureHotspots(designId).catch(() => {}));
+      onDesignUnlocked(designId);
     }
 
     if (userId && mode === "event" && eventConfig?.eventDate) {
