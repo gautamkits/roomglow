@@ -5,6 +5,7 @@ import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { rateLimit } from "@/lib/rateLimit";
 import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
+import { isFreeFirstDesignEligible } from "@/lib/promo";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -14,10 +15,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
 
-    // Detect hotspots only when they'll actually be shown: a restyle (styleHint)
-    // always targets an already-unlocked design, and a fresh create only ends up
-    // unlocked in free markets for a signed-in user. Locked designs defer
-    // detection to unlock time (P1-b).
     const session = await auth();
 
     // Image generation is the costliest step — sign-in required, then a
@@ -38,8 +35,17 @@ export async function POST(request: Request) {
       }
     }
 
+    // Detect hotspots up front only when the design will actually be entitled —
+    // otherwise defer to unlock time to save the AI cost (P1-b). A restyle
+    // (styleHint) always targets an unlocked design. A fresh create is entitled
+    // in a free market, for an admin (entitled everywhere), or for a promo user
+    // (first design free) — all of which show the design unlocked, so the pins
+    // must exist. Locked paid designs get pins later via ensureHotspots.
     const locale = localeFromRequest(request);
-    const willBeUnlocked = !!session?.user?.id && !PAYMENT_ENABLED[locale];
+    const willBeUnlocked =
+      !PAYMENT_ENABLED[locale] ||
+      isAdminEmail(session.user.email) ||
+      (await isFreeFirstDesignEligible(session.user.id));
     const detect = !!styleHint || willBeUnlocked;
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
