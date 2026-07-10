@@ -45,11 +45,13 @@ export async function GET(
 ) {
   const { designId } = await params;
 
-  // Only public (approved) or unlocked designs may be rendered into an OG card;
-  // anything else gets a branded placeholder.
+  // Only public (gallery-approved) designs render real pixels into the OG card.
+  // Social crawlers fetch this anonymously, so anything session-gated (including
+  // unlocked-but-private designs) must get the branded placeholder — otherwise
+  // a private design's before/after leaks through link previews.
   const design = await getDesign(designId);
   if (!design) return new Response("Not found", { status: 404 });
-  if (design.gallery_status !== "approved" && !design.is_unlocked) {
+  if (design.gallery_status !== "approved") {
     return brandedFallback();
   }
 

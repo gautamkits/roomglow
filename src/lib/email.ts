@@ -503,6 +503,70 @@ export async function sendContactMessage(data: {
   }
 }
 
+/** Invite sent when an owner shares a private design with an email address.
+ *  The recipient must sign in with Google using that same email to view. */
+export async function sendDesignShareInvite(data: {
+  to: string;
+  ownerName: string;
+  designId: string;
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+  const link = `${SITE_URL}/design/${data.designId}`;
+  const owner = esc(data.ownerName || "Someone");
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;">
+      <span style="font-size:20px;font-weight:700;color:${LINEN};">noosho</span>
+    </td></tr>
+    <tr><td style="padding:24px;">
+      <p style="font-size:16px;color:${TEXT};margin:0 0 8px;font-weight:600;">${owner} shared a design with you 🎨</p>
+      <p style="font-size:14px;color:${MUTED};margin:0 0 18px;line-height:1.6;">
+        They made a room design on Noosho and invited you to see it — the full
+        transformation with every product pinned and shoppable.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${CLAY_CTA};">
+        <a href="${esc(link)}" style="display:inline-block;padding:11px 22px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;">View the design</a>
+      </td></tr></table>
+      <p style="font-size:12px;color:${FAINT};margin:18px 0 0;line-height:1.6;">
+        This design is private. Sign in with Google using this email address
+        (${esc(data.to)}) to view it.
+      </p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: [{ email_address: { address: data.to, name: data.to } }],
+        subject: `${data.ownerName || "Someone"} shared a Noosho design with you`,
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Share invite failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Share invite threw:", e);
+    return { ok: false };
+  }
+}
+
 export async function sendEventReminderEmail(
   data: EventReminderEmailData
 ): Promise<{ ok: boolean }> {

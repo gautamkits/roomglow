@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
+import { auth } from "@/auth";
 import { getDesign } from "@/lib/db";
+import { designVisibility } from "@/lib/access";
+import AccessGate from "@/components/AccessGate";
 import {
   designTitle,
   designAltText,
@@ -18,6 +21,17 @@ export async function generateMetadata({
   const { designId } = await params;
   const d = await getDesign(designId);
   if (!d) return { title: "Design — Noosho" };
+
+  // Private designs get generic metadata — no room details, keywords, or a real
+  // OG image (the OG route serves a branded fallback for non-approved designs),
+  // so nothing about the design leaks through crawlers or link previews.
+  if (d.gallery_status !== "approved") {
+    return {
+      title: "A design on Noosho",
+      description: "This design is private. Sign in to view it if it was shared with you.",
+      robots: { index: false },
+    };
+  }
 
   const items = designItems(d);
   const itemSuffix = items.length ? ` with ${items.slice(0, 3).join(", ")}` : "";
@@ -56,6 +70,16 @@ export default async function DesignPage({
   const { designId } = await params;
   const d = await getDesign(designId);
   const approved = d?.gallery_status === "approved";
+
+  // Privacy gate: private designs render only for the owner, admins, and the
+  // emails they were shared with (see designVisibility).
+  const session = await auth();
+  const { canView, isOwner } = d
+    ? await designVisibility(d, session)
+    : { canView: true, isOwner: false };
+  if (d && !canView) {
+    return <AccessGate viewerEmail={session?.user?.email ?? null} />;
+  }
 
   // JSON-LD for approved (public) designs — Product list WITHOUT price/offer
   let jsonLd: string | null = null;
@@ -111,6 +135,7 @@ export default async function DesignPage({
       <DesignViewer
         designId={designId}
         approved={approved}
+        isOwner={isOwner}
         galleryStatus={d?.gallery_status || "none"}
         items={d ? designItems(d) : []}
         initial={

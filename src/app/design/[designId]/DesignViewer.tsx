@@ -12,6 +12,7 @@ import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
+import ManageAccess from "@/components/ManageAccess";
 import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
@@ -31,12 +32,14 @@ interface DesignData {
 function Viewer({
   designId,
   approved,
+  isOwner = false,
   galleryStatus = "none",
   initial,
   items = [],
 }: {
   designId: string;
   approved: boolean;
+  isOwner?: boolean;
   galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];
@@ -195,6 +198,13 @@ function Viewer({
             {modeLabel}
           </h2>
         </div>
+
+        {/* Owner-only: manage who can view this (private) design */}
+        {isOwner && (
+          <div className="mb-5">
+            <ManageAccess designId={designId} approved={approved} />
+          </div>
+        )}
 
         {design.design_narrative && showProducts && (
           <div className="mb-5 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl">
@@ -381,6 +391,7 @@ function Viewer({
 export default function DesignViewer(props: {
   designId: string;
   approved: boolean;
+  isOwner?: boolean;
   galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];

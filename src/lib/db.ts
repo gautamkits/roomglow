@@ -118,6 +118,66 @@ export async function getDesign(designId: string) {
   return rows[0] || null;
 }
 
+// ─── Design sharing (email-verified, privacy model) ───
+// A non-public design is viewable only by its owner, admins, and the emails in
+// design_shares. Recipients must sign in with Google using the shared email.
+let sharesSchemaReady = false;
+async function ensureSharesSchema() {
+  if (sharesSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS design_shares (
+      id BIGSERIAL PRIMARY KEY,
+      design_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE (design_id, email)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_design_shares_design ON design_shares (design_id)`;
+  sharesSchemaReady = true;
+}
+
+export async function addDesignShare(designId: string, email: string) {
+  await ensureSharesSchema();
+  await sql`
+    INSERT INTO design_shares (design_id, email)
+    VALUES (${designId}, ${email.trim().toLowerCase()})
+    ON CONFLICT (design_id, email) DO NOTHING
+  `;
+}
+
+export async function removeDesignShare(designId: string, email: string) {
+  await ensureSharesSchema();
+  await sql`
+    DELETE FROM design_shares
+    WHERE design_id = ${designId} AND email = ${email.trim().toLowerCase()}
+  `;
+}
+
+export async function listDesignShares(
+  designId: string
+): Promise<{ email: string; created_at: string }[]> {
+  await ensureSharesSchema();
+  const { rows } = await sql`
+    SELECT email, created_at FROM design_shares
+    WHERE design_id = ${designId} ORDER BY created_at ASC
+  `;
+  return rows as { email: string; created_at: string }[];
+}
+
+export async function isDesignSharedWith(
+  designId: string,
+  email: string
+): Promise<boolean> {
+  await ensureSharesSchema();
+  const { rows } = await sql`
+    SELECT 1 FROM design_shares
+    WHERE design_id = ${designId} AND email = ${email.trim().toLowerCase()}
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 export async function setHotspots(designId: string, hotspots: unknown) {
   await sql`
     UPDATE designs SET hotspots = ${JSON.stringify(hotspots)} WHERE id = ${designId}

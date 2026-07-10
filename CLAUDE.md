@@ -67,6 +67,18 @@ data (price/links), the paywall, locale-aware commerce, accountability, gallery/
   in `src/lib/coupons.ts`; admin-managed. `DESIGN20` is pushed in the day-4 abandoned email and
   auto-applied via `?coupon=` on the design link.
 
+## Design privacy & sharing (`src/lib/access.ts`)
+Designs are **private by default**: viewable only by the owner, admins, emails in
+`design_shares` (email-verified sharing — recipient signs in with Google using the shared
+email), or everyone once gallery-approved. Legacy designs with `user_id NULL` stay
+link-viewable. `designVisibility(design, session?)` is the single predicate — **every**
+surface exposing design pixels/details must use it: `/design/[id]` page (renders
+`AccessGate` for non-viewers; generic metadata for non-approved), `/api/image/[id]/[variant]`,
+`/api/og/[id]` (real pixels only when approved — crawlers are anonymous), `/api/share/[id]`
+(GIF). Owner UI: `ManageAccess` panel on the design page → `/api/design-share`
+(GET/POST/DELETE, owner/admin-only, 20 shares/design cap, invite email via
+`sendDesignShareInvite`).
+
 ## Gallery / home (`src/app/page.tsx`, `force-dynamic`)
 - Public grid of `gallery_status='approved'` designs (`getGalleryCards`). Search (`GallerySearch`,
   `q`) with synonym matching (`matchesQuery` in `src/lib/admin.ts`).

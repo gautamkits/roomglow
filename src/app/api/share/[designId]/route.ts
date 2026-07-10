@@ -1,6 +1,8 @@
 import sharp from "sharp";
 import { GIFEncoder, quantize, applyPalette } from "gifenc";
 import { loadDesignImages } from "@/lib/images";
+import { getDesign } from "@/lib/db";
+import { designVisibility } from "@/lib/access";
 
 export const runtime = "nodejs";
 
@@ -12,6 +14,14 @@ export async function GET(
   { params }: { params: Promise<{ designId: string }> }
 ) {
   const { designId } = await params;
+
+  // Privacy: this GIF contains the full before/after — same visibility rules as
+  // the design page. (Previously served with no check at all.)
+  const design = await getDesign(designId);
+  if (!design) return new Response("Not found", { status: 404 });
+  const { canView } = await designVisibility(design);
+  if (!canView) return new Response("Private", { status: 403 });
+
   const imgs = await loadDesignImages(designId);
   if (!imgs) return new Response("Not found", { status: 404 });
 

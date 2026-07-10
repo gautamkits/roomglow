@@ -1,6 +1,7 @@
 import { getDesign } from "@/lib/db";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
+import { designVisibility } from "@/lib/access";
 
 export const runtime = "nodejs";
 
@@ -42,10 +43,17 @@ export async function GET(
   const design = await getDesign(designId);
   if (!design) return new Response("Not found", { status: 404 });
 
+  const session = await auth();
+
+  // Privacy: a private design's pixels (even the watermarked preview) are only
+  // served to viewers allowed by the sharing model — owner, shared emails,
+  // admins, or everyone once gallery-approved.
+  const { canView } = await designVisibility(design, session);
+  if (!canView) return new Response("Private", { status: 403 });
+
   // Entitlement: the full-resolution master is only served once a design is
   // unlocked (paid / free-market claim), publicly approved for the gallery, or
   // to an admin. Everyone else gets the watermarked preview — never the master.
-  const session = await auth();
   const entitled =
     design.is_unlocked ||
     design.gallery_status === "approved" ||
