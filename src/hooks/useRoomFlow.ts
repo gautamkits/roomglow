@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type {
   AppMode,
   EventConfig,
@@ -14,6 +14,11 @@ import type {
   Hotspot,
 } from "@/lib/types";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
+import {
+  saveFlowSnapshot,
+  loadFlowSnapshot,
+  clearFlowSnapshot,
+} from "@/lib/flowPersistence";
 
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
@@ -63,6 +68,104 @@ export function useRoomFlow() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [restyleCount, setRestyleCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+
+  // ─── Level-1 resume: restore an in-progress flow on this device ───
+  // Gate persistence until the one-time rehydrate has run, so we never clobber a
+  // saved snapshot with the initial empty state on mount.
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFlowSnapshot().then((snap) => {
+      if (!cancelled && snap) {
+        // Only resume states worth returning to: a finished result, or a
+        // product-selection/generation stage (which always has an analysis).
+        const resumable =
+          (snap.step === "results" && snap.generatedImage) ||
+          snap.roomAnalysis ||
+          snap.personAnalysis;
+        if (resumable) {
+          setMode(snap.mode);
+          setEventConfig(snap.eventConfig);
+          setMakeoverConfig(snap.makeoverConfig);
+          setMaxBudget(snap.maxBudget);
+          setNoBudget(snap.noBudget);
+          setImage(snap.image);
+          setBaseImage(snap.baseImage);
+          setRoomAnalysis(snap.roomAnalysis);
+          setPersonAnalysis(snap.personAnalysis);
+          setSelectedItems(snap.selectedItems);
+          setProducts(snap.products);
+          setHotspots(snap.hotspots);
+          setGeneratedImage(snap.generatedImage);
+          setDesignNarrative(snap.designNarrative);
+          setDesignId(snap.designId);
+          setIsUnlocked(snap.isUnlocked);
+          // A run interrupted mid-generation drops back to product-selection so
+          // the user re-confirms (we don't silently resume a paid AI call).
+          setStep(
+            snap.step === "results" && snap.generatedImage
+              ? "results"
+              : "product-selection"
+          );
+        } else {
+          clearFlowSnapshot();
+        }
+      }
+      hydratedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the flow whenever the resumable state changes.
+  useEffect(() => {
+    if (!hydratedRef.current || !image) return;
+    const persistable =
+      step === "product-selection" ||
+      step === "generating" ||
+      step === "curating" ||
+      step === "results";
+    if (!persistable) return;
+    saveFlowSnapshot({
+      step,
+      mode,
+      eventConfig,
+      makeoverConfig,
+      maxBudget,
+      noBudget,
+      image,
+      baseImage,
+      roomAnalysis,
+      personAnalysis,
+      selectedItems,
+      products,
+      hotspots,
+      generatedImage,
+      designNarrative,
+      designId,
+      isUnlocked,
+    });
+  }, [
+    step,
+    mode,
+    eventConfig,
+    makeoverConfig,
+    maxBudget,
+    noBudget,
+    image,
+    baseImage,
+    roomAnalysis,
+    personAnalysis,
+    selectedItems,
+    products,
+    hotspots,
+    generatedImage,
+    designNarrative,
+    designId,
+    isUnlocked,
+  ]);
 
   const selectMode = useCallback((m: AppMode) => {
     setMode(m);
@@ -596,6 +699,7 @@ export function useRoomFlow() {
     setRetryCount(0);
     setCanRetry(false);
     progressRef.current = {};
+    clearFlowSnapshot();
   }, []);
 
   return {
