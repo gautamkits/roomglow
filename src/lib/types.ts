@@ -1,7 +1,21 @@
+/** Estimated real-world geometry of the photographed space, derived from
+ *  visible scale references (doors ≈ 6.7 ft, sofas ≈ 6 ft, switches ≈ 4 ft
+ *  high). Approximate by nature — used to ground generation at plausible
+ *  scale, not for exact measurement. */
+export interface RoomGeometry {
+  approxWidthFt: number;
+  approxDepthFt: number;
+  approxCeilingFt: number;
+  /** Visible objects with known typical sizes, e.g. "door on left wall (~6.7 ft tall)". */
+  scaleReferences: string[];
+}
+
 export interface RoomAnalysis {
   roomType: string;
   currentStyle: string;
   dimensions: string;
+  /** Optional: absent on designs analyzed before geometry estimation existed. */
+  geometry?: RoomGeometry;
   existingFurniture: string[];
   lightingCondition: string;
   colorPalette: string[];

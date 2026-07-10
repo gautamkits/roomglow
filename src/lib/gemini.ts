@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { RoomAnalysis } from "./types";
+import type { RoomAnalysis, RoomGeometry } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -38,12 +38,24 @@ const removableObjectSchema = {
   required: ["id", "label"],
 };
 
+const roomGeometrySchema = {
+  type: Type.OBJECT,
+  properties: {
+    approxWidthFt: { type: Type.NUMBER },
+    approxDepthFt: { type: Type.NUMBER },
+    approxCeilingFt: { type: Type.NUMBER },
+    scaleReferences: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["approxWidthFt", "approxDepthFt", "approxCeilingFt", "scaleReferences"],
+};
+
 const roomAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
     roomType: { type: Type.STRING },
     currentStyle: { type: Type.STRING },
     dimensions: { type: Type.STRING },
+    geometry: roomGeometrySchema,
     existingFurniture: { type: Type.ARRAY, items: { type: Type.STRING } },
     lightingCondition: { type: Type.STRING },
     colorPalette: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -55,6 +67,7 @@ const roomAnalysisSchema = {
     "roomType",
     "currentStyle",
     "dimensions",
+    "geometry",
     "existingFurniture",
     "lightingCondition",
     "colorPalette",
@@ -74,6 +87,11 @@ Fill in:
 - roomType: "living room" | "bedroom" | "kitchen" | etc
 - currentStyle: "modern" | "traditional" | "minimalist" | etc
 - dimensions: "small" | "medium" | "large"
+- geometry: estimate the REAL size of the room in feet. Use objects with known typical sizes as rulers — an interior door is ~6.7 ft tall, a 3-seat sofa ~6 ft wide, a light switch ~4 ft above the floor, a bed ~6.3 ft long. Provide:
+  - approxWidthFt / approxDepthFt: the visible floor area's width and depth in feet
+  - approxCeilingFt: floor-to-ceiling height in feet
+  - scaleReferences: 1-3 visible objects you used as rulers, each with its assumed size (e.g. "door on left wall (~6.7 ft tall)", "3-seat sofa (~6 ft wide)")
+  Be conservative: if unsure, estimate SMALLER rather than larger.
 - existingFurniture: array of items you actually see
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the room
@@ -100,6 +118,11 @@ Fill in:
 - roomType: the kind of space (e.g. "living room", "hall", "backyard")
 - currentStyle: the current look of the space
 - dimensions: "small" | "medium" | "large"
+- geometry: estimate the REAL size of the space in feet. Use objects with known typical sizes as rulers — an interior door is ~6.7 ft tall, a 3-seat sofa ~6 ft wide, a dining table ~2.5 ft tall, a light switch ~4 ft above the floor. Provide:
+  - approxWidthFt / approxDepthFt: the visible floor area's width and depth in feet
+  - approxCeilingFt: floor-to-ceiling height in feet
+  - scaleReferences: 1-3 visible objects you used as rulers, each with its assumed size (e.g. "door on left wall (~6.7 ft tall)", "dining table (~2.5 ft tall)")
+  Be conservative: if unsure, estimate SMALLER rather than larger.
 - existingFurniture: key furniture/surfaces you see (sofa, table, wall, etc.)
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
@@ -361,7 +384,11 @@ export async function generateDesignImage(
   // Hotspot detection is a second Gemini call that's only useful once a design
   // is unlocked (hotspots aren't rendered behind the paywall). Skip it on the
   // locked create path and compute it lazily at unlock time (P1-b).
-  detect: boolean = true
+  detect: boolean = true,
+  // Estimated room geometry from analyzeRoom — grounds product scale so a
+  // small room doesn't get an oversized rug/backdrop. Optional: absent on
+  // restyles of pre-geometry designs.
+  geometry?: RoomGeometry
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -424,8 +451,22 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
+  const scaleBlock = geometry
+    ? `
+
+SCALE CONSTRAINTS (critical — respect the room's REAL size):
+- This space is approximately ${Math.round(geometry.approxWidthFt)} ft wide × ${Math.round(geometry.approxDepthFt)} ft deep with a ~${Math.round(geometry.approxCeilingFt)} ft ceiling.${
+        geometry.scaleReferences?.length
+          ? `\n- Use these visible objects as size rulers: ${geometry.scaleReferences.join("; ")}.`
+          : ""
+      }
+- Render EVERY added product at its true real-world size relative to those references. If a product title states a size (e.g. "5x7 ft rug", "6x4 ft backdrop"), treat that size as a hard constraint.
+- Never let an added item exceed the wall, floor, or ceiling space that physically exists for it — a rug must fit the visible floor with margin, a backdrop must not span wider than its wall, hanging decor must hang below the ceiling, furniture must not dwarf the existing furniture next to it.
+- When unsure, render items slightly SMALLER than plausible rather than larger.`
+    : "";
+
   parts.push({
-    text: `${intro}
+    text: `${intro}${scaleBlock}
 
 MUST PRESERVE (do NOT change any of these):
 - The exact same walls, wall color, and wall texture

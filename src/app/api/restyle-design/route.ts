@@ -75,6 +75,17 @@ export async function POST(request: Request) {
     }
 
     const products = (design.products as ProductResult[]) ?? [];
+    // Ground the restyle at the room's real scale when the stored analysis has
+    // geometry (absent on pre-geometry designs).
+    let analysis: { geometry?: import("@/lib/types").RoomGeometry } | null = null;
+    try {
+      analysis =
+        typeof design.room_analysis === "string"
+          ? JSON.parse(design.room_analysis)
+          : design.room_analysis;
+    } catch {
+      analysis = null;
+    }
     const { generatedImage, hotspots } = await generateDesignImage(
       base64,
       products.map((p) => ({
@@ -85,7 +96,9 @@ export async function POST(request: Request) {
         imageUrl: p.amazonProduct?.imageUrl || "",
       })),
       undefined,
-      styleHint
+      styleHint,
+      true,
+      analysis?.geometry || undefined
     );
 
     // Track the billed image-gen call for cost analytics (same as generate-image).

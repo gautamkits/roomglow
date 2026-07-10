@@ -455,6 +455,8 @@ export function useRoomFlow() {
                 originalImage: canvas,
                 eventContext,
                 products: productPayload,
+                // Estimated room geometry so generation respects real scale.
+                geometry: roomAnalysis?.geometry,
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -643,6 +645,7 @@ export function useRoomFlow() {
         body: JSON.stringify({
           originalImage: clearedCanvas,
           eventContext,
+          geometry: roomAnalysis?.geometry,
           products: products.map((p: ProductResult) => ({
             category: p.recommendation.category,
             placement: p.recommendation.placement,
