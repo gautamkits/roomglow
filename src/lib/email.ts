@@ -46,6 +46,13 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+// Amazon titles run 150+ chars, which wrap into a tall, ugly column on mobile
+// (email clients don't support line-clamp). Trim to a readable length.
+function truncate(s: string, max: number): string {
+  const t = s.trim();
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+}
+
 function ratingStars(rating: number): string {
   if (!rating || rating <= 0) return "";
   const rounded = Math.round(rating * 10) / 10;
@@ -54,10 +61,12 @@ function ratingStars(rating: number): string {
 
 function productRow(p: ProductResult): string {
   const ap = p.amazonProduct;
-  const title = esc(ap?.title || p.recommendation.category || "Suggested item");
+  const title = esc(
+    truncate(ap?.title || p.recommendation.category || "Suggested item", 60)
+  );
   const placement = p.recommendation.placement
     ? `<div style="font-size:12px;color:${FAINT};margin-top:3px;line-height:1.4;">${esc(
-        p.recommendation.placement
+        truncate(p.recommendation.placement, 70)
       )}</div>`
     : "";
 
@@ -94,19 +103,25 @@ function productRow(p: ProductResult): string {
       )}</span>`
     : "";
 
+  // Two columns (thumb | content) so the title gets the full width and stays a
+  // couple of lines on mobile; price and the Buy button share a row underneath.
   return `
     <tr><td style="padding:6px 0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ${BORDER};border-radius:12px;">
         <tr>
           <td width="68" valign="top" style="padding:14px 0 14px 14px;">${thumb}</td>
-          <td valign="middle" style="padding:14px 12px;">
-            <div style="font-size:15px;font-weight:600;color:${TEXT};line-height:1.3;">${title}</div>
+          <td valign="top" style="padding:14px 14px 14px 12px;">
+            <div style="font-size:15px;font-weight:600;color:${TEXT};line-height:1.35;">${title}</div>
             ${placement}
-            <div style="margin-top:6px;">${price}${ratingHtml}</div>
-          </td>
-          <td width="86" valign="middle" align="right" style="padding:14px 14px 14px 0;">
-            <a href="${esc(ap.affiliateUrl)}"
-               style="display:inline-block;background:${CLAY_CTA};color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;">Buy</a>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:10px;">
+              <tr>
+                <td valign="middle">${price}${ratingHtml}</td>
+                <td valign="middle" align="right">
+                  <a href="${esc(ap.affiliateUrl)}"
+                     style="display:inline-block;background:${CLAY_CTA};color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;">Buy</a>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
       </table>
