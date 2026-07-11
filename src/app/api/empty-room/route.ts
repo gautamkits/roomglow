@@ -8,7 +8,7 @@ import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
-    const { image, removeLabels, keepLabels } = await request.json();
+    const { image, removeLabels, keepLabels, orphanedLabels } = await request.json();
     if (!image) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
@@ -39,7 +39,8 @@ export async function POST(request: Request) {
     const emptied = await emptyRoom(
       base64,
       Array.isArray(removeLabels) ? removeLabels : [],
-      Array.isArray(keepLabels) ? keepLabels : []
+      Array.isArray(keepLabels) ? keepLabels : [],
+      Array.isArray(orphanedLabels) ? orphanedLabels : []
     );
 
     // Track the billed image-gen call for cost analytics (empty-room pass).

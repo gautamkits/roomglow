@@ -74,6 +74,9 @@ export function useRoomFlow() {
   const [refreshedSuggestions, setRefreshedSuggestions] = useState<
     SuggestedProduct[] | null
   >(null);
+  // Space redesigns: let the AI rearrange kept furniture for the best layout
+  // (default on). "Keep my layout" flips it off.
+  const [optimizeLayout, setOptimizeLayout] = useState(true);
 
   // ─── Level-1 resume: restore an in-progress flow on this device ───
   // Gate persistence until the one-time rehydrate has run, so we never clobber a
@@ -346,13 +349,22 @@ export function useRoomFlow() {
       if (removedLabels.length && image && !p.canvas) {
         setStatusMessage("Tidying up the room...");
         try {
-          const keepLabels = (roomAnalysis?.removableObjects ?? [])
+          const objects = roomAnalysis?.removableObjects ?? [];
+          const keepLabels = objects
             .map((o) => o.label)
             .filter((l) => !removedLabels.includes(l));
+          // Kept items whose supporting object is being removed → must be
+          // re-placed so they don't float.
+          const removedIds = new Set(
+            objects.filter((o) => removedLabels.includes(o.label)).map((o) => o.id)
+          );
+          const orphanedLabels = objects
+            .filter((o) => !removedLabels.includes(o.label) && o.restsOn && removedIds.has(o.restsOn))
+            .map((o) => o.label);
           const emptyRes = await fetch("/api/empty-room", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image, removeLabels: removedLabels, keepLabels }),
+            body: JSON.stringify({ image, removeLabels: removedLabels, keepLabels, orphanedLabels }),
           });
           if (emptyRes.ok) {
             const { emptiedImage } = await emptyRes.json();
@@ -504,6 +516,8 @@ export function useRoomFlow() {
                 products: productPayload,
                 // Estimated room geometry so generation respects real scale.
                 geometry: roomAnalysis?.geometry,
+                // Space redesigns may rearrange kept furniture (default on).
+                optimizeLayout: mode === "space" ? optimizeLayout : false,
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -568,7 +582,7 @@ export function useRoomFlow() {
       setCanRetry(retriesLeft);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, noBudget, removedLabels, retryCount]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, noBudget, removedLabels, optimizeLayout, retryCount]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
@@ -728,6 +742,7 @@ export function useRoomFlow() {
           originalImage: clearedCanvas,
           eventContext,
           geometry: roomAnalysis?.geometry,
+          optimizeLayout: mode === "space" ? optimizeLayout : false,
           products: products.map((p: ProductResult) => ({
             category: p.recommendation.category,
             placement: p.recommendation.placement,
@@ -752,7 +767,7 @@ export function useRoomFlow() {
       );
       setStep("results");
     }
-  }, [image, products, isUnlocked, restyleCount, mode, eventConfig, roomAnalysis, generatedImage]);
+  }, [image, products, isUnlocked, restyleCount, mode, eventConfig, roomAnalysis, generatedImage, optimizeLayout]);
 
   const handleUnlocked = useCallback(() => {
     setIsUnlocked(true);
@@ -779,6 +794,7 @@ export function useRoomFlow() {
     setNoBudget(false);
     setRemovedLabels([]);
     setRefreshedSuggestions(null);
+    setOptimizeLayout(true);
     setSelectedItems([]);
     setError(null);
     setStatusMessage("");
@@ -812,6 +828,8 @@ export function useRoomFlow() {
     selectMode,
     submitEventConfig,
     refreshedSuggestions,
+    optimizeLayout,
+    setOptimizeLayout,
     handleImageSelected,
     handleProductSelection,
     handleTidyUp,

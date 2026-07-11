@@ -30,6 +30,9 @@ export type ClutterLevel = "clean" | "moderate" | "cluttered";
 export interface RemovableObject {
   id: string;
   label: string;
+  /** id of the object this one rests on / is supported by (e.g. a basket on a
+   *  table), if any — so clearing/redesign never leaves it floating. */
+  restsOn?: string;
 }
 
 export interface Question {

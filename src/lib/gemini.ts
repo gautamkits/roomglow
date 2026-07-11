@@ -34,6 +34,7 @@ const removableObjectSchema = {
   properties: {
     id: { type: Type.STRING },
     label: { type: Type.STRING },
+    restsOn: { type: Type.STRING },
   },
   required: ["id", "label"],
 };
@@ -97,7 +98,7 @@ Fill in:
 - colorPalette: 3 hex colors representing the room
 - suggestedProducts: 6-8 products
 - clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
-- removableObjects: the movable furniture and objects you actually see that COULD be cleared to empty the space (e.g. sofa, coffee table, chairs, rug, lamp, decor, boxes). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry). Return an empty array only if the room is already empty.
+- removableObjects: the movable furniture and objects you actually see that COULD be cleared to empty the space (e.g. sofa, coffee table, chairs, rug, lamp, decor, boxes). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry). If an object rests on or is supported by another removable object, set "restsOn" to that supporting object's "id" (e.g. a basket on a table, a lamp on a side table, a TV on a console). Return an empty array only if the room is already empty.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest products that can REALISTICALLY be added to THIS room
@@ -128,7 +129,7 @@ Fill in:
 - colorPalette: 3 hex colors representing the space
 - suggestedProducts: 6-8 EVENT DECORATION items
 - clutterLevel: "clean" if the space is empty or nearly so, "moderate" if it has some furniture/objects, "cluttered" if it is full of items that would crowd the decorations
-- removableObjects: the movable furniture and objects you actually see that COULD be cleared to free up the space (e.g. sofa, table, chairs, rug, clutter). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors). Return an empty array only if the space is already empty.
+- removableObjects: the movable furniture and objects you actually see that COULD be cleared to free up the space (e.g. sofa, table, chairs, rug, clutter). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors). If an object rests on or is supported by another removable object, set "restsOn" to that supporting object's "id" (e.g. a centerpiece on a table, a lamp on a stand). Return an empty array only if the space is already empty.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest ONLY event DECORATIONS appropriate to the occasion and theme — NOT permanent furniture
@@ -169,7 +170,10 @@ CRITICAL RULES for suggestedProducts:
 export async function emptyRoom(
   imageBase64: string,
   removeLabels: string[],
-  keepLabels: string[] = []
+  keepLabels: string[] = [],
+  // Kept items whose supporting object is being removed — must be re-placed on a
+  // real surface/floor so they don't float.
+  orphanedLabels: string[] = []
 ): Promise<string> {
   const removeLine = removeLabels.length
     ? `Remove these objects: ${removeLabels.join(", ")}.`
@@ -177,14 +181,18 @@ export async function emptyRoom(
   const keepLine = keepLabels.length
     ? `\nKEEP these items exactly as they are, do NOT remove them: ${keepLabels.join(", ")}.`
     : "";
+  const orphanLine = orphanedLabels.length
+    ? `\nThese kept items were resting on something you're removing: ${orphanedLabels.join(", ")}. Re-place each of them naturally on the floor or the nearest suitable surface — never leave them floating.`
+    : "";
 
   const prompt = `This is a photo of a room. This is a STRICT photo editing task — produce a clean, EMPTY version of this exact room.
 
-${removeLine}${keepLine}
+${removeLine}${keepLine}${orphanLine}
 
 MUST DO:
 - Photo-realistically reconstruct the floor, walls, and any surfaces that were hidden behind the removed objects, matching the existing flooring material, wall color, and texture.
 - Keep the EXACT same walls, floor, ceiling, windows, doors, built-in fixtures, room layout, dimensions, perspective, camera angle, and lighting.
+- If any item you KEEP was resting on or supported by an item you remove, do NOT leave it floating — place it naturally on the floor or the nearest suitable surface. Nothing may hover in mid-air.
 
 MUST NOT:
 - Do NOT add any new furniture, decorations, or objects.
@@ -388,7 +396,11 @@ export async function generateDesignImage(
   // Estimated room geometry from analyzeRoom — grounds product scale so a
   // small room doesn't get an oversized rug/backdrop. Optional: absent on
   // restyles of pre-geometry designs.
-  geometry?: RoomGeometry
+  geometry?: RoomGeometry,
+  // Space redesigns only: when true the AI may reposition existing/kept furniture
+  // for the best layout (identity/appearance preserved). Off for events (decorate,
+  // don't rearrange the venue) and for the "keep my layout" opt-out.
+  optimizeLayout: boolean = false
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -465,18 +477,30 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - When unsure, render items slightly SMALLER than plausible rather than larger.`
     : "";
 
+  // Space redesigns may rearrange kept furniture for a better layout; events keep
+  // the venue as-is. Architecture is always fixed either way.
+  const canRearrange = optimizeLayout && !eventContext;
+  const furnitureBlock = canRearrange
+    ? `EXISTING FURNITURE (you MAY rearrange for the best layout):
+- You may REPOSITION the existing furniture to create the best, most cohesive layout (e.g. move a lamp beside the sofa, angle a chair toward the focal point, pull the rug under the seating).
+- Keep each existing item's IDENTITY and APPEARANCE IDENTICAL — same sofa, same lamp, same colors and materials — only place it better. Do NOT invent, remove, or restyle existing furniture.
+- Respect real-world placement: large pieces sit against or near walls, nothing floats, and everything stays at correct scale.`
+    : `EXISTING FURNITURE (keep in place):
+- ALL existing furniture (sofa, tables, shelves, etc.) — keep them exactly where they are.
+- All cables, outlets, and existing items stay as-is.`;
+
   parts.push({
     text: `${intro}${scaleBlock}
 
-MUST PRESERVE (do NOT change any of these):
+MUST PRESERVE EXACTLY (never change the architecture):
 - The exact same walls, wall color, and wall texture
 - The exact same floor and flooring material
 - The exact same ceiling, ceiling fan, and light fixtures
-- ALL existing furniture (sofa, tables, shelves, etc.) — keep them exactly as they are
-- The exact same room layout, dimensions, and perspective
-- The exact same camera angle
-- Whether windows exist or not — do NOT add or remove windows
-- All cables, outlets, and existing items
+- The exact same room dimensions, perspective, and camera angle
+- Whether windows and doors exist or not — do NOT add or remove them
+
+${furnitureBlock}
+- Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
 ${productList}

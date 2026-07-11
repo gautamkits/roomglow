@@ -57,6 +57,8 @@ function HomeContent() {
     handleProductSelection,
     handleTidyUp,
     refreshedSuggestions,
+    optimizeLayout,
+    setOptimizeLayout,
     handleRegenerate,
     retryGeneration,
     canRetry,
@@ -288,6 +290,41 @@ function HomeContent() {
                   )}
               </p>
             </div>
+            {mode === "space" && (
+              <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 animate-fade-up-delay-1">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Layout
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {optimizeLayout
+                      ? "We'll rearrange your furniture into the best layout."
+                      : "We'll keep your furniture where it is."}
+                  </p>
+                </div>
+                <div className="flex gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 text-xs shrink-0">
+                  {(
+                    [
+                      { id: true, label: "Optimize" },
+                      { id: false, label: "Keep mine" },
+                    ] as const
+                  ).map(({ id, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setOptimizeLayout(id)}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${
+                        optimizeLayout === id
+                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium shadow-sm"
+                          : "text-zinc-500"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="animate-fade-up-delay-1">
               <ProductSelection
                 products={refreshedSuggestions ?? roomAnalysis.suggestedProducts ?? []}
