@@ -68,6 +68,12 @@ export function useRoomFlow() {
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [restyleCount, setRestyleCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
+  // Items the user chose to remove in the tidy-up step, and the AI-refreshed
+  // "what to add" suggestions that account for those removals.
+  const [removedLabels, setRemovedLabels] = useState<string[]>([]);
+  const [refreshedSuggestions, setRefreshedSuggestions] = useState<
+    SuggestedProduct[] | null
+  >(null);
 
   // ─── Level-1 resume: restore an in-progress flow on this device ───
   // Gate persistence until the one-time rehydrate has run, so we never clobber a
@@ -265,7 +271,13 @@ export function useRoomFlow() {
         }
         const analysis: RoomAnalysis = await res.json();
         setRoomAnalysis(analysis);
-        setStep("product-selection");
+        // Cluttered room/venue → let the user pick what to remove BEFORE the
+        // "what to add" step, since removals change what should be recommended
+        // (e.g. remove the sofa → we can then offer a new sofa).
+        const cluttered =
+          analysis.clutterLevel !== "clean" &&
+          (analysis.removableObjects?.length ?? 0) > 0;
+        setStep(cluttered ? "tidy-up" : "product-selection");
       } catch (e) {
         setError(
           e instanceof Error
@@ -302,10 +314,6 @@ export function useRoomFlow() {
     if (!roomAnalysis || !image) return;
     const p = progressRef.current;
     const selected = p.selected ?? [];
-    // Generate on the clean canvas (emptied room when decluttered, else the
-    // original). `p.canvas` is set synchronously by the tidy-up step; `image`
-    // stays the true upload for saving and before/after.
-    const canvas = p.canvas ?? baseImage ?? image;
 
     setStep("generating");
     setError(null);
@@ -332,6 +340,40 @@ export function useRoomFlow() {
     const isMakeover = mode === "makeover";
 
     try {
+      // 0. Empty the items the user chose to remove in tidy-up, before designing.
+      // Cached in p.canvas so a retry doesn't re-empty (and re-pay). Non-fatal:
+      // on failure we design on the original photo.
+      if (removedLabels.length && image && !p.canvas) {
+        setStatusMessage("Tidying up the room...");
+        try {
+          const keepLabels = (roomAnalysis?.removableObjects ?? [])
+            .map((o) => o.label)
+            .filter((l) => !removedLabels.includes(l));
+          const emptyRes = await fetch("/api/empty-room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image, removeLabels: removedLabels, keepLabels }),
+          });
+          if (emptyRes.ok) {
+            const { emptiedImage } = await emptyRes.json();
+            const cleared = emptiedImage?.startsWith("data:")
+              ? emptiedImage
+              : emptiedImage
+              ? `data:image/png;base64,${emptiedImage}`
+              : null;
+            if (cleared) {
+              setBaseImage(cleared);
+              p.canvas = cleared;
+            }
+          }
+        } catch {
+          /* non-fatal: design on the original photo */
+        }
+      }
+      // Generate on the clean canvas (emptied room when decluttered, else the
+      // original). `image` stays the true upload for saving and before/after.
+      const canvas = p.canvas ?? baseImage ?? image;
+
       // 1. Design vision + product recommendations
       if (!p.recs || p.designVision === undefined) {
         setStep("generating");
@@ -372,6 +414,7 @@ export function useRoomFlow() {
               userAnswers: {},
               selectedProductTypes: selected.map((s) => s.label),
               eventContext,
+              removeLabels: removedLabels,
             },
             "We couldn't create a design plan. Please try again."
           );
@@ -524,67 +567,50 @@ export function useRoomFlow() {
       setCanRetry(retriesLeft);
       setStep("product-selection");
     }
-  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, noBudget, retryCount]);
+  }, [roomAnalysis, image, baseImage, mode, eventConfig, makeoverConfig, personAnalysis, maxBudget, noBudget, removedLabels, retryCount]);
 
   const handleProductSelection = useCallback(
     async (selected: SuggestedProduct[]) => {
       setSelectedItems(selected);
       // Fresh submission → start a clean run (don't reuse stale partial work).
+      // removedLabels lives in state and is read by runPipeline.
       progressRef.current = { selected };
-      // Cluttered room/venue → let the user pick items to remove before we
-      // generate (opt-in). Makeover (person photo) is never decluttered.
-      const cluttered =
-        mode !== "makeover" &&
-        !!roomAnalysis &&
-        roomAnalysis.clutterLevel !== "clean" &&
-        (roomAnalysis.removableObjects?.length ?? 0) > 0;
-      if (cluttered) {
-        setStep("tidy-up");
-        return;
-      }
       await runPipeline();
     },
-    [runPipeline, mode, roomAnalysis]
+    [runPipeline]
   );
 
-  // From the tidy-up step: optionally empty the chosen items, then generate.
-  // Empty removeLabels (keep everything) skips the paid empty-room render.
+  // Tidy-up step (runs BEFORE product selection). Record what to remove, and if
+  // anything was removed, AI-refresh the "what to add" list so removals surface
+  // replacements/fillers. The actual empty-room render is deferred to
+  // runPipeline (only when the user commits by picking products).
   const handleTidyUp = useCallback(
     async (removeLabels: string[]) => {
-      if (removeLabels.length && image) {
-        setStep("generating");
-        setError(null);
-        setStatusMessage("Tidying up the room...");
+      setRemovedLabels(removeLabels);
+      setRefreshedSuggestions(null);
+      if (removeLabels.length && image && roomAnalysis) {
+        setStep("analyzing");
+        setStatusMessage("Updating suggestions for your cleared room...");
         try {
-          const keepLabels = (roomAnalysis?.removableObjects ?? [])
-            .map((o) => o.label)
-            .filter((l) => !removeLabels.includes(l));
-          const res = await fetch("/api/empty-room", {
+          const res = await fetch("/api/refresh-suggestions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image, removeLabels, keepLabels }),
+            body: JSON.stringify({ image, roomAnalysis, removeLabels }),
           });
           if (res.ok) {
-            const { emptiedImage } = await res.json();
-            const cleared = emptiedImage?.startsWith("data:")
-              ? emptiedImage
-              : emptiedImage
-              ? `data:image/png;base64,${emptiedImage}`
-              : null;
-            if (cleared) {
-              setBaseImage(cleared);
-              // Synchronous handoff so runPipeline uses the cleared canvas now.
-              progressRef.current.canvas = cleared;
+            const { suggestedProducts } = await res.json();
+            if (Array.isArray(suggestedProducts) && suggestedProducts.length) {
+              setRefreshedSuggestions(suggestedProducts);
             }
           }
-          // Non-fatal: on any failure we fall through and design on the original.
+          // Non-fatal: fall back to the original suggestion list on failure.
         } catch {
-          /* ignore — design on the original photo */
+          /* ignore — keep original suggestions */
         }
       }
-      await runPipeline();
+      setStep("product-selection");
     },
-    [image, roomAnalysis, runPipeline]
+    [image, roomAnalysis]
   );
 
   // Resume a failed run from the first incomplete step (U2). Capped so a
@@ -750,6 +776,8 @@ export function useRoomFlow() {
     setPromoApplied(false);
     setMaxBudget(undefined);
     setNoBudget(false);
+    setRemovedLabels([]);
+    setRefreshedSuggestions(null);
     setSelectedItems([]);
     setError(null);
     setStatusMessage("");
@@ -782,6 +810,7 @@ export function useRoomFlow() {
     statusMessage,
     selectMode,
     submitEventConfig,
+    refreshedSuggestions,
     handleImageSelected,
     handleProductSelection,
     handleTidyUp,

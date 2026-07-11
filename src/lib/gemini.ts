@@ -945,20 +945,33 @@ export async function recommendProducts(
   roomAnalysis: RoomAnalysis,
   userAnswers: Record<string, string>,
   selectedProductTypes: string[],
-  eventContext?: string
+  eventContext?: string,
+  // Items the user chose to remove in the tidy-up step. They are gone from the
+  // canvas, so recommendations must treat them as absent (and may fill the
+  // freed space).
+  removeLabels: string[] = []
 ): Promise<string> {
   const productTypesList =
     selectedProductTypes.length > 0
       ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
       : "";
 
+  // Existing furniture minus anything the user removed, so we don't design
+  // around items that are no longer in the room.
+  const remaining = roomAnalysis.existingFurniture.filter(
+    (f) => !removeLabels.some((r) => f.toLowerCase().includes(r.toLowerCase()) || r.toLowerCase().includes(f.toLowerCase()))
+  );
+  const removedBlock = removeLabels.length
+    ? `\n- REMOVED by the user (no longer in the room — do not design around these; suggest replacements/fillers for the freed space where it makes sense): ${removeLabels.join(", ")}`
+    : "";
+
   const analysisBlock = `Space Analysis:
 - Type: ${roomAnalysis.roomType}
 - Current Style: ${roomAnalysis.currentStyle}
 - Size: ${roomAnalysis.dimensions}
-- Existing Furniture/Surfaces: ${roomAnalysis.existingFurniture.join(", ")}
+- Existing Furniture/Surfaces: ${remaining.join(", ") || "cleared / mostly empty"}
 - Lighting: ${roomAnalysis.lightingCondition}
-- Current Colors: ${roomAnalysis.colorPalette.join(", ")}
+- Current Colors: ${roomAnalysis.colorPalette.join(", ")}${removedBlock}
 ${productTypesList}`;
 
   const spacePrompt = `You are an expert interior designer. Based on the space analysis and user preferences below, create a design vision and recommend specific products that would transform this space.
@@ -1010,6 +1023,59 @@ Also write a clear 2-3 sentence designVision describing the styling — color pa
     config: {
       responseMimeType: "application/json",
       responseSchema: recommendationSchema,
+    },
+  });
+
+  return response.text ?? "";
+}
+
+const suggestionListSchema = {
+  type: Type.OBJECT,
+  properties: {
+    suggestedProducts: { type: Type.ARRAY, items: suggestedProductSchema },
+  },
+  required: ["suggestedProducts"],
+};
+
+/**
+ * Regenerate the "what to add" suggestion list after the user removes items in
+ * the tidy-up step, so removing (e.g.) a sofa surfaces a NEW sofa as an option
+ * plus fillers for the freed space — which the original analysis suppressed
+ * because the item was still present. Cheap gemini-2.5-flash text call.
+ */
+export async function refreshSuggestions(
+  imageBase64: string,
+  roomAnalysis: RoomAnalysis,
+  removeLabels: string[]
+): Promise<string> {
+  const remaining = roomAnalysis.existingFurniture.filter(
+    (f) => !removeLabels.some((r) => f.toLowerCase().includes(r.toLowerCase()) || r.toLowerCase().includes(f.toLowerCase()))
+  );
+
+  const prompt = `You are an interior design analyst. The user is redesigning their ${roomAnalysis.dimensions} ${roomAnalysis.roomType} and has chosen to REMOVE these items from it: ${removeLabels.join(", ")}.
+
+After removal, what remains: ${remaining.join(", ") || "the room is mostly empty now"}.
+
+Suggest 6-8 products the user could ADD, as a fresh checklist. IMPORTANT:
+- For each removed item that still has a functional need, suggest a REPLACEMENT (e.g. if the sofa was removed, DO suggest a new sofa/couch — the "don't suggest a sofa if one exists" rule no longer applies because it was removed).
+- Also suggest items to fill the space freed up by the removals.
+- Do NOT suggest a replacement for a removed item the user clearly wanted gone with no functional gap (use judgement).
+- Keep suggestions realistic for THIS room. Each has: "id" (short snake_case), "label" (human), "description" (referencing the room / the removal), "icon" (single emoji).`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: suggestionListSchema,
     },
   });
 
