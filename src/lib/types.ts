@@ -133,6 +133,7 @@ export type FlowStep =
   | "upload"
   | "analyzing"
   | "product-selection"
+  | "tidy-up"
   | "generating"
   | "curating"
   | "results";

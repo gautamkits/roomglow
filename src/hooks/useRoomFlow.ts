@@ -284,6 +284,9 @@ export function useRoomFlow() {
   // (U2). A fresh submission clears this, so the happy path is unchanged.
   const progressRef = useRef<{
     selected?: SuggestedProduct[];
+    // Cleared canvas from the upfront tidy-up step. Passed synchronously to
+    // runPipeline to avoid a stale-closure race with setBaseImage.
+    canvas?: string;
     recs?: ProductRecommendation[];
     categories?: unknown;
     designVision?: string;
@@ -300,8 +303,9 @@ export function useRoomFlow() {
     const p = progressRef.current;
     const selected = p.selected ?? [];
     // Generate on the clean canvas (emptied room when decluttered, else the
-    // original). `image` stays the true upload for saving and before/after.
-    const canvas = baseImage ?? image;
+    // original). `p.canvas` is set synchronously by the tidy-up step; `image`
+    // stays the true upload for saving and before/after.
+    const canvas = p.canvas ?? baseImage ?? image;
 
     setStep("generating");
     setError(null);
@@ -527,9 +531,60 @@ export function useRoomFlow() {
       setSelectedItems(selected);
       // Fresh submission → start a clean run (don't reuse stale partial work).
       progressRef.current = { selected };
+      // Cluttered room/venue → let the user pick items to remove before we
+      // generate (opt-in). Makeover (person photo) is never decluttered.
+      const cluttered =
+        mode !== "makeover" &&
+        !!roomAnalysis &&
+        roomAnalysis.clutterLevel !== "clean" &&
+        (roomAnalysis.removableObjects?.length ?? 0) > 0;
+      if (cluttered) {
+        setStep("tidy-up");
+        return;
+      }
       await runPipeline();
     },
-    [runPipeline]
+    [runPipeline, mode, roomAnalysis]
+  );
+
+  // From the tidy-up step: optionally empty the chosen items, then generate.
+  // Empty removeLabels (keep everything) skips the paid empty-room render.
+  const handleTidyUp = useCallback(
+    async (removeLabels: string[]) => {
+      if (removeLabels.length && image) {
+        setStep("generating");
+        setError(null);
+        setStatusMessage("Tidying up the room...");
+        try {
+          const keepLabels = (roomAnalysis?.removableObjects ?? [])
+            .map((o) => o.label)
+            .filter((l) => !removeLabels.includes(l));
+          const res = await fetch("/api/empty-room", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image, removeLabels, keepLabels }),
+          });
+          if (res.ok) {
+            const { emptiedImage } = await res.json();
+            const cleared = emptiedImage?.startsWith("data:")
+              ? emptiedImage
+              : emptiedImage
+              ? `data:image/png;base64,${emptiedImage}`
+              : null;
+            if (cleared) {
+              setBaseImage(cleared);
+              // Synchronous handoff so runPipeline uses the cleared canvas now.
+              progressRef.current.canvas = cleared;
+            }
+          }
+          // Non-fatal: on any failure we fall through and design on the original.
+        } catch {
+          /* ignore — design on the original photo */
+        }
+      }
+      await runPipeline();
+    },
+    [image, roomAnalysis, runPipeline]
   );
 
   // Resume a failed run from the first incomplete step (U2). Capped so a
@@ -729,6 +784,7 @@ export function useRoomFlow() {
     submitEventConfig,
     handleImageSelected,
     handleProductSelection,
+    handleTidyUp,
     handleRegenerate,
     retryGeneration,
     canRetry,

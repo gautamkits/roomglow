@@ -18,6 +18,7 @@ import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
 import ProductSelection from "@/components/ProductSelection";
+import TidyUpSelection from "@/components/TidyUpSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
 import Landing from "@/components/Landing";
@@ -55,6 +56,7 @@ function HomeContent() {
     statusMessage,
     handleImageSelected,
     handleProductSelection,
+    handleTidyUp,
     handleRegenerate,
     retryGeneration,
     canRetry,
@@ -324,6 +326,17 @@ function HomeContent() {
                 onComplete={handleProductSelection}
               />
             </div>
+          </div>
+        )}
+
+        {/* ─── TIDY UP (pick items to remove) ─── */}
+        {step === "tidy-up" && roomAnalysis && image && (
+          <div className="py-10 max-w-3xl mx-auto animate-fade-up">
+            <TidyUpSelection
+              photoUrl={image}
+              items={roomAnalysis.removableObjects || []}
+              onComplete={handleTidyUp}
+            />
           </div>
         )}
 
