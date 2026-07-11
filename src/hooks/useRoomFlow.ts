@@ -74,9 +74,9 @@ export function useRoomFlow() {
   const [refreshedSuggestions, setRefreshedSuggestions] = useState<
     SuggestedProduct[] | null
   >(null);
-  // Space redesigns: let the AI rearrange kept furniture for the best layout
-  // (default on). "Keep my layout" flips it off.
-  const [optimizeLayout, setOptimizeLayout] = useState(true);
+  // Space redesigns: whether the AI may rearrange kept furniture for the best
+  // layout. Defaults OFF ("Keep mine") — the user opts into "Optimize".
+  const [optimizeLayout, setOptimizeLayout] = useState(false);
 
   // ─── Level-1 resume: restore an in-progress flow on this device ───
   // Gate persistence until the one-time rehydrate has run, so we never clobber a
@@ -796,7 +796,7 @@ export function useRoomFlow() {
     setNoBudget(false);
     setRemovedLabels([]);
     setRefreshedSuggestions(null);
-    setOptimizeLayout(true);
+    setOptimizeLayout(false);
     setSelectedItems([]);
     setError(null);
     setStatusMessage("");
