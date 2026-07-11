@@ -20,12 +20,29 @@ type ApprovedDesign = RevealDesign & {
   original_image_url: string;
 };
 
+interface AllDesign {
+  id: string;
+  mode: string;
+  design_narrative: string;
+  original_image_url: string;
+  generated_image_url: string;
+  created_at: string;
+  is_unlocked: boolean;
+  gallery_status: string;
+  user_email: string | null;
+}
+
+const ALL_PAGE = 60;
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<"pending" | "published">("pending");
+  const [tab, setTab] = useState<"pending" | "published" | "all">("pending");
   const [designs, setDesigns] = useState<PendingDesign[]>([]);
   const [approved, setApproved] = useState<ApprovedDesign[]>([]);
+  const [all, setAll] = useState<AllDesign[]>([]);
+  const [allHasMore, setAllHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [makeoverEnabled, setMakeoverEnabled] = useState(false);
@@ -58,6 +75,24 @@ function AdminContent() {
     const data = await res.json();
     setApproved(data.designs || []);
     setLoading(false);
+  }, []);
+
+  const loadAll = useCallback(async (offset = 0) => {
+    if (offset === 0) setLoading(true);
+    else setLoadingMore(true);
+    const res = await fetch(`/api/admin/all-designs?limit=${ALL_PAGE}&offset=${offset}`);
+    if (res.status === 403) {
+      setForbidden(true);
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+    const data = await res.json();
+    const batch: AllDesign[] = data.designs || [];
+    setAll((prev) => (offset === 0 ? batch : [...prev, ...batch]));
+    setAllHasMore(batch.length === ALL_PAGE);
+    setLoading(false);
+    setLoadingMore(false);
   }, []);
 
   useEffect(() => {
@@ -96,8 +131,9 @@ function AdminContent() {
     if (status === "unauthenticated") signIn("google");
     if (status !== "authenticated") return;
     if (tab === "pending") load();
-    else loadApproved();
-  }, [status, tab, load, loadApproved]);
+    else if (tab === "published") loadApproved();
+    else loadAll(0);
+  }, [status, tab, load, loadApproved, loadAll]);
 
   const review = async (id: string, action: "approve" | "reject") => {
     setDesigns((d) => d.filter((x) => x.id !== id));
@@ -184,6 +220,16 @@ function AdminContent() {
             >
               Published
             </button>
+            <button
+              onClick={() => setTab("all")}
+              className={`px-3 py-1 rounded-md transition-colors ${
+                tab === "all"
+                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                  : "text-zinc-500"
+              }`}
+            >
+              All designs
+            </button>
           </div>
         }
       />
@@ -241,8 +287,8 @@ function AdminContent() {
           </div>
         </div>
 
-        {tab === "pending" ? (
-          designs.length === 0 ? (
+        {tab === "pending" &&
+          (designs.length === 0 ? (
             <p className="text-center text-zinc-500 py-20">Nothing pending review.</p>
           ) : (
             <div className="grid sm:grid-cols-2 gap-6">
@@ -280,33 +326,102 @@ function AdminContent() {
                 </div>
               ))}
             </div>
-          )
-        ) : approved.length === 0 ? (
-          <p className="text-center text-zinc-500 py-20">No published designs yet.</p>
-        ) : (
-          <div className="grid sm:grid-cols-2 gap-6">
-            {approved.map((d) => (
-              <div
-                key={d.id}
-                className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden"
-              >
-                <div className="grid grid-cols-2">
-                  <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
-                  <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+          ))}
+
+        {tab === "published" &&
+          (approved.length === 0 ? (
+            <p className="text-center text-zinc-500 py-20">No published designs yet.</p>
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-6">
+              {approved.map((d) => (
+                <div
+                  key={d.id}
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden"
+                >
+                  <div className="grid grid-cols-2">
+                    <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
+                    <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+                  </div>
+                  <div className="p-4">
+                    <RevealExport design={d} />
+                    <button
+                      onClick={() => removeFromGallery(d.id)}
+                      className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                    >
+                      <X size={15} /> Remove from home page
+                    </button>
+                  </div>
                 </div>
-                <div className="p-4">
-                  <RevealExport design={d} />
-                  <button
-                    onClick={() => removeFromGallery(d.id)}
-                    className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+              ))}
+            </div>
+          ))}
+
+        {tab === "all" &&
+          (all.length === 0 ? (
+            <p className="text-center text-zinc-500 py-20">No designs yet.</p>
+          ) : (
+            <>
+              <p className="text-xs text-zinc-500 mb-4">
+                Every generated design (private too) — for reviewing outputs to
+                refine prompts. Click any card to open it.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
+                {all.map((d) => (
+                  <a
+                    key={d.id}
+                    href={`/design/${d.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden hover:border-orange-700 transition-colors"
                   >
-                    <X size={15} /> Remove from home page
+                    <div className="grid grid-cols-2">
+                      <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
+                      <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+                    </div>
+                    <div className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] uppercase tracking-wide text-zinc-400">
+                          {d.mode}
+                        </span>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                            d.gallery_status === "approved"
+                              ? "bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400"
+                              : d.gallery_status === "pending"
+                              ? "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400"
+                              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500"
+                          }`}
+                        >
+                          {d.gallery_status === "approved"
+                            ? "public"
+                            : d.gallery_status === "pending"
+                            ? "pending"
+                            : "private"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-600 dark:text-zinc-300 truncate mt-1">
+                        {d.user_email || "anonymous"}
+                      </p>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        {new Date(d.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+              {allHasMore && (
+                <div className="text-center mt-8">
+                  <button
+                    onClick={() => loadAll(all.length)}
+                    disabled={loadingMore}
+                    className="px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 disabled:opacity-50"
+                  >
+                    {loadingMore ? "Loading…" : "Load more"}
                   </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </>
+          ))}
       </main>
     </div>
   );

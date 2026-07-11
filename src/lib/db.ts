@@ -219,6 +219,25 @@ export async function getPendingDesigns() {
   return rows;
 }
 
+/** Admin-only: every generated design (regardless of privacy/gallery status),
+ *  newest first, with the owner's email — for reviewing outputs to refine
+ *  prompts. Paginated. */
+export async function getAllDesigns(opts: { limit?: number; offset?: number } = {}) {
+  const limit = Math.min(opts.limit ?? 60, 120);
+  const offset = opts.offset ?? 0;
+  const { rows } = await sql.query(
+    `SELECT d.id, d.mode, d.design_narrative, d.original_image_url,
+            d.generated_image_url, d.created_at, d.is_unlocked, d.gallery_status,
+            u.email AS user_email
+     FROM designs d
+     LEFT JOIN users u ON u.id = d.user_id
+     ORDER BY d.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+  return rows;
+}
+
 export async function getGalleryDesigns(opts: {
   mode?: string;
   sort?: string;
