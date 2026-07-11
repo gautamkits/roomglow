@@ -98,7 +98,7 @@ Fill in:
 - colorPalette: 3 hex colors representing the room
 - suggestedProducts: 6-8 products
 - clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
-- removableObjects: the movable furniture and objects you actually see that COULD be cleared to empty the space (e.g. sofa, coffee table, chairs, rug, lamp, decor, boxes). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry). If an object rests on or is supported by another removable object, set "restsOn" to that supporting object's "id" (e.g. a basket on a table, a lamp on a side table, a TV on a console). Return an empty array only if the room is already empty.
+- removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, bed, dining/coffee table, chairs, shelving unit, rug, large floor lamp, large potted plant, cabinet/console, TV). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, cushions, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a lamp on a side table, a TV on a console). Return an empty array only if there are no large movable pieces.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest products that can REALISTICALLY be added to THIS room
@@ -129,7 +129,7 @@ Fill in:
 - colorPalette: 3 hex colors representing the space
 - suggestedProducts: 6-8 EVENT DECORATION items
 - clutterLevel: "clean" if the space is empty or nearly so, "moderate" if it has some furniture/objects, "cluttered" if it is full of items that would crowd the decorations
-- removableObjects: the movable furniture and objects you actually see that COULD be cleared to free up the space (e.g. sofa, table, chairs, rug, clutter). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors). If an object rests on or is supported by another removable object, set "restsOn" to that supporting object's "id" (e.g. a centerpiece on a table, a lamp on a stand). Return an empty array only if the space is already empty.
+- removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, table, chairs, shelving unit, rug, large lamp, large plant, cabinet/console). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a centerpiece on a table, a lamp on a stand). Return an empty array only if there are no large movable pieces.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest ONLY event DECORATIONS appropriate to the occasion and theme — NOT permanent furniture
@@ -192,6 +192,7 @@ ${removeLine}${keepLine}${orphanLine}
 MUST DO:
 - Photo-realistically reconstruct the floor, walls, and any surfaces that were hidden behind the removed objects, matching the existing flooring material, wall color, and texture.
 - Keep the EXACT same walls, floor, ceiling, windows, doors, built-in fixtures, room layout, dimensions, perspective, camera angle, and lighting.
+- Also clear away ALL small clutter and loose tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, small stray objects) so every surface looks clean and tidy — regardless of the list above.
 - If any item you KEEP was resting on or supported by an item you remove, do NOT leave it floating — place it naturally on the floor or the nearest suitable surface. Nothing may hover in mid-air.
 
 MUST NOT:
@@ -500,6 +501,7 @@ MUST PRESERVE EXACTLY (never change the architecture):
 - Whether windows and doors exist or not — do NOT add or remove them
 
 ${furnitureBlock}
+- Tidy the space as part of the redesign: clear away any small clutter and loose tabletop items (remotes, bottles, cups, food/fruit, papers, chargers, small stray objects) so surfaces look clean and styled. This does NOT apply to the main furniture above.
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
