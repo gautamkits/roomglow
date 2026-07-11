@@ -6,7 +6,7 @@ import type { RemovableObject } from "@/lib/types";
 
 interface TidyUpSelectionProps {
   /** The uploaded room/venue photo (data URL) — shown so the user can see the
-   *  actual room while choosing what to remove. */
+   *  actual room while choosing what to keep. */
   photoUrl: string;
   items: RemovableObject[];
   /** Called with the labels the user wants removed (empty = keep everything). */
@@ -18,11 +18,15 @@ export default function TidyUpSelection({
   items,
   onComplete,
 }: TidyUpSelectionProps) {
-  // Opt-in removal: nothing selected by default → we keep everything.
-  const [remove, setRemove] = useState<Set<string>>(new Set());
+  // Keep-based selection: everything is kept by default (checked). The user
+  // UNCHECKS anything they'd like cleared out. Default keep-all means no
+  // empty-room render (no cost) unless they actually remove something.
+  const [keep, setKeep] = useState<Set<string>>(
+    () => new Set(items.map((i) => i.id))
+  );
 
   const toggle = (id: string) => {
-    setRemove((prev) => {
+    setKeep((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -30,25 +34,28 @@ export default function TidyUpSelection({
     });
   };
 
-  const removeAll = () => setRemove(new Set(items.map((i) => i.id)));
-  const keepAll = () => setRemove(new Set());
+  const keepAll = () => setKeep(new Set(items.map((i) => i.id)));
+  const removeAll = () => setKeep(new Set());
 
   const handleContinue = () => {
-    const labels = items.filter((i) => remove.has(i.id)).map((i) => i.label);
-    onComplete(labels);
+    const removeLabels = items
+      .filter((i) => !keep.has(i.id))
+      .map((i) => i.label);
+    onComplete(removeLabels);
   };
 
-  const count = remove.size;
+  const labelById = new Map(items.map((i) => [i.id, i.label]));
+  const removeCount = items.length - keep.size;
 
   return (
     <div className="w-full">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Anything you&apos;d like removed?
+          What would you like to keep?
         </h2>
         <p className="text-sm text-zinc-500 mt-1">
-          We&apos;ll keep everything unless you pick items to clear out. Removing
-          clutter gives your new design a cleaner canvas.
+          Everything is kept by default. Uncheck anything you&apos;d like cleared
+          out — we&apos;ll design a cleaner space around what you keep.
         </p>
       </div>
 
@@ -67,16 +74,9 @@ export default function TidyUpSelection({
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] uppercase tracking-wide text-zinc-400">
-              Detected in your room
+              Detected in your room — checked items stay
             </span>
             <div className="flex gap-1.5">
-              <button
-                type="button"
-                onClick={removeAll}
-                className="text-xs px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
-              >
-                Remove all
-              </button>
               <button
                 type="button"
                 onClick={keepAll}
@@ -84,40 +84,57 @@ export default function TidyUpSelection({
               >
                 Keep all
               </button>
+              <button
+                type="button"
+                onClick={removeAll}
+                className="text-xs px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+              >
+                Remove all
+              </button>
             </div>
           </div>
 
           <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
             {items.map((item) => {
-              const isRemoving = remove.has(item.id);
+              const isKeeping = keep.has(item.id);
+              const restsOnLabel = item.restsOn
+                ? labelById.get(item.restsOn)
+                : undefined;
               return (
                 <button
                   key={item.id}
                   onClick={() => toggle(item.id)}
-                  aria-pressed={isRemoving}
+                  aria-pressed={isKeeping}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-left transition-colors border ${
-                    isRemoving
-                      ? "border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30"
-                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    isKeeping
+                      ? "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-zinc-300 dark:hover:border-zinc-700"
+                      : "border-red-200 bg-red-50/60 dark:border-red-900/60 dark:bg-red-950/20"
                   }`}
                 >
                   <span
                     className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
-                      isRemoving
-                        ? "bg-red-600 border-red-600 text-white"
+                      isKeeping
+                        ? "bg-orange-700 border-orange-700 text-white"
                         : "border-zinc-300 dark:border-zinc-600 text-transparent"
                     }`}
                   >
                     <Check size={12} strokeWidth={3} />
                   </span>
-                  <span
-                    className={`text-sm ${
-                      isRemoving
-                        ? "line-through text-red-700 dark:text-red-400"
-                        : "text-zinc-800 dark:text-zinc-200"
-                    }`}
-                  >
-                    {item.label}
+                  <span className="min-w-0">
+                    <span
+                      className={`block text-sm ${
+                        isKeeping
+                          ? "text-zinc-800 dark:text-zinc-200"
+                          : "line-through text-red-700 dark:text-red-400"
+                      }`}
+                    >
+                      {item.label}
+                    </span>
+                    {restsOnLabel && (
+                      <span className="block text-[11px] text-zinc-400">
+                        on the {restsOnLabel.toLowerCase()}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
@@ -130,10 +147,10 @@ export default function TidyUpSelection({
         onClick={handleContinue}
         className="mt-6 w-full py-3 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2 bg-orange-700 hover:bg-orange-800 text-white"
       >
-        {count > 0 ? (
+        {removeCount > 0 ? (
           <>
             <Trash2 size={15} />
-            Remove {count} item{count !== 1 ? "s" : ""} &amp; continue
+            Remove {removeCount} item{removeCount !== 1 ? "s" : ""} &amp; continue
           </>
         ) : (
           <>
