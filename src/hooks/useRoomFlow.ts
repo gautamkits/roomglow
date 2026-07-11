@@ -131,11 +131,13 @@ export function useRoomFlow() {
   // Persist the flow whenever the resumable state changes.
   useEffect(() => {
     if (!hydratedRef.current || !image) return;
+    // Only in-progress steps are snapshotted for resume. A completed design
+    // lives at its permanent /design/[id] page (we redirect there), so we don't
+    // persist "results" — otherwise /create would restore + redirect in a loop.
     const persistable =
       step === "product-selection" ||
       step === "generating" ||
-      step === "curating" ||
-      step === "results";
+      step === "curating";
     if (!persistable) return;
     saveFlowSnapshot({
       step,

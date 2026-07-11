@@ -13,6 +13,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
+import { clearFlowSnapshot } from "@/lib/flowPersistence";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
@@ -85,18 +86,16 @@ function HomeContent() {
 
   const isEvent = mode === "event";
 
-  // Reflect the saved design's real URL in the address bar once results are
-  // shown, so the page is shareable/bookmarkable and a refresh loads the actual
-  // /design/[id] page. Uses replaceState (not navigation) to keep the freshly
-  // generated in-memory result on screen. Reverts to /create for a fresh start.
+  // Once a design is saved, redirect to its permanent /design/[id] page so the
+  // URL is shareable AND the content is the single canonical design page (no
+  // more "same URL, different content" between the create-results view and the
+  // real page). Clear the resume snapshot so /create starts fresh next time.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const target =
-      step === "results" && designId ? `/design/${designId}` : "/create";
-    if (window.location.pathname !== target) {
-      window.history.replaceState(null, "", target);
+    if (step === "results" && designId) {
+      clearFlowSnapshot();
+      router.replace(`/design/${designId}`);
     }
-  }, [step, designId]);
+  }, [step, designId, router]);
 
   // Anonymous visitors get the marketing landing only at the very start; once
   // they begin a design the flow renders for them too, up to the paywall (U1).
