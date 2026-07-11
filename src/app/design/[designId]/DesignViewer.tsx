@@ -29,6 +29,7 @@ interface DesignData {
   like_count?: number;
   selected_items?: string[] | null;
   removed_items?: string[] | null;
+  kept_items?: string[] | null;
 }
 
 /** JSONB columns can arrive as an array or a JSON string; normalize to string[]. */
@@ -233,8 +234,10 @@ function Viewer({
         {showProducts &&
           (() => {
             const added = toLabels(design.selected_items);
+            const kept = toLabels(design.kept_items);
             const removed = toLabels(design.removed_items);
-            if (added.length === 0 && removed.length === 0) return null;
+            if (added.length === 0 && kept.length === 0 && removed.length === 0)
+              return null;
             return (
               <div className="mb-5 flex flex-col gap-3 max-w-2xl">
                 {added.length > 0 && (
@@ -249,6 +252,23 @@ function Viewer({
                           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 text-xs"
                         >
                           <span aria-hidden>+</span>
+                          {it}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {kept.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+                      Kept from your room
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {kept.map((it) => (
+                        <span
+                          key={`keep-${it}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 text-xs"
+                        >
                           {it}
                         </span>
                       ))}

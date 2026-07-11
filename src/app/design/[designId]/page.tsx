@@ -62,6 +62,37 @@ interface ProductRow {
   amazonProduct?: { title?: string; imageUrl?: string; affiliateUrl?: string };
 }
 
+function parseJsonish(v: unknown): unknown {
+  if (typeof v === "string") {
+    try {
+      return JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  return v;
+}
+
+function asLabels(v: unknown): string[] {
+  const p = parseJsonish(v);
+  return Array.isArray(p) ? p.filter((x): x is string => typeof x === "string") : [];
+}
+
+/** What the user chose to KEEP: detected removable items minus what they removed.
+ *  Only meaningful once the design went through the tidy-up step — legacy designs
+ *  have `removed_items === null`, so we return undefined and show nothing. */
+function keptFromDesign(d: Record<string, unknown> | null): string[] | undefined {
+  if (!d || d.removed_items == null) return undefined;
+  const ra = parseJsonish(d.room_analysis) as
+    | { removableObjects?: { label?: string }[] }
+    | null;
+  const removable = (ra?.removableObjects ?? [])
+    .map((o) => o?.label)
+    .filter((l): l is string => typeof l === "string");
+  const removed = asLabels(d.removed_items);
+  return removable.filter((l) => !removed.includes(l));
+}
+
 export default async function DesignPage({
   params,
 }: {
@@ -161,6 +192,7 @@ export default async function DesignPage({
                 is_unlocked: d.is_unlocked,
                 selected_items: d.selected_items,
                 removed_items: d.removed_items,
+                kept_items: keptFromDesign(d),
               }
             : null
         }
