@@ -197,6 +197,7 @@ MUST DO:
 
 MUST NOT:
 - Do NOT add any new furniture, decorations, or objects.
+- Do NOT add, extend, close off, or invent any walls — if a side of the room is open or has no visible wall, keep it exactly that open. Do NOT enclose or "complete" the room.
 - Do NOT add or remove windows, doors, or change the architecture.
 - Do NOT change the camera angle or crop.
 
@@ -494,10 +495,10 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
     text: `${intro}${scaleBlock}
 
 MUST PRESERVE EXACTLY (never change the architecture):
-- The exact same walls, wall color, and wall texture
+- The exact same walls, wall color, and wall texture. Do NOT add, extend, close off, or invent any walls — if a side of the room is open, half-walls, or has no visible wall in the photo, keep it exactly that open (do NOT enclose the space or "complete" the room).
 - The exact same floor and flooring material
 - The exact same ceiling, ceiling fan, and light fixtures
-- The exact same room dimensions, perspective, and camera angle
+- The exact same room dimensions, boundaries, perspective, and camera angle — do NOT crop, zoom, or reframe
 - Whether windows and doors exist or not — do NOT add or remove them
 
 ${furnitureBlock}
