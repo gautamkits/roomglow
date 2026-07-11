@@ -9,6 +9,7 @@ import {
   designDescription,
   designKeywords,
   designItems,
+  isAdminEmail,
 } from "@/lib/admin";
 import DesignViewer from "./DesignViewer";
 import { SITE_URL as BASE } from "@/lib/site";
@@ -167,6 +168,7 @@ export default async function DesignPage({
         designId={designId}
         approved={approved}
         isOwner={isOwner}
+        isAdmin={isAdminEmail(session?.user?.email)}
         galleryStatus={d?.gallery_status || "none"}
         items={d ? designItems(d) : []}
         initial={

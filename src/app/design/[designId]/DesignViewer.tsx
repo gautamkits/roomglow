@@ -50,6 +50,7 @@ function Viewer({
   designId,
   approved,
   isOwner = false,
+  isAdmin = false,
   galleryStatus = "none",
   initial,
   items = [],
@@ -57,6 +58,7 @@ function Viewer({
   designId: string;
   approved: boolean;
   isOwner?: boolean;
+  isAdmin?: boolean;
   galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];
@@ -267,7 +269,9 @@ function Viewer({
               imageSrc={generatedSrc}
               hotspots={showProducts ? design.hotspots : []}
               products={design.products as never[]}
-              hidePrices={approved}
+              // Public/approved designs hide cached Amazon prices, but the owner
+              // and admins see full prices + total for review.
+              hidePrices={approved && !isOwner && !isAdmin}
             />
           </div>
           )}
@@ -476,6 +480,7 @@ export default function DesignViewer(props: {
   designId: string;
   approved: boolean;
   isOwner?: boolean;
+  isAdmin?: boolean;
   galleryStatus?: string;
   initial: DesignData | null;
   items?: string[];
