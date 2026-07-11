@@ -27,6 +27,22 @@ interface DesignData {
   original_image_url?: string;
   is_unlocked: boolean;
   like_count?: number;
+  selected_items?: string[] | null;
+  removed_items?: string[] | null;
+}
+
+/** JSONB columns can arrive as an array or a JSON string; normalize to string[]. */
+function toLabels(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string");
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
 }
 
 function Viewer({
@@ -214,7 +230,53 @@ function Viewer({
           </div>
         )}
 
-        {approved && items.length > 0 && (
+        {showProducts &&
+          (() => {
+            const added = toLabels(design.selected_items);
+            const removed = toLabels(design.removed_items);
+            if (added.length === 0 && removed.length === 0) return null;
+            return (
+              <div className="mb-5 flex flex-col gap-3 max-w-2xl">
+                {added.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+                      Added to your design
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {added.map((it) => (
+                        <span
+                          key={`add-${it}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-300 text-xs"
+                        >
+                          <span aria-hidden>+</span>
+                          {it}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {removed.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
+                      Cleared from the room
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {removed.map((it) => (
+                        <span
+                          key={`rm-${it}`}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 text-xs line-through"
+                        >
+                          {it}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+        {approved && items.length > 0 && toLabels(design.selected_items).length === 0 && (
           <div className="mb-5">
             <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-2">
               Featured in this design

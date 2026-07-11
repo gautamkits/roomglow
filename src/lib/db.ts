@@ -37,6 +37,9 @@ let designColumnsReady = false;
 async function ensureDesignColumns() {
   if (designColumnsReady) return;
   await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS preview_image_url TEXT`;
+  // Items the user chose to remove in the tidy-up step (labels), shown on the
+  // design page alongside selected_items ("what changed").
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS removed_items JSONB`;
   designColumnsReady = true;
 }
 
@@ -84,6 +87,7 @@ export async function saveDesign(params: {
   userId?: string | null;
   isUnlocked?: boolean;
   selectedItems?: unknown;
+  removedItems?: unknown;
   originalBlur?: string | null;
   generatedBlur?: string | null;
   // Watermarked, downscaled preview served to non-entitled viewers (paywall).
@@ -91,7 +95,7 @@ export async function saveDesign(params: {
 }) {
   await ensureDesignColumns();
   const { rows } = await sql`
-    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, original_blur, generated_blur)
+    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, removed_items, original_blur, generated_blur)
     VALUES (
       ${params.mode},
       ${JSON.stringify(params.eventConfig)},
@@ -105,6 +109,7 @@ export async function saveDesign(params: {
       ${params.userId ?? null},
       ${params.isUnlocked ?? false},
       ${JSON.stringify(params.selectedItems ?? null)},
+      ${JSON.stringify(params.removedItems ?? null)},
       ${params.originalBlur ?? null},
       ${params.generatedBlur ?? null}
     )

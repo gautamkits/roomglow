@@ -159,6 +159,8 @@ export default async function DesignPage({
                 original_image_url:
                   d.is_unlocked || approved ? d.original_image_url : undefined,
                 is_unlocked: d.is_unlocked,
+                selected_items: d.selected_items,
+                removed_items: d.removed_items,
               }
             : null
         }

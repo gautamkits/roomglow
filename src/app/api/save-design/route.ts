@@ -22,7 +22,7 @@ function toBuffer(input: string): Buffer {
 
 export async function POST(request: Request) {
   try {
-    const { mode, eventConfig, makeoverConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems } =
+    const { mode, eventConfig, makeoverConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems, removedItems } =
       await request.json();
 
     if (!products || !originalImage || !generatedImage) {
@@ -105,6 +105,7 @@ export async function POST(request: Request) {
       userId,
       isUnlocked,
       selectedItems: selectedItems || null,
+      removedItems: removedItems || null,
     });
 
     // Designs unlocked at save time (free markets, or the free-first-design promo

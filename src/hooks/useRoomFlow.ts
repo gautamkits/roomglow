@@ -535,6 +535,7 @@ export function useRoomFlow() {
               originalImage: image,
               generatedImage: genImg,
               selectedItems: selected.map((s) => s.label),
+              removedItems: removedLabels,
             },
             "Failed to save your design."
           );
