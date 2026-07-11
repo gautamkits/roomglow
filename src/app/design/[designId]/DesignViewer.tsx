@@ -223,8 +223,72 @@ function Viewer({
           </div>
         )}
 
+        {showProducts && design.original_image_url && (
+          <div className="flex justify-center mb-4">
+            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
+              <button
+                onClick={() => setShowBefore(false)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  !showBefore
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "text-zinc-500"
+                }`}
+              >
+                Design
+              </button>
+              <button
+                onClick={() => setShowBefore(true)}
+                className={`px-3 py-1 rounded-md transition-colors ${
+                  showBefore
+                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                    : "text-zinc-500"
+                }`}
+              >
+                Compare
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="relative">
+          {showProducts && showBefore && design.original_image_url ? (
+            <div className="max-w-3xl mx-auto">
+              <BeforeAfterSlider
+                beforeSrc={design.original_image_url}
+                afterSrc={design.generated_image_url}
+              />
+              <p className="text-center text-xs text-zinc-400 mt-3">
+                Drag the handle to compare the original with the new design
+              </p>
+            </div>
+          ) : (
+          <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
+            <ImageWithHotspots
+              imageSrc={generatedSrc}
+              hotspots={showProducts ? design.hotspots : []}
+              products={design.products as never[]}
+              hidePrices={approved}
+            />
+          </div>
+          )}
+
+          {!isUnlocked && !approved && (
+            <PaywallOverlay
+              designId={design.id}
+              mode={design.mode as "space" | "event"}
+              itemCount={design.products?.length ?? 0}
+              narrative={design.design_narrative}
+              items={items}
+              imageUrl={design.generated_image_url}
+              onUnlocked={() => setIsUnlocked(true)}
+            />
+          )}
+        </div>
+
+        {/* Design description + what changed — shown BELOW the design so the
+            image leads and the reporting doesn't clutter the top. */}
         {design.design_narrative && showProducts && (
-          <div className="mb-5 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl">
+          <div className="mt-8 mb-5 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl">
             <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
               {design.design_narrative}
             </p>
@@ -313,68 +377,6 @@ function Viewer({
             </div>
           </div>
         )}
-
-        {showProducts && design.original_image_url && (
-          <div className="flex justify-center mb-4">
-            <div className="flex rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
-              <button
-                onClick={() => setShowBefore(false)}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  !showBefore
-                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "text-zinc-500"
-                }`}
-              >
-                Design
-              </button>
-              <button
-                onClick={() => setShowBefore(true)}
-                className={`px-3 py-1 rounded-md transition-colors ${
-                  showBefore
-                    ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                    : "text-zinc-500"
-                }`}
-              >
-                Compare
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="relative">
-          {showProducts && showBefore && design.original_image_url ? (
-            <div className="max-w-3xl mx-auto">
-              <BeforeAfterSlider
-                beforeSrc={design.original_image_url}
-                afterSrc={design.generated_image_url}
-              />
-              <p className="text-center text-xs text-zinc-400 mt-3">
-                Drag the handle to compare the original with the new design
-              </p>
-            </div>
-          ) : (
-          <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
-            <ImageWithHotspots
-              imageSrc={generatedSrc}
-              hotspots={showProducts ? design.hotspots : []}
-              products={design.products as never[]}
-              hidePrices={approved}
-            />
-          </div>
-          )}
-
-          {!isUnlocked && !approved && (
-            <PaywallOverlay
-              designId={design.id}
-              mode={design.mode as "space" | "event"}
-              itemCount={design.products?.length ?? 0}
-              narrative={design.design_narrative}
-              items={items}
-              imageUrl={design.generated_image_url}
-              onUnlocked={() => setIsUnlocked(true)}
-            />
-          )}
-        </div>
 
         {RESTYLE_UI_ENABLED && isUnlocked && !approved && design.mode === "space" && (
           <div className="mt-8">
