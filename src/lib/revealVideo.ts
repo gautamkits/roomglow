@@ -134,15 +134,13 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number,
   return lines;
 }
 
-/** Rounded image card: blurred cover backdrop + the whole photo (contain) on top.
- *  Returns the contained image rect (for scan line / hotspot mapping). */
-function drawImageCard(
+/** Paints an image's card content — blurred cover backdrop + the whole photo
+ *  (contain) on top — into rect `c`. Assumes any rounded/scan clipping is
+ *  already applied by the caller. Returns the contained image rect. */
+function paintCardImage(
   ctx: CanvasRenderingContext2D, img: HTMLImageElement,
-  c: { x: number; y: number; w: number; h: number; rad: number }
+  c: { x: number; y: number; w: number; h: number }
 ): Rect {
-  ctx.save();
-  roundRect(ctx, c.x, c.y, c.w, c.h, c.rad);
-  ctx.clip();
   ctx.fillStyle = "#171310";
   ctx.fillRect(c.x, c.y, c.w, c.h);
   ctx.save();
@@ -152,6 +150,19 @@ function drawImageCard(
   ctx.restore();
   const r = fitContain(img, c.x, c.y, c.w, c.h);
   ctx.drawImage(img, r.x, r.y, r.w, r.h);
+  return r;
+}
+
+/** Rounded image card: blurred cover backdrop + the whole photo (contain) on top.
+ *  Returns the contained image rect (for scan line / hotspot mapping). */
+function drawImageCard(
+  ctx: CanvasRenderingContext2D, img: HTMLImageElement,
+  c: { x: number; y: number; w: number; h: number; rad: number }
+): Rect {
+  ctx.save();
+  roundRect(ctx, c.x, c.y, c.w, c.h, c.rad);
+  ctx.clip();
+  const r = paintCardImage(ctx, img, c);
   ctx.restore();
   return r;
 }
@@ -461,32 +472,34 @@ function sceneTransform(ctx: CanvasRenderingContext2D, before: HTMLImageElement,
   const line = easeInOutSine(clamp((lt - 0.9) / 2.3)); // 0..1 within image
   const scanning = lt > 0.7 && line < 1;
 
-  const rect = drawImageCard(ctx, after, CARD); // after base + contained rect
-  // before clipped below the scan line, within the image rect
+  drawImageCard(ctx, after, CARD); // after base (fills the whole card)
+  // The "before" fills the whole card the same way (its own backdrop + contained
+  // photo), clipped below the scan line, so the letterbox bands never expose the
+  // final design before the wipe reaches them. Scan sweeps the full card height.
   if (line < 1) {
-    const sy = rect.y + line * rect.h;
+    const cardBottom = CARD.y + CARD.h;
+    const sy = CARD.y + line * CARD.h;
     ctx.save();
-    ctx.beginPath();
     roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, CARD.rad);
     ctx.clip();
     ctx.beginPath();
-    ctx.rect(rect.x, sy, rect.w, rect.y + rect.h - sy);
+    ctx.rect(CARD.x, sy, CARD.w, cardBottom - sy);
     ctx.clip();
-    ctx.drawImage(before, rect.x, rect.y, rect.w, rect.h);
+    paintCardImage(ctx, before, CARD);
     if (scanning) {
       ctx.fillStyle = "rgba(122,54,32,0.18)";
-      ctx.fillRect(rect.x, sy, rect.w, rect.y + rect.h - sy);
+      ctx.fillRect(CARD.x, sy, CARD.w, cardBottom - sy);
       ctx.strokeStyle = "rgba(255,255,255,0.16)";
       ctx.lineWidth = 1;
-      for (let gx = rect.x; gx < rect.x + rect.w; gx += 46) { ctx.beginPath(); ctx.moveTo(gx, sy); ctx.lineTo(gx, rect.y + rect.h); ctx.stroke(); }
-      for (let gy = Math.ceil(sy / 46) * 46; gy < rect.y + rect.h; gy += 46) { ctx.beginPath(); ctx.moveTo(rect.x, gy); ctx.lineTo(rect.x + rect.w, gy); ctx.stroke(); }
+      for (let gx = CARD.x; gx < CARD.x + CARD.w; gx += 46) { ctx.beginPath(); ctx.moveTo(gx, sy); ctx.lineTo(gx, cardBottom); ctx.stroke(); }
+      for (let gy = Math.ceil(sy / 46) * 46; gy < cardBottom; gy += 46) { ctx.beginPath(); ctx.moveTo(CARD.x, gy); ctx.lineTo(CARD.x + CARD.w, gy); ctx.stroke(); }
     }
     ctx.restore();
     if (scanning) {
       const glow = ctx.createLinearGradient(0, sy - 200, 0, sy);
       glow.addColorStop(0, "rgba(206,101,51,0)"); glow.addColorStop(1, "rgba(206,101,51,0.55)");
-      ctx.fillStyle = glow; ctx.fillRect(rect.x, sy - 200, rect.w, 200);
-      ctx.fillStyle = CLAY_BR; ctx.fillRect(rect.x, sy - 3, rect.w, 6);
+      ctx.fillStyle = glow; ctx.fillRect(CARD.x, sy - 200, CARD.w, 200);
+      ctx.fillStyle = CLAY_BR; ctx.fillRect(CARD.x, sy - 3, CARD.w, 6);
     }
   }
 
