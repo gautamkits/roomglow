@@ -151,6 +151,92 @@ export async function addDesignShare(designId: string, email: string) {
   `;
 }
 
+// ─── Decor waitlist leads ───
+// Demand-validation for a physical decoration-build service advertised on event
+// designs (India only). Each row is a waitlist signup; the quoted price is
+// captured so we know what figure a lead saw even if pricing later changes.
+let decorLeadsSchemaReady = false;
+async function ensureDecorLeadsSchema() {
+  if (decorLeadsSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS decor_leads (
+      id BIGSERIAL PRIMARY KEY,
+      design_id TEXT,
+      event_label TEXT,
+      email TEXT NOT NULL,
+      phone TEXT,
+      event_date TEXT,
+      city TEXT,
+      locale TEXT,
+      quoted_price_minor BIGINT,
+      currency TEXT,
+      duration_label TEXT,
+      user_id TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_decor_leads_created ON decor_leads (created_at)`;
+  decorLeadsSchemaReady = true;
+}
+
+export interface DecorLead {
+  designId?: string | null;
+  eventLabel?: string | null;
+  email: string;
+  phone?: string | null;
+  eventDate?: string | null;
+  city?: string | null;
+  locale?: string | null;
+  quotedPriceMinor?: number | null;
+  currency?: string | null;
+  durationLabel?: string | null;
+  userId?: string | null;
+}
+
+export async function saveDecorLead(lead: DecorLead) {
+  await ensureDecorLeadsSchema();
+  await sql`
+    INSERT INTO decor_leads (
+      design_id, event_label, email, phone, event_date, city, locale,
+      quoted_price_minor, currency, duration_label, user_id
+    ) VALUES (
+      ${lead.designId ?? null}, ${lead.eventLabel ?? null},
+      ${lead.email.trim().toLowerCase()}, ${lead.phone ?? null},
+      ${lead.eventDate ?? null}, ${lead.city ?? null}, ${lead.locale ?? null},
+      ${lead.quotedPriceMinor ?? null}, ${lead.currency ?? null},
+      ${lead.durationLabel ?? null}, ${lead.userId ?? null}
+    )
+  `;
+}
+
+export interface DecorLeadRow {
+  id: string;
+  design_id: string | null;
+  event_label: string | null;
+  email: string;
+  phone: string | null;
+  event_date: string | null;
+  city: string | null;
+  locale: string | null;
+  quoted_price_minor: string | null;
+  currency: string | null;
+  duration_label: string | null;
+  user_id: string | null;
+  created_at: string;
+}
+
+export async function listDecorLeads(limit = 500): Promise<DecorLeadRow[]> {
+  await ensureDecorLeadsSchema();
+  const { rows } = await sql`
+    SELECT id, design_id, event_label, email, phone, event_date, city, locale,
+           quoted_price_minor, currency, duration_label, user_id, created_at
+    FROM decor_leads
+    ORDER BY created_at DESC
+    LIMIT ${limit}
+  `;
+  return rows as DecorLeadRow[];
+}
+
 export async function removeDesignShare(designId: string, email: string) {
   await ensureSharesSchema();
   await sql`

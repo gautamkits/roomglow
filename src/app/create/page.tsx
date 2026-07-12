@@ -28,6 +28,7 @@ import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
 import OccasionProducts from "@/components/OccasionProducts";
+import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
 import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
@@ -564,6 +565,10 @@ function HomeContent() {
                 subTheme={eventConfig.subTheme}
                 eventLabel={eventConfig.eventLabel}
               />
+            )}
+
+            {isUnlocked && mode === "event" && eventConfig && (
+              <BookDecorCTA designId={designId} eventLabel={eventConfig.eventLabel} />
             )}
 
             {isUnlocked && mode === "makeover" && makeoverConfig && (

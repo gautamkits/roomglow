@@ -171,6 +171,12 @@ function AnalyticsContent() {
             Users report
           </button>
           <button
+            onClick={() => router.push("/admin/decor-leads")}
+            className="text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors"
+          >
+            Decorator waitlist
+          </button>
+          <button
             onClick={syncStripe}
             disabled={syncing}
             className="text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 transition-colors disabled:opacity-50"

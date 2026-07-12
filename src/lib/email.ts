@@ -503,6 +503,87 @@ export async function sendContactMessage(data: {
   }
 }
 
+/** Notifies the team of a new "book a decorator" waitlist lead. Reply-to is set
+ *  to the lead so a reply goes straight to them. Never throws. */
+export async function sendDecorLeadNotification(data: {
+  email: string;
+  phone?: string | null;
+  eventLabel?: string | null;
+  eventDate?: string | null;
+  city?: string | null;
+  locale?: string | null;
+  designId?: string | null;
+  quotedPriceMinor?: number | null;
+  currency?: string | null;
+  durationLabel?: string | null;
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN) return { ok: false };
+  const to = [process.env.CONTACT_TO || "designs@noosho.com"];
+
+  const price =
+    data.quotedPriceMinor != null
+      ? formatAmount(data.quotedPriceMinor, data.currency || "inr")
+      : "—";
+  const designUrl = data.designId ? `${SITE_URL}/design/${data.designId}` : "—";
+  const rows: [string, string][] = [
+    ["Email", data.email],
+    ["Phone", data.phone || "—"],
+    ["Event", data.eventLabel || "—"],
+    ["Event date", data.eventDate || "—"],
+    ["City", data.city || "—"],
+    ["Locale", data.locale || "—"],
+    ["Quoted", `${price}${data.durationLabel ? ` · ${data.durationLabel}` : ""}`],
+    ["Design", designUrl],
+  ];
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px;font-weight:600;color:${TEXT};white-space:nowrap;">${esc(
+          k
+        )}</td><td style="padding:6px 12px;color:${MUTED};">${esc(v)}</td></tr>`
+    )
+    .join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;color:${LINEN};font-size:18px;font-weight:700;">🎉 Noosho — decorator waitlist lead</td></tr>
+    <tr><td style="padding:20px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:10px;border-collapse:separate;">${rowsHtml}</table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: to.map((address) => ({ email_address: { address, name: "Noosho" } })),
+        reply_to: [{ address: data.email, name: data.email }],
+        subject: `New decorator waitlist lead${data.eventLabel ? ` — ${data.eventLabel}` : ""}`,
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Decor lead send failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Decor lead send threw:", e);
+    return { ok: false };
+  }
+}
+
 /** Invite sent when an owner shares a private design with an email address.
  *  The recipient must sign in with Google using that same email to view. */
 export async function sendDesignShareInvite(data: {

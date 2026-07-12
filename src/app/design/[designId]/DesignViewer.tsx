@@ -10,6 +10,7 @@ import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
+import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
 import ManageAccess from "@/components/ManageAccess";
@@ -415,6 +416,13 @@ function Viewer({
           <OccasionProducts
             eventId={design.event_config.eventType}
             subTheme={design.event_config.subTheme}
+            eventLabel={design.event_config.eventLabel || "event"}
+          />
+        )}
+
+        {showProducts && design.mode === "event" && design.event_config && (
+          <BookDecorCTA
+            designId={design.id}
             eventLabel={design.event_config.eventLabel || "event"}
           />
         )}
