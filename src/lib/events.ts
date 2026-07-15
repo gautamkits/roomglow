@@ -427,8 +427,11 @@ export const EVENTS: EventDefinition[] = [
 /** How many months ahead of a festival it starts being offered. */
 export const EVENT_LEAD_MONTHS = 3;
 
-/** How many days ahead a festival counts as "trending" on the public gallery. */
-export const TRENDING_WINDOW_DAYS = 45;
+/** How many days ahead a festival counts as "trending" on the public gallery.
+ *  90 keeps the whole Aug–Sep Indian festival run in view at once (Independence
+ *  Day → Raksha Bandhan → Janmashtami → Ganesh Chaturthi → Navratri), which is
+ *  the season people actually plan décor for. */
+export const TRENDING_WINDOW_DAYS = 90;
 
 /** Midnight-normalised copy of `now`. */
 function startOfDay(now: Date): Date {
