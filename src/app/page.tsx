@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
-import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles } from "lucide-react";
+import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles, TrendingUp } from "lucide-react";
 import { auth } from "@/auth";
 import { getGalleryCards } from "@/lib/db";
+import { localeFromCookieHeader } from "@/lib/locale";
+import { getUpcomingSeasonalEvents } from "@/lib/events";
 import {
   designTitle,
   designAltText,
@@ -50,16 +53,35 @@ export default async function Home({
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { type, sort = "top", room, event, q = "", page: pageParam } = await searchParams;
+  const { type, sort: sortParam, room, event, q = "", page: pageParam } = await searchParams;
+  const sort = sortParam ?? "top";
   const mode = type === "space" || type === "event" ? type : undefined;
   const page = Math.max(1, parseInt(pageParam || "1", 10) || 1);
+  // Only the untouched gallery gets re-ordered by upcoming events — an explicit
+  // sort/search/filter is the visitor's intent and is respected. Not keyed on
+  // `page`, so the order stays consistent across pages.
+  const isDefaultView = !sortParam && !type && !room && !event && !q;
 
   // Fetch all approved (lightweight, cached) so facets reflect the whole
   // gallery; filter in JS. auth() stays uncached (per-request session).
-  const [allCards, session] = await Promise.all([
+  const [allCards, session, cookieHeader] = await Promise.all([
     getCachedGalleryCards(sort),
     auth(),
+    headers().then((h) => h.get("cookie")),
   ]);
+
+  // Festivals coming up for this visitor's market (India: Diwali/Raksha Bandhan;
+  // US: Halloween/Thanksgiving). Computed per-request — deliberately outside the
+  // 5-min gallery cache, which is keyed on `sort` and would freeze a date-
+  // dependent order. Soonest first; evergreen events are never "upcoming".
+  const upcomingEvents = getUpcomingSeasonalEvents(localeFromCookieHeader(cookieHeader));
+  const trendingRankById = new Map(upcomingEvents.map((u, i) => [u.event.id, i]));
+  // Infinity = not trending, so it sorts after everything ranked.
+  const trendingRank = (d: (typeof allCards)[number]) =>
+    d.mode === "event"
+      ? trendingRankById.get(d.event_config?.eventType) ?? Infinity
+      : Infinity;
+  const isTrending = (d: (typeof allCards)[number]) => trendingRank(d) !== Infinity;
 
   // Facets from the full approved set
   const roomFacets = [
@@ -88,9 +110,15 @@ export default async function Home({
     return true;
   });
 
-  const totalPages = Math.max(1, Math.ceil(designs.length / PAGE_SIZE));
+  // Lead with designs for festivals that are almost here, soonest event first.
+  // sort() is stable, so everything else keeps its like_count/published_at order.
+  const ordered = isDefaultView
+    ? [...designs].sort((a, b) => trendingRank(a) - trendingRank(b))
+    : designs;
+
+  const totalPages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
-  const pageDesigns = designs.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageDesigns = ordered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const tabs = [
     { label: "All", type: "" },
@@ -270,28 +298,37 @@ export default async function Home({
                     priority={i < 4}
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   />
-                  <span
-                    className={`absolute top-2 left-2 z-10 inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm pointer-events-none ${
-                      d.mode === "event"
-                        ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                  {/* Stacked on the left — the top-right corner belongs to AdminDeleteButton. */}
+                  <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1 pointer-events-none">
+                    <span
+                      className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm ${
+                        d.mode === "event"
+                          ? "bg-purple-100/90 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300"
+                          : d.mode === "makeover"
+                          ? "bg-pink-100/90 text-pink-700 dark:bg-pink-950/70 dark:text-pink-300"
+                          : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
+                      }`}
+                    >
+                      {d.mode === "event" ? (
+                        <PartyPopper size={10} />
+                      ) : d.mode === "makeover" ? (
+                        <Sparkles size={10} />
+                      ) : (
+                        <Sofa size={10} />
+                      )}
+                      {d.mode === "event"
+                        ? d.event_config?.eventLabel || "Event"
                         : d.mode === "makeover"
-                        ? "bg-pink-100/90 text-pink-700 dark:bg-pink-950/70 dark:text-pink-300"
-                        : "bg-teal-100/90 text-teal-700 dark:bg-teal-950/70 dark:text-teal-300"
-                    }`}
-                  >
-                    {d.mode === "event" ? (
-                      <PartyPopper size={10} />
-                    ) : d.mode === "makeover" ? (
-                      <Sparkles size={10} />
-                    ) : (
-                      <Sofa size={10} />
+                        ? "Makeover"
+                        : "Space"}
+                    </span>
+                    {isTrending(d) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-medium backdrop-blur-sm bg-orange-100/90 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300">
+                        <TrendingUp size={10} />
+                        Trending
+                      </span>
                     )}
-                    {d.mode === "event"
-                      ? d.event_config?.eventLabel || "Event"
-                      : d.mode === "makeover"
-                      ? "Makeover"
-                      : "Space"}
-                  </span>
+                  </div>
                   <span className="sr-only">{designAltText(d)}</span>
                   {isAdminEmail(session?.user?.email) && (
                     <AdminDeleteButton designId={d.id} />

@@ -427,20 +427,62 @@ export const EVENTS: EventDefinition[] = [
 /** How many months ahead of a festival it starts being offered. */
 export const EVENT_LEAD_MONTHS = 3;
 
+/** How many days ahead a festival counts as "trending" on the public gallery. */
+export const TRENDING_WINDOW_DAYS = 45;
+
+/** Midnight-normalised copy of `now`. */
+function startOfDay(now: Date): Date {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+}
+
+/** A festival's next occurrence of its `season` anchor — this year's date, rolled
+ *  to next year once it's past. Null for evergreen events (no `season`). */
+function nextSeasonOccurrence(ev: EventDefinition, today: Date): Date | null {
+  if (!ev.season) return null;
+  const { month, day } = ev.season;
+  const occ = new Date(today.getFullYear(), month - 1, day);
+  return occ < today ? new Date(today.getFullYear() + 1, month - 1, day) : occ;
+}
+
 /** Whether a seasonal festival's next occurrence is close enough to offer now.
  *  Evergreen events (no `season`) are always available. */
 export function isSeasonalEventNear(
   ev: EventDefinition,
   now: Date = new Date()
 ): boolean {
-  if (!ev.season) return true; // evergreen — birthdays, anniversaries, life events
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const { month, day } = ev.season;
-  let occ = new Date(today.getFullYear(), month - 1, day);
-  if (occ < today) occ = new Date(today.getFullYear() + 1, month - 1, day);
+  const today = startOfDay(now);
+  const occ = nextSeasonOccurrence(ev, today);
+  if (!occ) return true; // evergreen — birthdays, anniversaries, life events
   const horizon = new Date(today);
   horizon.setMonth(horizon.getMonth() + EVENT_LEAD_MONTHS);
   return occ <= horizon;
+}
+
+/** Days until a festival's next occurrence. Null for evergreen events, which have
+ *  no calendar anchor and so are never "upcoming". */
+export function daysUntilSeason(
+  ev: EventDefinition,
+  now: Date = new Date()
+): number | null {
+  const today = startOfDay(now);
+  const occ = nextSeasonOccurrence(ev, today);
+  if (!occ) return null;
+  return Math.round((occ.getTime() - today.getTime()) / 86_400_000);
+}
+
+/** Seasonal events for `locale` whose next occurrence falls within `withinDays`,
+ *  soonest first. Drives the gallery's "Trending" tag and ordering. Evergreen
+ *  events (birthday, anniversary, life events) are deliberately excluded — they
+ *  have no season, so they are never "coming up". */
+export function getUpcomingSeasonalEvents(
+  locale: Locale,
+  now: Date = new Date(),
+  withinDays: number = TRENDING_WINDOW_DAYS
+): { event: EventDefinition; daysUntil: number }[] {
+  return EVENTS.filter((e) => e.markets.includes(locale) && e.season)
+    .map((event) => ({ event, daysUntil: daysUntilSeason(event, now) as number }))
+    .filter(({ daysUntil }) => daysUntil <= withinDays)
+    .sort((a, b) => a.daysUntil - b.daysUntil);
 }
 
 /** Events available for a given marketplace, in season (or evergreen) as of `now`. */
