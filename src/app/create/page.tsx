@@ -171,8 +171,11 @@ function HomeContent() {
               /* Render the grid during load too so the create card holds its
                  final position — avoids the centered→two-column layout shift. */
               <div className="grid lg:grid-cols-[1.55fr_1fr] gap-6 items-start animate-fade-up-delay-1">
-                {/* Left: prominent create card */}
-                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
+                {/* Left: prominent create card.
+                    -mx-5 cancels <main>'s px-5 so the card runs edge-to-edge on
+                    phones (side borders/corners/shadow dropped there); from sm up
+                    it returns to a normal inset card. */}
+                <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
                   <div className="flex items-start gap-3 mb-5">
                     <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
                       <Wand2 size={19} className="text-white" />
@@ -239,7 +242,8 @@ function HomeContent() {
             ) : (
               /* ─── No designs: centered single column ─── */
               <div className="max-w-xl mx-auto animate-fade-up-delay-1">
-                <div className="relative overflow-hidden rounded-2xl border border-orange-200/70 dark:border-orange-900/40 bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-5 sm:p-6 shadow-lg shadow-orange-900/5">
+                {/* Edge-to-edge on phones — see the create card above. */}
+                <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
                   <div className="flex items-center gap-3 mb-5">
                     <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
                       <Wand2 size={18} className="text-white" />

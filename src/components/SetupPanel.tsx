@@ -130,7 +130,8 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   };
 
   return (
-    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 space-y-4">
+    /* No card of its own — both call sites already wrap this in the create card. */
+    <div className="space-y-4">
       {/* Mode toggle */}
       <div className={`grid gap-2 ${makeoverEnabled ? "grid-cols-3" : "grid-cols-2"}`}>
         {(
@@ -146,7 +147,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
             className={`flex flex-col items-center justify-center gap-1.5 py-2.5 rounded-lg text-xs font-medium border transition-colors ${
               mode === id
                 ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300"
-                : "border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
+                : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700"
             }`}
           >
             <Icon size={16} strokeWidth={1.75} />
@@ -173,7 +174,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                 className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
                   eventId === e.id
                     ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
-                    : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                    : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
                 }`}
               >
                 <span>{e.icon}</span>
@@ -340,7 +341,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
                     makeoverStyleId === s.id
                       ? "border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300 font-medium"
-                      : "border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
+                      : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700"
                   }`}
                 >
                   <span>{s.icon}</span>
