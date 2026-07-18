@@ -548,9 +548,15 @@ CRITICAL TEXT RULE:
     }
   }
 
-  // If image generation failed, fall back to original image
+  // If the model returned no image (refusal, safety filter, overloaded composite,
+  // timeout), do NOT silently save the untouched original — that ships a "design"
+  // that did nothing to the photo (and wastes the user's unlock). Throw so the
+  // pipeline surfaces an error + offers a retry (the model is flaky, so a retry
+  // usually succeeds), and admins get alerted via the route's notifyAdminError.
   if (!generatedImageBase64) {
-    generatedImageBase64 = roomImageBase64;
+    throw new Error(
+      "The design couldn't be rendered this time. Please try again."
+    );
   }
 
   // Step 2 (optional): locate each product. Deferred for locked designs.
