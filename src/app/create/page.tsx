@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { SessionProvider, useSession } from "next-auth/react";
+import { SessionProvider, useSession, signIn } from "next-auth/react";
 import {
   Wand2,
   RotateCcw,
@@ -11,6 +11,7 @@ import {
   Download,
   Share2,
   RefreshCw,
+  Camera,
 } from "lucide-react";
 import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { clearFlowSnapshot } from "@/lib/flowPersistence";
@@ -38,6 +39,7 @@ import DesignGrid from "@/components/dashboard/DesignGrid";
 function HomeContent() {
   const {
     step,
+    awaitingSignIn,
     mode,
     eventConfig,
     makeoverConfig,
@@ -76,6 +78,10 @@ function HomeContent() {
   const { formatBudget } = useLocale();
   const [showBefore, setShowBefore] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sending" | "done">("idle");
+  // Anonymous visitors first see the marketing Landing; clicking a CTA reveals
+  // the uploader inline (sign-in is deferred to after they upload — see the
+  // awaitingSignIn gate below).
+  const [showAnonUploader, setShowAnonUploader] = useState(false);
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
   const isLoading =
@@ -106,9 +112,13 @@ function HomeContent() {
     }
   }, [step, designId, router]);
 
-  // Anonymous visitors get the marketing landing only at the very start; once
-  // they begin a design the flow renders for them too, up to the paywall (U1).
-  const onLandingView = sessionStatus === "unauthenticated" && step === "upload";
+  // The full-bleed marketing Landing only shows to anonymous visitors before
+  // they start (not once they reveal the uploader or hit the sign-in gate).
+  const onLandingView =
+    sessionStatus === "unauthenticated" &&
+    step === "upload" &&
+    !showAnonUploader &&
+    !awaitingSignIn;
 
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
@@ -151,9 +161,73 @@ function HomeContent() {
           </div>
         )}
 
-        {/* ─── ANONYMOUS — sign in required before uploading ─── */}
-        {step === "upload" && sessionStatus === "unauthenticated" && (
-          <Landing />
+        {/* ─── ANONYMOUS — upload first, sign in later ─── */}
+        {/* Marketing landing → CTA reveals the uploader inline. No sign-in wall
+            up front; sign-in is deferred to the gate below (after upload). */}
+        {step === "upload" &&
+          sessionStatus === "unauthenticated" &&
+          !awaitingSignIn &&
+          (showAnonUploader ? (
+            <div className="max-w-xl mx-auto py-8 animate-fade-up">
+              <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
+                <div className="flex items-center gap-3 mb-5">
+                  <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                    <Wand2 size={18} className="text-white" />
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                      Start your design
+                    </h2>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Upload a photo — no sign-in needed to start.
+                    </p>
+                  </div>
+                </div>
+                <SetupPanel onImageSelected={handleImageSelected} />
+              </div>
+            </div>
+          ) : (
+            <Landing onStart={() => setShowAnonUploader(true)} />
+          ))}
+
+        {/* ─── SIGN-IN GATE (deferred; fires right after upload) ─── */}
+        {awaitingSignIn && (
+          <div className="max-w-md mx-auto py-12 text-center animate-fade-up">
+            {image && (
+              <div className="relative rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-lg aspect-[4/3] mb-6">
+                <img
+                  src={image}
+                  alt="Your uploaded photo"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-zinc-900/40 flex items-center justify-center">
+                  <span className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm shadow-lg text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <Sparkles size={15} className="text-orange-700" />
+                    Ready to transform
+                  </span>
+                </div>
+              </div>
+            )}
+            <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
+              Sign in to see your design
+            </h2>
+            <p className="text-sm text-zinc-500 mb-6">
+              Your photo&apos;s ready. Sign in with Google and we&apos;ll design it
+              in seconds — your first design is on us.
+            </p>
+            <button
+              onClick={() =>
+                signIn("google", { callbackUrl: "/create?resume=1" })
+              }
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-medium text-white bg-orange-700 hover:bg-orange-800 transition-colors shadow-lg shadow-orange-700/20 w-full sm:w-auto"
+            >
+              <Camera size={17} />
+              Continue with Google
+            </button>
+            <p className="text-xs text-zinc-400 mt-4">
+              Free to start · we never post or sell your data
+            </p>
+          </div>
         )}
 
         {/* ─── DASHBOARD (authenticated home) ─── */}

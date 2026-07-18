@@ -110,3 +110,61 @@ export async function clearFlowSnapshot(): Promise<void> {
     /* ignore */
   }
 }
+
+// ─── Pending upload (deferred sign-in) ───
+// When an anonymous user uploads a photo, we gate on "sign in to see your
+// design". Google OAuth is a full-page redirect, so we stash the upload + its
+// setup here (separate key from the main snapshot, to avoid touching the
+// resume/paid-gen logic) and replay it once they're signed in.
+
+const PENDING_KEY = "pendingUpload";
+
+export interface PendingUpload {
+  v: number;
+  savedAt: number;
+  base64: string;
+  mode: AppMode;
+  eventConfig: EventConfig | null;
+  makeoverConfig: MakeoverConfig | null;
+  maxBudget?: number;
+  noBudget: boolean;
+}
+
+export async function savePendingUpload(
+  pending: Omit<PendingUpload, "v" | "savedAt">
+): Promise<void> {
+  if (!hasIDB()) return;
+  try {
+    await tx("readwrite", (s) =>
+      s.put({ ...pending, v: SNAPSHOT_VERSION, savedAt: Date.now() }, PENDING_KEY)
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function loadPendingUpload(): Promise<PendingUpload | null> {
+  if (!hasIDB()) return null;
+  try {
+    const p = await tx<PendingUpload | undefined>("readonly", (s) =>
+      s.get(PENDING_KEY)
+    );
+    if (!p || p.v !== SNAPSHOT_VERSION) return null;
+    if (Date.now() - p.savedAt > MAX_AGE_MS) {
+      await clearPendingUpload();
+      return null;
+    }
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearPendingUpload(): Promise<void> {
+  if (!hasIDB()) return;
+  try {
+    await tx("readwrite", (s) => s.delete(PENDING_KEY));
+  } catch {
+    /* ignore */
+  }
+}

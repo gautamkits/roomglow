@@ -13,11 +13,15 @@ import type {
   ProductResult,
   Hotspot,
 } from "@/lib/types";
+import { useSession } from "next-auth/react";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import {
   saveFlowSnapshot,
   loadFlowSnapshot,
   clearFlowSnapshot,
+  savePendingUpload,
+  loadPendingUpload,
+  clearPendingUpload,
 } from "@/lib/flowPersistence";
 
 // Soft cap on free restyles per design — each restyle is a paid image generation.
@@ -39,6 +43,12 @@ function buildEventContext(cfg: EventConfig | null): string | undefined {
 }
 
 export function useRoomFlow() {
+  // Deferred sign-in: anonymous users can pick a mode and upload a photo; we
+  // only require Google sign-in at the moment of peak intent ("sign in to see
+  // your design"), right before the paid generation.
+  const { status: authStatus } = useSession();
+  const [awaitingSignIn, setAwaitingSignIn] = useState(false);
+
   const [step, setStep] = useState<FlowStep>("upload");
   const [mode, setMode] = useState<AppMode>("space");
   const [eventConfig, setEventConfig] = useState<EventConfig | null>(null);
@@ -217,6 +227,26 @@ export function useRoomFlow() {
 
       setImage(base64);
       setBaseImage(base64);
+
+      // Deferred sign-in gate: an anonymous user has now uploaded their photo —
+      // the moment of peak intent. Persist the upload + setup (survives the
+      // Google OAuth redirect) and show the "sign in to see your design" gate
+      // instead of running the paid analysis/generation. The resume effect below
+      // replays this once they're authenticated. No backend call happens for
+      // anonymous users, so there's no anonymous-compute cost/abuse surface.
+      if (authStatus !== "authenticated") {
+        await savePendingUpload({
+          base64,
+          mode: activeMode,
+          eventConfig: activeEventConfig,
+          makeoverConfig: activeMakeoverConfig,
+          maxBudget: selectedMaxBudget,
+          noBudget: !!selectedNoBudget,
+        });
+        setAwaitingSignIn(true);
+        return;
+      }
+
       setRetryCount(0);
       setStep("analyzing");
       setError(null);
@@ -304,8 +334,36 @@ export function useRoomFlow() {
         setStep("upload");
       }
     },
-    [mode, eventConfig, makeoverConfig]
+    [mode, eventConfig, makeoverConfig, authStatus]
   );
+
+  // Resume the deferred-sign-in flow after the Google OAuth round-trip. We send
+  // users back to /create?resume=1; once authenticated, replay the stashed
+  // upload straight into the normal (now authorized) analyze→generate pipeline.
+  const resumeHandledRef = useRef(false);
+  useEffect(() => {
+    if (resumeHandledRef.current) return;
+    if (authStatus !== "authenticated") return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("resume") !== "1") return;
+    resumeHandledRef.current = true;
+    loadPendingUpload().then((p) => {
+      // Drop the resume flag so a later refresh can't replay it.
+      window.history.replaceState({}, "", "/create");
+      if (!p) return;
+      clearPendingUpload();
+      setAwaitingSignIn(false);
+      handleImageSelected(
+        p.base64,
+        p.mode,
+        p.eventConfig,
+        p.maxBudget,
+        p.makeoverConfig,
+        p.noBudget
+      );
+    });
+  }, [authStatus, handleImageSelected]);
 
   // Each create-pipeline call is expensive (a paid AI step). We stash each
   // step's output here so that if a later step fails, retrying resumes from the
@@ -834,12 +892,15 @@ export function useRoomFlow() {
     setRestyleCount(0);
     setRetryCount(0);
     setCanRetry(false);
+    setAwaitingSignIn(false);
     progressRef.current = {};
     clearFlowSnapshot();
+    clearPendingUpload();
   }, []);
 
   return {
     step,
+    awaitingSignIn,
     mode,
     eventConfig,
     makeoverConfig,
