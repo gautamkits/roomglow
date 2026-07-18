@@ -27,12 +27,6 @@ import {
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
 
-// When auto-selecting suggested items (the "what to add" screen is skipped), cap
-// how many go into generation. The image model composites one reference image
-// per product; asking it to add too many at once makes it more likely to return
-// no image (→ a no-op design). ~6 keeps designs full but reliably renderable.
-const MAX_AUTO_ITEMS = 6;
-
 // Each retry/clear below is a paid image generation, so cap them to stop a user
 // (or tester) from triggering unlimited generations. These are client-side
 // guards for UX; the API routes enforce a hard per-user/IP cap server-side.
@@ -686,11 +680,7 @@ export function useRoomFlow() {
       !error
     ) {
       autoProceedRef.current = false;
-      const all = (
-        refreshedSuggestions ??
-        roomAnalysis.suggestedProducts ??
-        []
-      ).slice(0, MAX_AUTO_ITEMS);
+      const all = refreshedSuggestions ?? roomAnalysis.suggestedProducts ?? [];
       handleProductSelection(all);
     }
   }, [step, roomAnalysis, refreshedSuggestions, error, handleProductSelection]);
