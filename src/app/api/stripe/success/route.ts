@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { stripe } from "@/lib/stripe";
+import { sendMetaEvent, metaContextFromRequest } from "@/lib/meta";
 import { unlockDesign, getDesign, saveEventDate, incrementCouponUse, recordStripeSale } from "@/lib/db";
 import { sendDesignReadyEmail, notifyAdminError } from "@/lib/email";
 import { onDesignUnlocked } from "@/lib/unlock";
@@ -55,6 +56,22 @@ export async function GET(request: Request) {
 
       // Fill in deferred hotspots now that the design is paid/entitled (P1-b).
       onDesignUnlocked(designId);
+
+      // Server-side Purchase → Meta CAPI. event_id = Stripe session id (unique +
+      // idempotent). amount_total is in minor units (cents), Meta wants major.
+      const metaCtx = metaContextFromRequest(request);
+      after(() =>
+        sendMetaEvent({
+          eventName: "Purchase",
+          eventId: session.id,
+          email: session.customer_details?.email || session.customer_email,
+          externalId: userId,
+          value: session.amount_total != null ? session.amount_total / 100 : undefined,
+          currency: session.currency || "USD",
+          customData: { content_ids: [designId], content_type: "product" },
+          context: metaCtx,
+        })
+      );
 
       // Record coupon usage on successful payment.
       const usedCoupon = session.metadata?.couponCode;

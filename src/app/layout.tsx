@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Sora } from "next/font/google";
 import "./globals.css";
+import MetaPixel from "@/components/MetaPixel";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,6 +43,7 @@ export default function RootLayout({
         className="min-h-full flex flex-col font-[family-name:var(--font-geist-sans)] bg-stone-50 dark:bg-zinc-950 overflow-x-clip"
         suppressHydrationWarning
       >
+        <MetaPixel />
         {children}
       </body>
     </html>

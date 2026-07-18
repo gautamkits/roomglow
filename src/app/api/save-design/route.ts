@@ -8,6 +8,7 @@ import { sendDesignReadyEmail } from "@/lib/email";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isFreeFirstDesignEligible } from "@/lib/promo";
 import { onDesignUnlocked } from "@/lib/unlock";
+import { sendMetaEvent, metaContextFromRequest } from "@/lib/meta";
 
 export const runtime = "nodejs";
 
@@ -114,6 +115,22 @@ export async function POST(request: Request) {
     // shoppable pins don't show.
     if (isUnlocked && designId) {
       onDesignUnlocked(designId);
+    }
+
+    // DesignCreated → Meta CAPI. This is the top-of-funnel event the prospecting
+    // campaign optimizes for (purchase volume is too thin to exit learning at
+    // launch budget). Fires for every saved design, locked or unlocked.
+    if (designId) {
+      const metaCtx = metaContextFromRequest(request);
+      after(() =>
+        sendMetaEvent({
+          eventName: "DesignCreated",
+          email: session?.user?.email,
+          externalId: userId,
+          customData: { mode: mode || "space", content_ids: [designId] },
+          context: metaCtx,
+        })
+      );
     }
 
     if (userId && mode === "event" && eventConfig?.eventDate) {
