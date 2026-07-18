@@ -117,20 +117,24 @@ export async function POST(request: Request) {
       onDesignUnlocked(designId);
     }
 
-    // DesignCreated → Meta CAPI. This is the top-of-funnel event the prospecting
-    // campaign optimizes for (purchase volume is too thin to exit learning at
-    // launch budget). Fires for every saved design, locked or unlocked.
+    // Design-created signal → Meta CAPI. Fires for every saved design, locked or
+    // unlocked. We send TWO events for the same action:
+    //  - "Lead" (standard event): the prospecting campaign optimizes for this. A
+    //    standard event is selectable in Ads Manager immediately, avoiding the
+    //    flaky custom-conversion path.
+    //  - "DesignCreated" (custom event): kept for our own analytics / clarity.
     if (designId) {
       const metaCtx = metaContextFromRequest(request);
-      after(() =>
-        sendMetaEvent({
-          eventName: "DesignCreated",
-          email: session?.user?.email,
-          externalId: userId,
-          customData: { mode: mode || "space", content_ids: [designId] },
-          context: metaCtx,
-        })
-      );
+      const designSignal = {
+        email: session?.user?.email,
+        externalId: userId,
+        customData: { mode: mode || "space", content_ids: [designId] },
+        context: metaCtx,
+      };
+      after(async () => {
+        await sendMetaEvent({ eventName: "Lead", ...designSignal });
+        await sendMetaEvent({ eventName: "DesignCreated", ...designSignal });
+      });
     }
 
     if (userId && mode === "event" && eventConfig?.eventDate) {
