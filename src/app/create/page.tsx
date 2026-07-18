@@ -17,7 +17,6 @@ import { clearFlowSnapshot } from "@/lib/flowPersistence";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import SetupPanel from "@/components/SetupPanel";
-import ProductSelection from "@/components/ProductSelection";
 import TidyUpSelection from "@/components/TidyUpSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
@@ -56,11 +55,8 @@ function HomeContent() {
     error,
     statusMessage,
     handleImageSelected,
-    handleProductSelection,
     handleTidyUp,
     refreshedSuggestions,
-    optimizeLayout,
-    setOptimizeLayout,
     handleRegenerate,
     retryGeneration,
     canRetry,
@@ -84,6 +80,18 @@ function HomeContent() {
 
   const isLoading =
     step === "analyzing" || step === "generating" || step === "curating";
+  // The "what to add" screen is auto-skipped: on a fresh analysis the flow
+  // lands on "product-selection" and immediately advances to generation. Show
+  // the processing view (not a blank grid) during that moment. On a pipeline
+  // failure the step also returns here, but with `error` set — then we fall
+  // through to the error banner + retry instead of a spinner.
+  const isAutoAdvancing = step === "product-selection" && !error;
+  // Auto-selected items to ticker through while the design is built.
+  const tickerItems = (
+    selectedItems.length
+      ? selectedItems
+      : refreshedSuggestions ?? roomAnalysis?.suggestedProducts ?? []
+  ).map((s) => ({ label: s.label, icon: s.icon }));
 
   const isEvent = mode === "event";
 
@@ -267,89 +275,25 @@ function HomeContent() {
           </div>
         )}
 
-        {/* ─── LOADING ─── */}
-        {isLoading && (
+        {/* ─── LOADING (incl. the auto-skipped selection moment) ─── */}
+        {(isLoading || isAutoAdvancing) && (
           <ProcessingView
             image={image}
-            step={step as "analyzing" | "generating" | "curating"}
+            step={
+              isLoading
+                ? (step as "analyzing" | "generating" | "curating")
+                : "generating"
+            }
             isEvent={isEvent}
             mode={mode}
             statusMessage={statusMessage}
+            items={tickerItems}
           />
         )}
 
-        {/* ─── PRODUCT SELECTION ─── */}
-        {step === "product-selection" && roomAnalysis && (
-          <div className="py-10 max-w-2xl mx-auto">
-            <div className="mb-7 animate-fade-up">
-              <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-1.5">
-                {mode === "event"
-                  ? "Which decorations should we add?"
-                  : mode === "makeover"
-                  ? "Which items should we find you?"
-                  : "What should we add?"}
-              </h2>
-              <p className="text-sm text-zinc-500">
-                {mode === "makeover"
-                  ? "Your stylist analyzed your photo. Pick the pieces you'd like us to source."
-                  : refreshedSuggestions ? (
-                    <>
-                      Based on what you cleared out, here&apos;s what we&apos;d add —
-                      including replacements for anything you removed.
-                    </>
-                  ) : (
-                    <>
-                      We analyzed your {roomAnalysis.dimensions} {roomAnalysis.roomType}.
-                      {mode === "event"
-                        ? " Pick the decorations you'd like for the event."
-                        : " Pick the pieces you'd like our designer to source."}
-                    </>
-                  )}
-              </p>
-            </div>
-            {mode === "space" && (
-              <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-zinc-200 dark:border-zinc-800 p-3 animate-fade-up-delay-1">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Layout
-                  </p>
-                  <p className="text-xs text-zinc-500">
-                    {optimizeLayout
-                      ? "We'll rearrange your furniture into the best layout."
-                      : "We'll keep your furniture where it is."}
-                  </p>
-                </div>
-                <div className="flex gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 text-xs shrink-0">
-                  {(
-                    [
-                      { id: true, label: "Optimize" },
-                      { id: false, label: "Keep mine" },
-                    ] as const
-                  ).map(({ id, label }) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => setOptimizeLayout(id)}
-                      className={`px-2.5 py-1 rounded-md transition-colors ${
-                        optimizeLayout === id
-                          ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium shadow-sm"
-                          : "text-zinc-500"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <div className="animate-fade-up-delay-1">
-              <ProductSelection
-                products={refreshedSuggestions ?? roomAnalysis.suggestedProducts ?? []}
-                onComplete={handleProductSelection}
-              />
-            </div>
-          </div>
-        )}
+        {/* The "what to add" selection screen is intentionally removed — the
+            flow auto-selects every suggested item and advances straight to
+            generation (see useRoomFlow auto-advance + the ItemTicker above). */}
 
         {/* ─── TIDY UP (pick items to remove) ─── */}
         {step === "tidy-up" && roomAnalysis && image && (

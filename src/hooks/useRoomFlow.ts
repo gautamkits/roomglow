@@ -78,6 +78,14 @@ export function useRoomFlow() {
   // layout. Defaults OFF ("Keep mine") — the user opts into "Optimize".
   const [optimizeLayout, setOptimizeLayout] = useState(false);
 
+  // The "what to add" screen is auto-skipped: after a FRESH photo analysis we
+  // proceed straight to generation with every suggested item selected. This ref
+  // scopes that auto-advance to fresh analyses only — it is deliberately NOT set
+  // on the resume-restore path (below) or the pipeline-failure fallback (which
+  // both also land on "product-selection"), so we never silently fire a paid
+  // generation on resume or loop on failure.
+  const autoProceedRef = useRef(false);
+
   // ─── Level-1 resume: restore an in-progress flow on this device ───
   // Gate persistence until the one-time rehydrate has run, so we never clobber a
   // saved snapshot with the initial empty state on mount.
@@ -243,6 +251,7 @@ export function useRoomFlow() {
             removableObjects: [],
             questions: [],
           });
+          autoProceedRef.current = true; // fresh analysis → auto-skip selection
           setStep("product-selection");
         } catch (e) {
           setError(
@@ -282,6 +291,9 @@ export function useRoomFlow() {
         const cluttered =
           analysis.clutterLevel !== "clean" &&
           (analysis.removableObjects?.length ?? 0) > 0;
+        // Non-cluttered → auto-skip selection now. Cluttered → the ref is set
+        // after the tidy-up step instead (handleTidyUp).
+        autoProceedRef.current = !cluttered;
         setStep(cluttered ? "tidy-up" : "product-selection");
       } catch (e) {
         setError(
@@ -597,6 +609,24 @@ export function useRoomFlow() {
     [runPipeline]
   );
 
+  // Auto-skip the "what to add" screen: on a fresh analysis (autoProceedRef set
+  // by handleImageSelected / handleTidyUp), immediately proceed to generation
+  // with EVERY suggested item selected. Guarded so it fires exactly once per
+  // fresh entry and never on resume (ref unset) or after a pipeline failure
+  // (`error` set) — both of which also land on "product-selection".
+  useEffect(() => {
+    if (
+      step === "product-selection" &&
+      autoProceedRef.current &&
+      roomAnalysis &&
+      !error
+    ) {
+      autoProceedRef.current = false;
+      const all = refreshedSuggestions ?? roomAnalysis.suggestedProducts ?? [];
+      handleProductSelection(all);
+    }
+  }, [step, roomAnalysis, refreshedSuggestions, error, handleProductSelection]);
+
   // Tidy-up step (runs BEFORE product selection). Record what to remove, and if
   // anything was removed, AI-refresh the "what to add" list so removals surface
   // replacements/fillers. The actual empty-room render is deferred to
@@ -625,6 +655,7 @@ export function useRoomFlow() {
           /* ignore — keep original suggestions */
         }
       }
+      autoProceedRef.current = true; // declutter done → auto-skip selection
       setStep("product-selection");
     },
     [image, roomAnalysis]

@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Check,
+  Loader2,
   Sparkles,
   Camera,
   ScanLine,
@@ -34,6 +36,87 @@ interface ProcessingViewProps {
   isEvent: boolean;
   mode?: "space" | "event" | "makeover";
   statusMessage?: string;
+  /** Auto-selected items to ticker through while the design is being built. */
+  items?: { label: string; icon?: string }[];
+}
+
+// Item-by-item "designing" ticker shown once we're past analysis. Purely
+// cosmetic anticipation UX (decoupled from real pipeline timing): it checks off
+// each auto-selected piece one by one, then holds on the last until the design
+// is ready and the parent flips `step` to "results".
+function ItemTicker({
+  items,
+  mode,
+}: {
+  items: { label: string; icon?: string }[];
+  mode: "space" | "event" | "makeover";
+}) {
+  const reduceMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+  // done = index the ticker has advanced PAST (those are checked off).
+  const [done, setDone] = useState(reduceMotion ? items.length : 0);
+
+  useEffect(() => {
+    if (reduceMotion) return;
+    if (done >= items.length) return;
+    const t = setTimeout(() => setDone((d) => d + 1), 1700);
+    return () => clearTimeout(t);
+  }, [done, items.length, reduceMotion]);
+
+  const verb =
+    mode === "event" ? "Sourcing" : mode === "makeover" ? "Styling" : "Adding";
+
+  const allDone = done >= items.length;
+
+  return (
+    <>
+    <ul className="mt-6 space-y-2" aria-live="polite">
+      {items.map((item, i) => {
+        const isDone = i < done;
+        const isActive = i === done;
+        return (
+          <li
+            key={`${item.label}-${i}`}
+            className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${
+              isActive
+                ? "border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-950/20"
+                : "border-transparent"
+            } ${isDone || isActive ? "opacity-100" : "opacity-40"}`}
+          >
+            <span className="w-5 h-5 shrink-0 flex items-center justify-center">
+              {isDone ? (
+                <span className="w-5 h-5 rounded-full bg-orange-700 text-white flex items-center justify-center">
+                  <Check size={12} strokeWidth={3} />
+                </span>
+              ) : isActive && !reduceMotion ? (
+                <Loader2 size={16} className="text-orange-700 animate-spin" />
+              ) : (
+                <span className="text-base leading-none">{item.icon ?? "•"}</span>
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                {item.label}
+              </span>
+              {isActive && (
+                <span className="block text-xs text-orange-700 dark:text-orange-400">
+                  {`${verb}…`}
+                </span>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+    {allDone && (
+      <p className="mt-3 text-center text-sm text-orange-700 dark:text-orange-400">
+        Putting it all together…
+      </p>
+    )}
+    </>
+  );
 }
 
 // Themed icons that pop in one-by-one while each pipeline step runs — makes the
@@ -101,9 +184,12 @@ export default function ProcessingView({
   isEvent,
   mode,
   statusMessage,
+  items,
 }: ProcessingViewProps) {
   const activeMode: "space" | "event" | "makeover" =
     mode ?? (isEvent ? "event" : "space");
+  // Show the item ticker only once we're past analysis (we have the item list).
+  const showTicker = step !== "analyzing" && !!items && items.length > 0;
   const loadingIndex =
     step === "analyzing" ? 0 : step === "generating" ? 1 : 2;
 
@@ -202,7 +288,10 @@ export default function ProcessingView({
           })}
         </div>
 
-        {statusMessage && (
+        {/* item-by-item "designing" ticker (auto-selected pieces) */}
+        {showTicker && <ItemTicker items={items!} mode={activeMode} />}
+
+        {statusMessage && !showTicker && (
           <p className="text-sm text-zinc-500 text-center mt-6">
             {statusMessage}
           </p>
