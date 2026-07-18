@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
+import { trackMeta } from "@/lib/metaClient";
 import {
   Lock,
   LogIn,
@@ -241,6 +242,9 @@ export default function PaywallOverlay({
   };
 
   const handlePay = async () => {
+    // Fire InitiateCheckout on the browser Pixel — builds a high-intent
+    // retargeting audience (users who opened checkout but may not finish).
+    trackMeta("InitiateCheckout", designId ? { content_ids: [designId] } : undefined);
     if (locale === "IN") return handlePayRazorpay();
     if (!designId) return;
     setPaying(true);

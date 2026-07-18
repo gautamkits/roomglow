@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { verifyPaymentSignature } from "@/lib/razorpay";
+import { sendMetaEvent, metaContextFromRequest } from "@/lib/meta";
 import {
   unlockDesign,
   getDesign,
@@ -66,6 +67,23 @@ export async function POST(request: Request) {
     }
 
     onDesignUnlocked(designId);
+
+    // Server-side Purchase → Meta CAPI. Most reliable purchase signal for the
+    // India funnel. event_id = payment id (unique + idempotent). Value is sent
+    // in major units (rupees), so divide the minor-unit amount by 100.
+    const metaCtx = metaContextFromRequest(request);
+    after(() =>
+      sendMetaEvent({
+        eventName: "Purchase",
+        eventId: razorpay_payment_id,
+        email: session.user?.email,
+        externalId: session.user?.id,
+        value: amount != null ? Number(amount) / 100 : undefined,
+        currency: currency ?? "INR",
+        customData: { content_ids: [designId], content_type: "product" },
+        context: metaCtx,
+      })
+    );
 
     const design = await getDesign(designId);
     if (design) {
