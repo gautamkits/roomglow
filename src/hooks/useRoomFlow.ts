@@ -48,6 +48,7 @@ export function useRoomFlow() {
   // your design"), right before the paid generation.
   const { status: authStatus } = useSession();
   const [awaitingSignIn, setAwaitingSignIn] = useState(false);
+  const [resumePending, setResumePending] = useState(false);
 
   const [step, setStep] = useState<FlowStep>("upload");
   const [mode, setMode] = useState<AppMode>("space");
@@ -102,15 +103,26 @@ export function useRoomFlow() {
   const hydratedRef = useRef(false);
 
   useEffect(() => {
+    // On the Google sign-in return (?resume=1) the deferred-resume effect below
+    // owns the flow — it replays the stashed upload straight into generation.
+    // Skip snapshot restore here so we don't race it: otherwise this async load
+    // can resolve AFTER generation has begun writing progress snapshots, restore
+    // that half-written snapshot, and hijack the live run (the design finishes
+    // server-side but the tab is left stuck on a ghost progress bar).
+    if (
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("resume") === "1"
+    ) {
+      hydratedRef.current = true;
+      return;
+    }
     let cancelled = false;
     loadFlowSnapshot().then((snap) => {
       if (!cancelled && snap) {
         // Only resume states worth returning to: a finished result, or a
         // product-selection/generation stage (which always has an analysis).
-        const resumable =
-          (snap.step === "results" && snap.generatedImage) ||
-          snap.roomAnalysis ||
-          snap.personAnalysis;
+        const finished = snap.step === "results" && !!snap.generatedImage;
+        const resumable = finished || snap.roomAnalysis || snap.personAnalysis;
         if (resumable) {
           setMode(snap.mode);
           setEventConfig(snap.eventConfig);
@@ -128,13 +140,12 @@ export function useRoomFlow() {
           setDesignNarrative(snap.designNarrative);
           setDesignId(snap.designId);
           setIsUnlocked(snap.isUnlocked);
-          // A run interrupted mid-generation drops back to product-selection so
-          // the user re-confirms (we don't silently resume a paid AI call).
-          setStep(
-            snap.step === "results" && snap.generatedImage
-              ? "results"
-              : "product-selection"
-          );
+          setStep(finished ? "results" : "product-selection");
+          // A run interrupted mid-generation: the resume effect below checks
+          // whether the design already finished server-side (jump to it, free)
+          // and only re-runs the paid pipeline when it truly didn't — so we
+          // neither strand the user on a ghost progress bar nor double-charge.
+          if (!finished) setResumePending(true);
         } else {
           clearFlowSnapshot();
         }
@@ -667,6 +678,63 @@ export function useRoomFlow() {
     [runPipeline]
   );
 
+  // Resume an interrupted run (a manual mid-generation refresh, or a sign-in
+  // round-trip that got hijacked). Option 1: if the design already completed
+  // server-side just before the interruption, jump straight to it — no new
+  // (paid) generation. Only when nothing finished do we re-run the pipeline once.
+  const resumeAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!resumePending || resumeAttemptedRef.current) return;
+    resumeAttemptedRef.current = true;
+    setResumePending(false);
+    (async () => {
+      try {
+        const res = await fetch("/api/user/designs");
+        if (res.ok) {
+          const { designs } = await res.json();
+          const latest = designs?.[0];
+          const ageMs = latest?.created_at
+            ? Date.now() - new Date(latest.created_at).getTime()
+            : Infinity;
+          // A design created in the last few minutes is this interrupted run's
+          // finished output — go to it instead of paying to regenerate.
+          if (latest?.id && ageMs < 3 * 60 * 1000) {
+            clearFlowSnapshot();
+            setDesignId(latest.id);
+            setStep("results"); // create page redirects to /design/[id]
+            return;
+          }
+        }
+      } catch {
+        /* couldn't check — fall through and re-run */
+      }
+      const all = selectedItems.length
+        ? selectedItems
+        : refreshedSuggestions ?? roomAnalysis?.suggestedProducts ?? [];
+      if (all.length) {
+        handleProductSelection(all);
+      } else {
+        setStep("upload");
+      }
+    })();
+  }, [
+    resumePending,
+    selectedItems,
+    refreshedSuggestions,
+    roomAnalysis,
+    handleProductSelection,
+  ]);
+
+  // "Use a different photo" on the sign-in gate: drop the stashed upload and
+  // return to the uploader.
+  const changePhoto = useCallback(() => {
+    setAwaitingSignIn(false);
+    clearPendingUpload();
+    setImage(null);
+    setBaseImage(null);
+    setStep("upload");
+  }, []);
+
   // Auto-skip the "what to add" screen: on a fresh analysis (autoProceedRef set
   // by handleImageSelected / handleTidyUp), immediately proceed to generation
   // with EVERY suggested item selected. Guarded so it fires exactly once per
@@ -901,6 +969,7 @@ export function useRoomFlow() {
   return {
     step,
     awaitingSignIn,
+    changePhoto,
     mode,
     eventConfig,
     makeoverConfig,

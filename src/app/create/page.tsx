@@ -40,6 +40,7 @@ function HomeContent() {
   const {
     step,
     awaitingSignIn,
+    changePhoto,
     mode,
     eventConfig,
     makeoverConfig,
@@ -224,6 +225,14 @@ function HomeContent() {
               <Camera size={17} />
               Continue with Google
             </button>
+            <div className="mt-4">
+              <button
+                onClick={changePhoto}
+                className="text-sm text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline underline-offset-2 transition-colors"
+              >
+                Use a different photo
+              </button>
+            </div>
             <p className="text-xs text-zinc-400 mt-4">
               Free to start · we never post or sell your data
             </p>
