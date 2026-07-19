@@ -22,6 +22,7 @@ export const metaCapiConfigured = Boolean(PIXEL_ID && ACCESS_TOKEN);
 type StandardEvent =
   | "Purchase"
   | "InitiateCheckout"
+  | "AddToCart"
   | "ViewContent"
   | "Lead"
   | "PageView";

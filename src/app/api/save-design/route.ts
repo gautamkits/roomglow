@@ -118,11 +118,11 @@ export async function POST(request: Request) {
     }
 
     // Design-created signal → Meta CAPI. Fires for every saved design, locked or
-    // unlocked. We send TWO events for the same action:
-    //  - "Lead" (standard event): the prospecting campaign optimizes for this. A
-    //    standard event is selectable in Ads Manager immediately, avoiding the
-    //    flaky custom-conversion path.
-    //  - "DesignCreated" (custom event): kept for our own analytics / clarity.
+    // unlocked. Building a shoppable design = assembling a cart, so we model it
+    // as "AddToCart" — a standard event VALID for the Sales objective (Lead is
+    // not), giving a clean funnel: AddToCart (design) → InitiateCheckout
+    // (paywall) → Purchase (paid). "DesignCreated" (custom) is kept for our own
+    // analytics.
     if (designId) {
       const metaCtx = metaContextFromRequest(request);
       const designSignal = {
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
         context: metaCtx,
       };
       after(async () => {
-        await sendMetaEvent({ eventName: "Lead", ...designSignal });
+        await sendMetaEvent({ eventName: "AddToCart", ...designSignal });
         await sendMetaEvent({ eventName: "DesignCreated", ...designSignal });
       });
     }
