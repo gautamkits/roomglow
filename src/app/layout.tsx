@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Sora } from "next/font/google";
 import "./globals.css";
+import { PostHogProvider } from "@/providers/PostHogProvider";
 import MetaPixel from "@/components/MetaPixel";
 
 const geistSans = Geist({
@@ -44,7 +45,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <MetaPixel />
-        {children}
+        <PostHogProvider>{children}</PostHogProvider>
       </body>
     </html>
   );
