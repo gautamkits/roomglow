@@ -10,6 +10,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 // adds zero weight until switched on in the environment. Inputs are masked, so
 // we never record what users type (respects the "we never sell your data"
 // promise); we still see the click/navigation path and where people drop off.
+// NEXT_PUBLIC_* are inlined at build time — read them at module scope.
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com";
 
