@@ -21,7 +21,6 @@ import SetupPanel from "@/components/SetupPanel";
 import TidyUpSelection from "@/components/TidyUpSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
-import Landing from "@/components/Landing";
 import SiteHeader from "@/components/SiteHeader";
 import ShareButton from "@/components/ShareButton";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
@@ -82,7 +81,6 @@ function HomeContent() {
   // Anonymous visitors first see the marketing Landing; clicking a CTA reveals
   // the uploader inline (sign-in is deferred to after they upload — see the
   // awaitingSignIn gate below).
-  const [showAnonUploader, setShowAnonUploader] = useState(false);
   const firstName = session?.user?.name?.split(" ")[0] || "there";
 
   const isLoading =
@@ -113,14 +111,6 @@ function HomeContent() {
     }
   }, [step, designId, router]);
 
-  // The full-bleed marketing Landing only shows to anonymous visitors before
-  // they start (not once they reveal the uploader or hit the sign-in gate).
-  const onLandingView =
-    sessionStatus === "unauthenticated" &&
-    step === "upload" &&
-    !showAnonUploader &&
-    !awaitingSignIn;
-
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
       <SiteHeader
@@ -140,7 +130,7 @@ function HomeContent() {
         }
       />
 
-      <main className={onLandingView ? "" : "max-w-5xl mx-auto px-5"}>
+      <main className="max-w-5xl mx-auto px-5">
         {error && (
           <div className="mt-6 p-4 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg text-red-700 dark:text-red-300 text-sm flex flex-wrap items-center justify-between gap-3">
             <span>{error}</span>
@@ -163,12 +153,13 @@ function HomeContent() {
         )}
 
         {/* ─── ANONYMOUS — upload first, sign in later ─── */}
-        {/* Marketing landing → CTA reveals the uploader inline. No sign-in wall
-            up front; sign-in is deferred to the gate below (after upload). */}
+        {/* /create IS the tool: open straight to the uploader (no second
+            marketing page — the homepage handles that). The visitor came here to
+            create, so show the action immediately. Sign-in is deferred to the
+            gate below (after upload). */}
         {step === "upload" &&
           sessionStatus === "unauthenticated" &&
-          !awaitingSignIn &&
-          (showAnonUploader ? (
+          !awaitingSignIn && (
             <div className="max-w-xl mx-auto py-8 animate-fade-up">
               <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
                 <div className="flex items-center gap-3 mb-5">
@@ -177,19 +168,17 @@ function HomeContent() {
                   </span>
                   <div className="min-w-0">
                     <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                      Start your design
+                      Redesign your space
                     </h2>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Upload a photo — no sign-in needed to start.
+                      Upload a photo → see it transformed, free. No sign-in to start.
                     </p>
                   </div>
                 </div>
                 <SetupPanel onImageSelected={handleImageSelected} />
               </div>
             </div>
-          ) : (
-            <Landing onStart={() => setShowAnonUploader(true)} />
-          ))}
+          )}
 
         {/* ─── SIGN-IN GATE (deferred; fires right after upload) ─── */}
         {awaitingSignIn && (
