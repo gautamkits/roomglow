@@ -101,9 +101,11 @@ export default function ImageUpload({ onImageSelected }: ImageUploadProps) {
             </div>
             <div>
               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Drop a photo, or click to upload
+                Tap to upload your photo
               </p>
-              <p className="text-xs text-zinc-500 mt-1">JPG or PNG, up to ~10MB</p>
+              <p className="text-xs text-zinc-500 mt-1">
+                Take one now or pick from your gallery · JPG or PNG
+              </p>
             </div>
           </div>
           <input

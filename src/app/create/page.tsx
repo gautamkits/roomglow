@@ -26,6 +26,7 @@ import ShareButton from "@/components/ShareButton";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
+import EmailSignIn from "@/components/EmailSignIn";
 import OccasionProducts from "@/components/OccasionProducts";
 import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
@@ -214,6 +215,16 @@ function HomeContent() {
               <Camera size={17} />
               Continue with Google
             </button>
+
+            {/* Email fallback — works inside the Instagram in-app browser, where
+                Google OAuth is blocked. */}
+            <div className="flex items-center gap-3 my-4">
+              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+              <span className="text-xs text-zinc-400">or</span>
+              <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+            </div>
+            <EmailSignIn callbackUrl="/create?resume=1" />
+
             <div className="mt-4">
               <button
                 onClick={changePhoto}

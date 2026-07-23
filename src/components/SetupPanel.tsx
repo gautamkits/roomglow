@@ -258,76 +258,6 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </div>
       )}
 
-      {/* Budget — auto by default; the pipeline sizes it from real product prices */}
-      <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Budget
-          </span>
-          <div className="flex gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 text-xs">
-            {(
-              [
-                { id: "auto", label: "Auto" },
-                { id: "unlimited", label: "No limit" },
-                { id: "custom", label: "Set max" },
-              ] as const
-            ).map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setBudgetMode(id)}
-                className={`px-2.5 py-1 rounded-md transition-colors ${
-                  budgetMode === id
-                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium shadow-sm"
-                    : "text-zinc-500"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {budgetMode === "auto" ? (
-          <p className="text-xs text-zinc-500">
-            Recommended — we pick the best value for a full, great-looking design
-            based on real product prices.
-          </p>
-        ) : budgetMode === "unlimited" ? (
-          <p className="text-xs text-zinc-500">
-            No cap — the AI chooses whatever best suits the design, regardless of
-            price.
-          </p>
-        ) : (
-          <>
-            <div className="flex items-baseline justify-between mb-1.5">
-              <span className="text-xs text-zinc-500">Max spend</span>
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                {formatBudget(maxBudget)}
-                {maxBudget >= budgetMax && "+"}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={budgetMin}
-              max={budgetMax}
-              step={budgetStep}
-              value={maxBudget}
-              onChange={(e) => setMaxBudget(Number(e.target.value))}
-              className="w-full accent-orange-700"
-            />
-            <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
-              <span>{formatBudget(budgetMin)}</span>
-              <span>{formatBudget(budgetMax)}+</span>
-            </div>
-            <p className="text-[10px] text-zinc-400 mt-1.5">
-              We&apos;ll keep to this cap, but never below what the full look
-              actually costs.
-            </p>
-          </>
-        )}
-      </div>
-
       {/* Makeover style picker */}
       {mode === "makeover" && (
         <div className="space-y-3 animate-fade-up">
@@ -395,7 +325,10 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
         </ul>
       </div>
 
-      {/* Upload — gated until event options / makeover style are set */}
+      {/* Upload — gated until event options / makeover style are set.
+          The primary CTA: kept directly under the tips with nothing between it
+          and the visitor. Budget lives below (it defaults to Auto, so it never
+          blocks uploading). */}
       <div className="pt-1">
         {eventReady ? (
           <ImageUpload onImageSelected={handleImage} />
@@ -403,14 +336,93 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           <div className="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 p-6 text-center">
             <p className="text-sm text-zinc-500">
               {mode === "makeover" && !makeoverStyleId
-                ? "Pick a style look, then set your budget to upload"
-                : !eventConfigReady
-                ? "Pick an occasion, theme & colors, then set your budget to upload"
-                : "Set your max budget to upload your photo"}
+                ? "Pick a style look above to upload your photo"
+                : "Pick an occasion, theme & colors above to upload your photo"}
             </p>
           </div>
         )}
       </div>
+
+      {/* Budget — auto by default; the pipeline sizes it from real product
+          prices. Placed AFTER the uploader so it never delays the core action;
+          most visitors leave it on Auto. */}
+      <details className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-3">
+        <summary className="flex items-center justify-between cursor-pointer list-none">
+          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Budget
+          </span>
+          <span className="text-xs text-zinc-400">
+            {budgetMode === "auto"
+              ? "Auto (recommended)"
+              : budgetMode === "unlimited"
+              ? "No limit"
+              : `Up to ${formatBudget(maxBudget)}${maxBudget >= budgetMax ? "+" : ""}`}
+          </span>
+        </summary>
+        <div className="mt-3">
+          <div className="flex gap-1 rounded-lg bg-zinc-100 dark:bg-zinc-800 p-0.5 text-xs mb-2 w-fit">
+            {(
+              [
+                { id: "auto", label: "Auto" },
+                { id: "unlimited", label: "No limit" },
+                { id: "custom", label: "Set max" },
+              ] as const
+            ).map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setBudgetMode(id)}
+                className={`px-2.5 py-1 rounded-md transition-colors ${
+                  budgetMode === id
+                    ? "bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 font-medium shadow-sm"
+                    : "text-zinc-500"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {budgetMode === "auto" ? (
+            <p className="text-xs text-zinc-500">
+              Recommended — we pick the best value for a full, great-looking
+              design based on real product prices.
+            </p>
+          ) : budgetMode === "unlimited" ? (
+            <p className="text-xs text-zinc-500">
+              No cap — the AI chooses whatever best suits the design, regardless
+              of price.
+            </p>
+          ) : (
+            <>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <span className="text-xs text-zinc-500">Max spend</span>
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  {formatBudget(maxBudget)}
+                  {maxBudget >= budgetMax && "+"}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={budgetMin}
+                max={budgetMax}
+                step={budgetStep}
+                value={maxBudget}
+                onChange={(e) => setMaxBudget(Number(e.target.value))}
+                className="w-full accent-orange-700"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-400 mt-1">
+                <span>{formatBudget(budgetMin)}</span>
+                <span>{formatBudget(budgetMax)}+</span>
+              </div>
+              <p className="text-[10px] text-zinc-400 mt-1.5">
+                We&apos;ll keep to this cap, but never below what the full look
+                actually costs.
+              </p>
+            </>
+          )}
+        </div>
+      </details>
     </div>
   );
 }

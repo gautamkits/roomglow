@@ -1,4 +1,5 @@
 import { sql } from "@vercel/postgres";
+import { createHash } from "crypto";
 import { isOneTimeEvent } from "@/lib/events";
 
 export async function findUserByGoogleId(googleId: string) {
@@ -29,6 +30,94 @@ export async function deductCredit(userId: string) {
 
 export async function addCredits(userId: string, amount: number) {
   await sql`UPDATE users SET credits = credits + ${amount} WHERE id = ${userId}`;
+}
+
+// ─── Passwordless email (magic-link) auth ───
+// Lets visitors sign in via a one-time email link instead of Google OAuth —
+// critical because Google blocks OAuth inside the Instagram in-app browser (our
+// top ad channel). Tokens are stored hashed, single-use, and short-lived.
+let magicSchemaReady = false;
+async function ensureMagicSchema() {
+  if (magicSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS magic_tokens (
+      id BIGSERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      token_hash TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      consumed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_magic_tokens_hash ON magic_tokens (token_hash)`;
+  magicSchemaReady = true;
+}
+
+/** Store a hashed one-time sign-in token for an email. */
+export async function createMagicToken(
+  email: string,
+  tokenHash: string,
+  expiresAt: Date
+) {
+  await ensureMagicSchema();
+  await sql`
+    INSERT INTO magic_tokens (email, token_hash, expires_at)
+    VALUES (${email}, ${tokenHash}, ${expiresAt.toISOString()})
+  `;
+}
+
+/**
+ * Atomically validate + single-use consume a magic token. Returns the email it
+ * was issued to, or null if the token is unknown, expired, or already used. The
+ * UPDATE…RETURNING makes consumption race-safe (a token can't be redeemed twice).
+ */
+export async function consumeMagicToken(
+  tokenHash: string
+): Promise<string | null> {
+  await ensureMagicSchema();
+  const { rows } = await sql`
+    UPDATE magic_tokens
+       SET consumed_at = now()
+     WHERE token_hash = ${tokenHash}
+       AND consumed_at IS NULL
+       AND expires_at > now()
+     RETURNING email
+  `;
+  return rows[0]?.email ?? null;
+}
+
+/**
+ * Resolve (or create) a user by email — the identity anchor for magic-link
+ * sign-in. Email-first so a visitor who already has a Google account with this
+ * address reuses that same row (no duplicate account). New email-only users are
+ * inserted with a NULL google_id.
+ */
+export async function upsertUserByEmail(email: string, name: string) {
+  const existing = await sql`SELECT * FROM users WHERE email = ${email} LIMIT 1`;
+  if (existing.rows[0]) return existing.rows[0];
+  try {
+    const { rows } = await sql`
+      INSERT INTO users (email, name, avatar_url)
+      VALUES (${email}, ${name}, '')
+      RETURNING *
+    `;
+    return rows[0];
+  } catch {
+    // Fallback for schemas where google_id is NOT NULL (the table predates
+    // multi-provider auth): insert with a synthetic, deterministic id derived
+    // from the email so it won't collide with real Google IDs and re-tries
+    // resolve to the same value.
+    const synthetic = `mlink_${createHash("sha256")
+      .update(email)
+      .digest("hex")
+      .slice(0, 32)}`;
+    const { rows } = await sql`
+      INSERT INTO users (google_id, email, name, avatar_url)
+      VALUES (${synthetic}, ${email}, ${name}, '')
+      RETURNING *
+    `;
+    return rows[0];
+  }
 }
 
 // preview_image_url was added in code without a migration; self-init it so

@@ -692,6 +692,66 @@ export async function sendEventReminderEmail(
   }
 }
 
+/** One-time passwordless sign-in link. */
+export async function sendMagicLinkEmail(data: {
+  to: string;
+  link: string;
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;">
+      <span style="font-size:20px;font-weight:700;color:${LINEN};">noosho</span>
+    </td></tr>
+    <tr><td style="padding:24px;">
+      <p style="font-size:16px;color:${TEXT};margin:0 0 8px;font-weight:600;">Sign in to Noosho</p>
+      <p style="font-size:14px;color:${MUTED};margin:0 0 18px;line-height:1.6;">
+        Tap the button below to sign in and see your design. This link works once
+        and expires in 15 minutes.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${CLAY_CTA};">
+        <a href="${esc(data.link)}" style="display:inline-block;padding:12px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Sign in to Noosho</a>
+      </td></tr></table>
+      <p style="font-size:12px;color:${FAINT};margin:18px 0 0;line-height:1.6;">
+        If you didn't request this, you can safely ignore this email — no one can
+        sign in without this link.
+      </p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: [{ email_address: { address: data.to, name: data.to } }],
+        subject: "Your Noosho sign-in link",
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Magic link failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Magic link threw:", e);
+    return { ok: false };
+  }
+}
+
 export interface AbandonedCheckoutEmailData {
   to: string;
   name?: string;

@@ -14,6 +14,7 @@ import type {
   Hotspot,
 } from "@/lib/types";
 import { useSession } from "next-auth/react";
+import { track } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import {
   saveFlowSnapshot,
@@ -238,6 +239,16 @@ export function useRoomFlow() {
 
       setImage(base64);
       setBaseImage(base64);
+
+      // Activation signal — every real photo upload, anon or authed. This is our
+      // earliest interest metric (fires well before the paid design pipeline),
+      // mirrored to the Meta Pixel as `ImageUploaded` so ad performance can be
+      // read against actual uploads, not just landing-page views.
+      track(
+        "image_uploaded",
+        { mode: activeMode, authed: authStatus === "authenticated" },
+        { meta: true }
+      );
 
       // Deferred sign-in gate: an anonymous user has now uploaded their photo —
       // the moment of peak intent. Persist the upload + setup (survives the

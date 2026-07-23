@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SessionProvider, useSession, signIn } from "next-auth/react";
+import { SessionProvider, useSession } from "next-auth/react";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import BeforeAfterSlider from "@/components/BeforeAfterSlider";
 import PaywallOverlay from "@/components/PaywallOverlay";
@@ -200,6 +200,18 @@ function Viewer({
             )}
             {approved && (
               <>
+                {/* Always-visible primary CTA on public gallery designs: converts
+                    browsers into creators before they leak out to the Amazon
+                    "shop the look" links below. Routes straight to the uploader
+                    (sign-in is deferred until after they upload). */}
+                <button
+                  onClick={() => router.push("/create")}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-700 hover:bg-orange-800 text-white text-sm font-medium transition-colors shadow-sm shadow-orange-700/20"
+                >
+                  <Wand2 size={15} />
+                  <span className="hidden sm:inline">Design yours</span>
+                  <span className="sm:hidden">Design</span>
+                </button>
                 <ShareButton designId={design.id} variant="ghost" />
                 <LikeButton designId={design.id} initialCount={design.like_count || 0} />
               </>
@@ -469,10 +481,11 @@ function Viewer({
               Want this for your own space?
             </h3>
             <p className="text-sm text-zinc-500 mb-4">
-              Upload a photo and Noosho designs it for you — free to start.
+              Upload a photo and Noosho designs it for you — free to start, no
+              sign-in needed.
             </p>
             <button
-              onClick={() => signIn("google", { callbackUrl: "/" })}
+              onClick={() => router.push("/create")}
               className="px-5 py-2.5 bg-orange-700 hover:bg-orange-800 text-white font-medium text-sm rounded-lg transition-colors"
             >
               Design your own room
