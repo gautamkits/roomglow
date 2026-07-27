@@ -521,6 +521,10 @@ export function useRoomFlow() {
               selectedProductTypes: selected.map((s) => s.label),
               eventContext,
               removeLabels: removedLabels,
+              // Events only (server-side gate): lets placements reference
+              // zones actually visible in the venue photo instead of being
+              // authored blind from the text analysis.
+              originalImage: isEvent ? canvas : undefined,
             },
             "We couldn't create a design plan. Please try again."
           );

@@ -333,7 +333,8 @@ Your job: Pick EXACTLY ONE product from each category that creates the most cohe
 - Style consistency (all products should feel like they belong together)
 - Visual appeal and quality based on the product images${
       eventContext
-        ? `\n- Prioritize items with strong festive visual impact for the occasion above — vibrant, celebratory, and eye-catching — over minimalist or muted interior-design taste.`
+        ? `\n- Prioritize items with strong festive visual impact for the occasion above — vibrant, celebratory, and eye-catching — over minimalist or muted interior-design taste.
+- Prefer decor with real physical volume (balloon garlands, drapes, fabric backdrops, string lights, standing props, table centerpieces) over flat paper goods (loose cutouts, decals, stickers, printed sheets) when either would satisfy the category — flat paper reads as pasted-on in a photograph and has little presence in the room.`
         : ""
     }
 - How well each product fits its intended placement in THIS specific room
@@ -528,6 +529,22 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - For every added item, perform local lighting and physical integration: render accurate, soft contact shadows where it touches a surface (especially soft furniture like a sofa); apply realistic ambient occlusion so it never appears to float or emit light; if placed on soft furniture, show slight natural compression where its weight would rest.`
     : "";
 
+  // Event-only. Many Indian party SKUs ("unicorn theme cutouts", wall decals,
+  // paper danglers) genuinely ARE flat paper — rendering them flat is correct,
+  // but they must be MOUNTED on a wall, not laid face-up on the rug. Left
+  // unsaid, the model dumps them on the largest empty region (the floor),
+  // which both looks pasted-on and blocks the space guests need to stand in.
+  const placementBlock = eventContext
+    ? `
+
+PLACEMENT DISCIPLINE (guests have to be able to use this room):
+- Keep the floor, the walkways, and the space in front of seating CLEAR. Real guests will stand, walk and sit here — never scatter decorations across open floor or across a rug.
+- Decorations belong on the focal/backdrop wall, on other walls, on the ceiling and upper edges, on table surfaces, and in the corners and edges of the room.
+- Flat items (cutouts, posters, decals, wall stickers, banners, paper danglers) are WALL or CEILING items. Mount them flush against a vertical surface, or hang them so they dangle freely. NEVER lay a flat item face-up on the floor, on a rug, or on a tabletop — a paper cutout lying on the ground is always wrong.
+- Anything standing on the floor must be a genuine free-standing 3D object (a balloon stand, a pedestal, a floor prop) and must sit against a wall or in a corner — never mid-room and never on a walkway.
+- Do NOT invent extra decorations beyond the numbered list above.`
+    : "";
+
   parts.push({
     text: `${intro}${scaleBlock}
 
@@ -543,7 +560,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.${physicsBlock}
 
 ${addLine}
-${productList}${referenceGuidance}
+${productList}${referenceGuidance}${placementBlock}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -1025,7 +1042,12 @@ export async function recommendProducts(
   // Items the user chose to remove in the tidy-up step. They are gone from the
   // canvas, so recommendations must treat them as absent (and may fill the
   // freed space).
-  removeLabels: string[] = []
+  removeLabels: string[] = [],
+  // Events only: the venue photo. Without it this step authors `placement`
+  // strings blind, from a six-line text summary — it cannot tell whether the
+  // zone it names is even in frame, so placements resolve downstream onto
+  // whatever large surface matches the words (usually the floor or the sofa).
+  roomImageBase64?: string
 ): Promise<string> {
   const productTypesList =
     selectedProductTypes.length > 0
@@ -1068,9 +1090,15 @@ For each product provide:
 
 Also write a clear 2-3 sentence designVision describing the overall color palette, style theme, and mood.`;
 
+  // Only sent for events (see the roomImageBase64 param note).
+  const hasPhoto = !!(eventContext && roomImageBase64);
+  const photoLine = hasPhoto
+    ? `\n\nThe attached image is a photo of the ACTUAL space. Study it before choosing zones — only name a placement you can actually see in that photo.`
+    : "";
+
   const eventPrompt = `You are an expert event decorator. ${eventContext}
 
-Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.
+Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.${photoLine}
 
 ${analysisBlock}
 
@@ -1082,20 +1110,25 @@ Think like a professional party stylist:
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
 - searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
-- placement: which zone in the space, e.g. 'on the wall behind the main table'
+- placement: which zone in the space, e.g. 'on the wall behind the main table'. PLACEMENT RULES — the room must stay usable by guests: use walls, the focal/backdrop wall, the ceiling and upper edges, table surfaces, and room corners. NEVER place anything on open floor, on a rug, on a walkway, or in front of seating — guests need that space to stand, walk and sit. Flat items (cutouts, decals, posters, banners, danglers) must be placed on a WALL or hung from the ceiling, never on the ground.
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
 Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
 
+  const promptText = eventContext ? eventPrompt : spacePrompt;
+  const parts: Array<
+    { text: string } | { inlineData: { mimeType: string; data: string } }
+  > = hasPhoto
+    ? [
+        { inlineData: { mimeType: "image/jpeg", data: roomImageBase64! } },
+        { text: promptText },
+      ]
+    : [{ text: promptText }];
+
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: eventContext ? eventPrompt : spacePrompt }],
-      },
-    ],
+    contents: [{ role: "user", parts }],
     config: {
       responseMimeType: "application/json",
       responseSchema: recommendationSchema,
