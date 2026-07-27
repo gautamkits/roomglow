@@ -10,32 +10,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
     }
 
-    const {
-      roomAnalysis,
-      userAnswers,
-      selectedProductTypes,
-      eventContext,
-      removeLabels,
-      originalImage,
-    } = await request.json();
+    const { roomAnalysis, userAnswers, selectedProductTypes, eventContext, removeLabels } =
+      await request.json();
     if (!roomAnalysis || !userAnswers) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
-
-    // Events pass the venue photo so placements reference zones that are
-    // actually visible; absent/blank is fine and falls back to text-only.
-    const roomImageBase64 =
-      typeof originalImage === "string" && originalImage
-        ? originalImage.replace(/^data:image\/\w+;base64,/, "")
-        : undefined;
 
     const recommendationsJson = await recommendProducts(
       roomAnalysis,
       userAnswers,
       selectedProductTypes || [],
       eventContext,
-      Array.isArray(removeLabels) ? removeLabels : [],
-      roomImageBase64
+      Array.isArray(removeLabels) ? removeLabels : []
     );
     const recommendations = JSON.parse(recommendationsJson);
 

@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { RoomAnalysis, RoomGeometry } from "./types";
-import { fetchProductImage } from "./amazon";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -243,11 +242,6 @@ export interface AmazonCandidate {
   affiliateUrl: string;
   rating: number;
   asin: string;
-  // Optional: absent on designs saved before quality ranking landed.
-  numRatings?: number;
-  isBestSeller?: boolean;
-  isAmazonChoice?: boolean;
-  salesVolume?: string;
 }
 
 export interface CategoryCandidates {
@@ -282,25 +276,15 @@ export async function curateProducts(
   roomImageBase64: string,
   designVision: string,
   categories: CategoryCandidates[],
-  budgetInstruction?: string,
-  eventContext?: string
+  budgetInstruction?: string
 ): Promise<string> {
   const candidateDescriptions = categories
     .map((cat, catIdx) => {
       const options = cat.candidates
-        .map((c, i) => {
-          const reviews = c.numRatings
-            ? ` from ${c.numRatings.toLocaleString("en-IN")} reviews`
-            : "";
-          const badges = [
-            c.isBestSeller ? "Amazon Best Seller" : "",
-            c.isAmazonChoice ? "Amazon's Choice" : "",
-            c.salesVolume ? c.salesVolume : "",
-          ]
-            .filter(Boolean)
-            .join(", ");
-          return `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating}★${reviews}${badges ? `; ${badges}` : ""})`;
-        })
+        .map(
+          (c, i) =>
+            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating})`
+        )
         .join("\n");
       return `Category ${catIdx}: ${cat.category} (for ${cat.placement})\n  Design need: ${cat.reason}\n  Ideal color/finish: ${cat.colorSuggestion}\n  Amazon options:\n${options}`;
     })
@@ -315,9 +299,13 @@ export async function curateProducts(
   const imageResults = await Promise.allSettled(
     allCandidates.map(async (c) => {
       if (!c.imageUrl) return null;
-      // Full-resolution variant: this is a visual reference for the model,
-      // not a thumbnail for a product card.
-      return await fetchProductImage(c.imageUrl);
+      const imgRes = await fetch(c.imageUrl);
+      if (!imgRes.ok) return null;
+      const buffer = await imgRes.arrayBuffer();
+      return {
+        data: Buffer.from(buffer).toString("base64"),
+        mimeType: imgRes.headers.get("content-type") || "image/jpeg",
+      };
     })
   );
   for (const result of imageResults) {
@@ -328,12 +316,8 @@ export async function curateProducts(
     }
   }
 
-  const persona = eventContext
-    ? `You are an expert event stylist. ${eventContext} Look at this space photo and the decoration product images from Amazon.`
-    : `You are an expert interior designer. Look at this room photo and the product images from Amazon.`;
-
   parts.push({
-    text: `${persona}
+    text: `You are an expert interior designer. Look at this room photo and the product images from Amazon.
 
 Design Vision: ${designVision}
 
@@ -342,13 +326,7 @@ ${candidateDescriptions}
 Your job: Pick EXACTLY ONE product from each category that creates the most cohesive, beautiful design together. Consider:
 - Color harmony between all selected products AND the existing room
 - Style consistency (all products should feel like they belong together)
-- Customer ratings and review volume: a well-rated product backed by many reviews is a safer pick than a slightly better-looking one with a thin or weak rating. "Amazon's Choice" and "Best Seller" badges are meaningful signals.
-- Visual appeal and quality based on the product images${
-      eventContext
-        ? `\n- Prioritize items with strong festive visual impact for the occasion above — vibrant, celebratory, and eye-catching — over minimalist or muted interior-design taste.
-- Prefer decor with real physical volume (balloon garlands, drapes, fabric backdrops, string lights, standing props, table centerpieces) over flat paper goods (loose cutouts, decals, stickers, printed sheets) when either would satisfy the category — flat paper reads as pasted-on in a photograph and has little presence in the room.`
-        : ""
-    }
+- Visual appeal and quality based on the product images
 - How well each product fits its intended placement in THIS specific room
 ${budgetInstruction ? `\n${budgetInstruction}\n` : ""}
 For each category, return the chosen optionIndex and a short reason. Also write a 2-3 sentence designNarrative describing how the products work together to transform the room.`,
@@ -429,10 +407,18 @@ export async function generateDesignImage(
   generatedImage: string;
   hotspots: HotspotBox[];
 }> {
-  // Fetch selected product images in parallel. Full-resolution variant — the
-  // model is reconstructing these objects, so detail matters more than bytes.
+  // Fetch selected product images in parallel
   const productImages = await Promise.allSettled(
-    selectedProducts.map((p) => fetchProductImage(p.imageUrl))
+    selectedProducts.map(async (p) => {
+      if (!p.imageUrl) return null;
+      const res = await fetch(p.imageUrl);
+      if (!res.ok) return null;
+      const buffer = await res.arrayBuffer();
+      return {
+        data: Buffer.from(buffer).toString("base64"),
+        mimeType: res.headers.get("content-type") || "image/jpeg",
+      };
+    })
   );
 
   const parts: Array<
@@ -479,18 +465,6 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
-  // Event-only: the reference images are e-commerce catalog photos (studio
-  // background, packaging, watermarks, flat-lay collages of multi-piece sets).
-  // Without this, "look EXACTLY like the reference" reads as license to paste
-  // the catalog photo itself, which is what produces the flat sticker artifact.
-  const referenceGuidance = eventContext
-    ? `
-
-REFERENCE IMAGE HANDLING:
-- For each reference product image, extract ONLY the physical object itself. Completely ignore and discard any white or neutral studio backgrounds, studio lighting reflections, packaging, watermarks, or embedded text.
-- Use the reference image purely to understand the item's material, color, and 3D form, then render it as a physical object natively present in the space — not as a copied photo.`
-    : "";
-
   const scaleBlock = geometry
     ? `
 
@@ -501,14 +475,8 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
           : ""
       }
 - Render EVERY added product at its true real-world size relative to those references. If a product title states a size (e.g. "5x7 ft rug", "6x4 ft backdrop"), treat that size as a hard constraint.
-- Never let an added item exceed the wall, floor, or ceiling space that physically exists for it — a rug must fit the visible floor with margin, a backdrop must not span wider than its wall, hanging decor must hang below the ceiling, furniture must not dwarf the existing furniture next to it.${
-        eventContext
-          ? `
-- Render decorations at their true, generous real-world scale so they command visual presence as professional event styling — do not shrink them for safety.
-- MULTIPLICITY: if a product title indicates a kit, set, or multi-count item (e.g. "100 Pcs Balloon Garland", "Pack of 12 fairy lights"), render the full, dense collection spanning its zone (a lush arch, a rich curtain of lights) — never a single sparse token of the set.`
-          : `
+- Never let an added item exceed the wall, floor, or ceiling space that physically exists for it — a rug must fit the visible floor with margin, a backdrop must not span wider than its wall, hanging decor must hang below the ceiling, furniture must not dwarf the existing furniture next to it.
 - When unsure, render items slightly SMALLER than plausible rather than larger.`
-      }`
     : "";
 
   // Space redesigns may rearrange kept furniture for a better layout; events keep
@@ -523,32 +491,6 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - ALL existing furniture (sofa, tables, shelves, etc.) — keep them exactly where they are.
 - All cables, outlets, and existing items stay as-is.`;
 
-  // Event-only: "keep in place" above governs identity and position, not
-  // pixel preservation — without this, integrating a new item (a shadow it
-  // casts, the cushion it rests on) reads as forbidden furniture editing,
-  // and the model's safest compliant output is a flat, shadowless composite.
-  const physicsBlock = eventContext
-    ? `
-- "Keep in place" means identity and position, not pixel-for-pixel preservation — you MUST alter the pixels immediately around and underneath each added item to integrate it.
-- For every added item, perform local lighting and physical integration: render accurate, soft contact shadows where it touches a surface (especially soft furniture like a sofa); apply realistic ambient occlusion so it never appears to float or emit light; if placed on soft furniture, show slight natural compression where its weight would rest.`
-    : "";
-
-  // Event-only. Many Indian party SKUs ("unicorn theme cutouts", wall decals,
-  // paper danglers) genuinely ARE flat paper — rendering them flat is correct,
-  // but they must be MOUNTED on a wall, not laid face-up on the rug. Left
-  // unsaid, the model dumps them on the largest empty region (the floor),
-  // which both looks pasted-on and blocks the space guests need to stand in.
-  const placementBlock = eventContext
-    ? `
-
-PLACEMENT DISCIPLINE (guests have to be able to use this room):
-- Keep the floor, the walkways, and the space in front of seating CLEAR. Real guests will stand, walk and sit here — never scatter decorations across open floor or across a rug.
-- Decorations belong on the focal/backdrop wall, on other walls, on the ceiling and upper edges, on table surfaces, and in the corners and edges of the room.
-- Flat items (cutouts, posters, decals, wall stickers, banners, paper danglers) are WALL or CEILING items. Mount them flush against a vertical surface, or hang them so they dangle freely. NEVER lay a flat item face-up on the floor, on a rug, or on a tabletop — a paper cutout lying on the ground is always wrong.
-- Anything standing on the floor must be a genuine free-standing 3D object (a balloon stand, a pedestal, a floor prop) and must sit against a wall or in a corner — never mid-room and never on a walkway.
-- Do NOT invent extra decorations beyond the numbered list above.`
-    : "";
-
   parts.push({
     text: `${intro}${scaleBlock}
 
@@ -561,10 +503,10 @@ MUST PRESERVE EXACTLY (never change the architecture):
 
 ${furnitureBlock}
 - Tidy the space as part of the redesign: clear away any small clutter and loose tabletop items (remotes, bottles, cups, food/fruit, papers, chargers, small stray objects) so surfaces look clean and styled. This does NOT apply to the main furniture above.
-- Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.${physicsBlock}
+- Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}${referenceGuidance}${placementBlock}
+${productList}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -588,12 +530,6 @@ CRITICAL TEXT RULE:
     contents: [{ role: "user", parts }],
     config: {
       responseModalities: ["TEXT", "IMAGE"],
-      ...(eventContext
-        ? {
-            systemInstruction:
-              "You are an elite, hyper-realistic event and architectural photographer. Your edits are indistinguishable from a real photograph — nothing you add may look composited, overlaid, or pasted.",
-          }
-        : {}),
     },
   });
 
@@ -1046,12 +982,7 @@ export async function recommendProducts(
   // Items the user chose to remove in the tidy-up step. They are gone from the
   // canvas, so recommendations must treat them as absent (and may fill the
   // freed space).
-  removeLabels: string[] = [],
-  // Events only: the venue photo. Without it this step authors `placement`
-  // strings blind, from a six-line text summary — it cannot tell whether the
-  // zone it names is even in frame, so placements resolve downstream onto
-  // whatever large surface matches the words (usually the floor or the sofa).
-  roomImageBase64?: string
+  removeLabels: string[] = []
 ): Promise<string> {
   const productTypesList =
     selectedProductTypes.length > 0
@@ -1094,15 +1025,9 @@ For each product provide:
 
 Also write a clear 2-3 sentence designVision describing the overall color palette, style theme, and mood.`;
 
-  // Only sent for events (see the roomImageBase64 param note).
-  const hasPhoto = !!(eventContext && roomImageBase64);
-  const photoLine = hasPhoto
-    ? `\n\nThe attached image is a photo of the ACTUAL space. Study it before choosing zones — only name a placement you can actually see in that photo.`
-    : "";
-
   const eventPrompt = `You are an expert event decorator. ${eventContext}
 
-Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.${photoLine}
+Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.
 
 ${analysisBlock}
 
@@ -1114,25 +1039,20 @@ Think like a professional party stylist:
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
 - searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
-- placement: which zone in the space, e.g. 'on the wall behind the main table'. PLACEMENT RULES — the room must stay usable by guests: use walls, the focal/backdrop wall, the ceiling and upper edges, table surfaces, and room corners. NEVER place anything on open floor, on a rug, on a walkway, or in front of seating — guests need that space to stand, walk and sit. Flat items (cutouts, decals, posters, banners, danglers) must be placed on a WALL or hung from the ceiling, never on the ground.
+- placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
 Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
 
-  const promptText = eventContext ? eventPrompt : spacePrompt;
-  const parts: Array<
-    { text: string } | { inlineData: { mimeType: string; data: string } }
-  > = hasPhoto
-    ? [
-        { inlineData: { mimeType: "image/jpeg", data: roomImageBase64! } },
-        { text: promptText },
-      ]
-    : [{ text: promptText }];
-
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: [{ role: "user", parts }],
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: eventContext ? eventPrompt : spacePrompt }],
+      },
+    ],
     config: {
       responseMimeType: "application/json",
       responseSchema: recommendationSchema,
