@@ -465,6 +465,16 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
+  // Events only. The model reads "floor" as any open surface and treats the
+  // centre rug and walkways as empty space to fill, which strands cutouts and
+  // props exactly where guests need to stand. Deliberately NOT applied to room
+  // redesigns — there, floor items (rugs, floor lamps) are the entire point.
+  const floorClearance = eventContext
+    ? `
+
+FLOOR CLEARANCE & WALKWAY RULE: Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props placed on the floor must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter items loose across open floor areas or pathways where people would walk.`
+    : "";
+
   const scaleBlock = geometry
     ? `
 
@@ -506,7 +516,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}
+${productList}${floorClearance}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -1042,6 +1052,8 @@ For each product provide:
 - placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
+
+- FLOOR & PLACEMENT CONSTRAINT: Never place items in open floor spaces, center-room rugs, or walking paths where guests need to walk. All floor-level items (such as standees, floor balloon clusters, or ground props) must be explicitly assigned to room perimeters, corners, against the base of walls, or directly tucked against heavy furniture (e.g., "anchored tightly against the base of the TV console").
 
 Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
 
