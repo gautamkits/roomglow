@@ -10,12 +10,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
     }
 
-    const { originalImage, designVision, categories, budgetInstruction } =
+    const { originalImage, designVision, categories, budgetInstruction, eventContext } =
       (await request.json()) as {
         originalImage: string;
         designVision: string;
         categories: CategoryCandidates[];
         budgetInstruction?: string;
+        eventContext?: string;
       };
 
     if (!originalImage || !categories?.length) {
@@ -27,7 +28,8 @@ export async function POST(request: Request) {
       base64,
       designVision,
       categories,
-      budgetInstruction
+      budgetInstruction,
+      eventContext
     );
     const curation = JSON.parse(curationJson);
 

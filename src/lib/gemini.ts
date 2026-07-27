@@ -276,7 +276,8 @@ export async function curateProducts(
   roomImageBase64: string,
   designVision: string,
   categories: CategoryCandidates[],
-  budgetInstruction?: string
+  budgetInstruction?: string,
+  eventContext?: string
 ): Promise<string> {
   const candidateDescriptions = categories
     .map((cat, catIdx) => {
@@ -316,8 +317,12 @@ export async function curateProducts(
     }
   }
 
+  const persona = eventContext
+    ? `You are an expert event stylist. ${eventContext} Look at this space photo and the decoration product images from Amazon.`
+    : `You are an expert interior designer. Look at this room photo and the product images from Amazon.`;
+
   parts.push({
-    text: `You are an expert interior designer. Look at this room photo and the product images from Amazon.
+    text: `${persona}
 
 Design Vision: ${designVision}
 
@@ -326,7 +331,11 @@ ${candidateDescriptions}
 Your job: Pick EXACTLY ONE product from each category that creates the most cohesive, beautiful design together. Consider:
 - Color harmony between all selected products AND the existing room
 - Style consistency (all products should feel like they belong together)
-- Visual appeal and quality based on the product images
+- Visual appeal and quality based on the product images${
+      eventContext
+        ? `\n- Prioritize items with strong festive visual impact for the occasion above — vibrant, celebratory, and eye-catching — over minimalist or muted interior-design taste.`
+        : ""
+    }
 - How well each product fits its intended placement in THIS specific room
 ${budgetInstruction ? `\n${budgetInstruction}\n` : ""}
 For each category, return the chosen optionIndex and a short reason. Also write a 2-3 sentence designNarrative describing how the products work together to transform the room.`,
@@ -465,6 +474,18 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
+  // Event-only: the reference images are e-commerce catalog photos (studio
+  // background, packaging, watermarks, flat-lay collages of multi-piece sets).
+  // Without this, "look EXACTLY like the reference" reads as license to paste
+  // the catalog photo itself, which is what produces the flat sticker artifact.
+  const referenceGuidance = eventContext
+    ? `
+
+REFERENCE IMAGE HANDLING:
+- For each reference product image, extract ONLY the physical object itself. Completely ignore and discard any white or neutral studio backgrounds, studio lighting reflections, packaging, watermarks, or embedded text.
+- Use the reference image purely to understand the item's material, color, and 3D form, then render it as a physical object natively present in the space — not as a copied photo.`
+    : "";
+
   const scaleBlock = geometry
     ? `
 
@@ -475,8 +496,14 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
           : ""
       }
 - Render EVERY added product at its true real-world size relative to those references. If a product title states a size (e.g. "5x7 ft rug", "6x4 ft backdrop"), treat that size as a hard constraint.
-- Never let an added item exceed the wall, floor, or ceiling space that physically exists for it — a rug must fit the visible floor with margin, a backdrop must not span wider than its wall, hanging decor must hang below the ceiling, furniture must not dwarf the existing furniture next to it.
+- Never let an added item exceed the wall, floor, or ceiling space that physically exists for it — a rug must fit the visible floor with margin, a backdrop must not span wider than its wall, hanging decor must hang below the ceiling, furniture must not dwarf the existing furniture next to it.${
+        eventContext
+          ? `
+- Render decorations at their true, generous real-world scale so they command visual presence as professional event styling — do not shrink them for safety.
+- MULTIPLICITY: if a product title indicates a kit, set, or multi-count item (e.g. "100 Pcs Balloon Garland", "Pack of 12 fairy lights"), render the full, dense collection spanning its zone (a lush arch, a rich curtain of lights) — never a single sparse token of the set.`
+          : `
 - When unsure, render items slightly SMALLER than plausible rather than larger.`
+      }`
     : "";
 
   // Space redesigns may rearrange kept furniture for a better layout; events keep
@@ -491,6 +518,16 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - ALL existing furniture (sofa, tables, shelves, etc.) — keep them exactly where they are.
 - All cables, outlets, and existing items stay as-is.`;
 
+  // Event-only: "keep in place" above governs identity and position, not
+  // pixel preservation — without this, integrating a new item (a shadow it
+  // casts, the cushion it rests on) reads as forbidden furniture editing,
+  // and the model's safest compliant output is a flat, shadowless composite.
+  const physicsBlock = eventContext
+    ? `
+- "Keep in place" means identity and position, not pixel-for-pixel preservation — you MUST alter the pixels immediately around and underneath each added item to integrate it.
+- For every added item, perform local lighting and physical integration: render accurate, soft contact shadows where it touches a surface (especially soft furniture like a sofa); apply realistic ambient occlusion so it never appears to float or emit light; if placed on soft furniture, show slight natural compression where its weight would rest.`
+    : "";
+
   parts.push({
     text: `${intro}${scaleBlock}
 
@@ -503,10 +540,10 @@ MUST PRESERVE EXACTLY (never change the architecture):
 
 ${furnitureBlock}
 - Tidy the space as part of the redesign: clear away any small clutter and loose tabletop items (remotes, bottles, cups, food/fruit, papers, chargers, small stray objects) so surfaces look clean and styled. This does NOT apply to the main furniture above.
-- Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
+- Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.${physicsBlock}
 
 ${addLine}
-${productList}
+${productList}${referenceGuidance}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -530,6 +567,12 @@ CRITICAL TEXT RULE:
     contents: [{ role: "user", parts }],
     config: {
       responseModalities: ["TEXT", "IMAGE"],
+      ...(eventContext
+        ? {
+            systemInstruction:
+              "You are an elite, hyper-realistic event and architectural photographer. Your edits are indistinguishable from a real photograph — nothing you add may look composited, overlaid, or pasted.",
+          }
+        : {}),
     },
   });
 

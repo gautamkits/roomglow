@@ -565,6 +565,7 @@ export function useRoomFlow() {
                     maxBudget,
                     (p.categories as SearchCategory[]) ?? []
                   ),
+              eventContext,
             },
             "We couldn't finalize the product selection. Please try again."
           );
