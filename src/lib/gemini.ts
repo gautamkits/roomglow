@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { RoomAnalysis, RoomGeometry } from "./types";
+import { fetchProductImage } from "./amazon";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -242,6 +243,11 @@ export interface AmazonCandidate {
   affiliateUrl: string;
   rating: number;
   asin: string;
+  // Optional: absent on designs saved before quality ranking landed.
+  numRatings?: number;
+  isBestSeller?: boolean;
+  isAmazonChoice?: boolean;
+  salesVolume?: string;
 }
 
 export interface CategoryCandidates {
@@ -282,10 +288,19 @@ export async function curateProducts(
   const candidateDescriptions = categories
     .map((cat, catIdx) => {
       const options = cat.candidates
-        .map(
-          (c, i) =>
-            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating})`
-        )
+        .map((c, i) => {
+          const reviews = c.numRatings
+            ? ` from ${c.numRatings.toLocaleString("en-IN")} reviews`
+            : "";
+          const badges = [
+            c.isBestSeller ? "Amazon Best Seller" : "",
+            c.isAmazonChoice ? "Amazon's Choice" : "",
+            c.salesVolume ? c.salesVolume : "",
+          ]
+            .filter(Boolean)
+            .join(", ");
+          return `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating}★${reviews}${badges ? `; ${badges}` : ""})`;
+        })
         .join("\n");
       return `Category ${catIdx}: ${cat.category} (for ${cat.placement})\n  Design need: ${cat.reason}\n  Ideal color/finish: ${cat.colorSuggestion}\n  Amazon options:\n${options}`;
     })
@@ -300,13 +315,9 @@ export async function curateProducts(
   const imageResults = await Promise.allSettled(
     allCandidates.map(async (c) => {
       if (!c.imageUrl) return null;
-      const imgRes = await fetch(c.imageUrl);
-      if (!imgRes.ok) return null;
-      const buffer = await imgRes.arrayBuffer();
-      return {
-        data: Buffer.from(buffer).toString("base64"),
-        mimeType: imgRes.headers.get("content-type") || "image/jpeg",
-      };
+      // Full-resolution variant: this is a visual reference for the model,
+      // not a thumbnail for a product card.
+      return await fetchProductImage(c.imageUrl);
     })
   );
   for (const result of imageResults) {
@@ -331,6 +342,7 @@ ${candidateDescriptions}
 Your job: Pick EXACTLY ONE product from each category that creates the most cohesive, beautiful design together. Consider:
 - Color harmony between all selected products AND the existing room
 - Style consistency (all products should feel like they belong together)
+- Customer ratings and review volume: a well-rated product backed by many reviews is a safer pick than a slightly better-looking one with a thin or weak rating. "Amazon's Choice" and "Best Seller" badges are meaningful signals.
 - Visual appeal and quality based on the product images${
       eventContext
         ? `\n- Prioritize items with strong festive visual impact for the occasion above — vibrant, celebratory, and eye-catching — over minimalist or muted interior-design taste.
@@ -417,18 +429,10 @@ export async function generateDesignImage(
   generatedImage: string;
   hotspots: HotspotBox[];
 }> {
-  // Fetch selected product images in parallel
+  // Fetch selected product images in parallel. Full-resolution variant — the
+  // model is reconstructing these objects, so detail matters more than bytes.
   const productImages = await Promise.allSettled(
-    selectedProducts.map(async (p) => {
-      if (!p.imageUrl) return null;
-      const res = await fetch(p.imageUrl);
-      if (!res.ok) return null;
-      const buffer = await res.arrayBuffer();
-      return {
-        data: Buffer.from(buffer).toString("base64"),
-        mimeType: res.headers.get("content-type") || "image/jpeg",
-      };
-    })
+    selectedProducts.map((p) => fetchProductImage(p.imageUrl))
   );
 
   const parts: Array<
