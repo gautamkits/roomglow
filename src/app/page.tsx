@@ -24,6 +24,7 @@ import GallerySearch from "@/components/GallerySearch";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
 import TiltCard from "@/components/TiltCard";
+import ExitIntentModal from "@/components/ExitIntentModal";
 
 export const metadata: Metadata = {
   title: "Noosho — AI room & event designs from one photo",
@@ -415,6 +416,9 @@ export default async function Home({
       </main>
 
       <Footer />
+
+      {/* Signed-in visitors already have an account — nothing to capture. */}
+      <ExitIntentModal enabled={!session?.user} context="home" />
     </div>
   );
 }

@@ -34,6 +34,7 @@ import InstallPrompt from "@/components/InstallPrompt";
 import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
 import DesignGrid from "@/components/dashboard/DesignGrid";
+import ExitIntentModal from "@/components/ExitIntentModal";
 
 
 function HomeContent() {
@@ -661,6 +662,17 @@ function HomeContent() {
         )}
       </main>
       {sessionStatus === "authenticated" && <Footer />}
+
+      {/* Only for anon visitors sitting on the uploader. Never mid-generation,
+          and never while the sign-in gate is up — that already asks for email. */}
+      <ExitIntentModal
+        enabled={
+          sessionStatus === "unauthenticated" &&
+          !awaitingSignIn &&
+          (step === "upload" || step === "event-setup")
+        }
+        context="create"
+      />
     </div>
   );
 }
