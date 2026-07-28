@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { RoomAnalysis, RoomGeometry } from "./types";
+import type { DecorSlot } from "./events";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -124,6 +125,7 @@ Fill in:
   - approxCeilingFt: floor-to-ceiling height in feet
   - scaleReferences: 1-3 visible objects you used as rulers, each with its assumed size (e.g. "door on left wall (~6.7 ft tall)", "dining table (~2.5 ft tall)")
   Be conservative: if unsure, estimate SMALLER rather than larger.
+  IMPORTANT: if the photo shows only a bare wall or has NO object of known size in it, return an EMPTY scaleReferences array and your roughest guess for the dimensions. Do NOT invent rulers that aren't visible — an empty array tells us to skip scale constraints rather than trust fabricated numbers.
 - existingFurniture: key furniture/surfaces you see (sofa, table, wall, etc.)
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
@@ -462,8 +464,26 @@ Decorate this EXACT space for the event. This is a STRICT photo editing task —
 Edit the room photo to add these products. This is a STRICT photo editing task.`;
 
   const addLine = eventContext
-    ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
+    ? `ONLY ADD these decorations (use their EXACT appearance from the product images). They are the pieces of ONE backdrop installation — compose them per the layering rules below, not as separate items dropped around the room:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
+
+  // Events only. Without this the model treats the products as N independent
+  // stickers and tiles them evenly across the wall like wallpaper. Real party
+  // setups are ONE layered installation with a focal centre — that difference
+  // is most of what separates a render worth paying for from a scatter of fans.
+  const backdropComposition = eventContext
+    ? `
+
+BACKDROP COMPOSITION — this is ONE installation, not scattered items:
+- Build a single cohesive backdrop centred on the main focal wall, the way a professional party stylist would. If the photo shows only a wall, that wall IS the backdrop — fill it as one composed setup.
+- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) any table or props at the base, tucked against the wall.
+- The finished setup must read as ONE piece with a clear focal centre. Do NOT spread items evenly across the wall like wallpaper or a grid.
+- Keep the area directly in front of the backdrop clear, so people can stand there and be photographed.
+
+DENSITY — decorations must look professionally installed, not sparse:
+- Render each product at the real quantity its title implies. A garland/arch kit is 100+ balloons and must appear as a full, lush, densely packed garland — never a handful of separate balloons. A set or multi-pack renders as the whole set.
+- Sparse, evenly-spaced decor is the main failure to avoid. When in doubt, render MORE of an item, clustered, rather than fewer spread out.`
+    : "";
 
   // Events only. The model reads "floor" as any open surface and treats the
   // centre rug and walkways as empty space to fill, which strands cutouts and
@@ -475,7 +495,13 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
 FLOOR CLEARANCE & WALKWAY RULE: Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props placed on the floor must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter items loose across open floor areas or pathways where people would walk.`
     : "";
 
-  const scaleBlock = geometry
+  // Events: no visible rulers (a bare-wall photo) means analyzeRoom's dimensions
+  // are invented, and constraining decor against fabricated feet is part of why
+  // it came out undersized. Empty scaleReferences is the model's signal that it
+  // had nothing to measure. Space redesigns keep the old behaviour — geometry
+  // alone is enough there, and those photos essentially always have rulers.
+  const useScaleBlock = eventContext ? !!geometry?.scaleReferences?.length : !!geometry;
+  const scaleBlock = geometry && useScaleBlock
     ? `
 
 SCALE CONSTRAINTS (critical — respect the room's REAL size):
@@ -516,7 +542,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}${floorClearance}
+${productList}${backdropComposition}${floorClearance}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -992,12 +1018,32 @@ export async function recommendProducts(
   // Items the user chose to remove in the tidy-up step. They are gone from the
   // canvas, so recommendations must treat them as absent (and may fill the
   // freed space).
-  removeLabels: string[] = []
+  removeLabels: string[] = [],
+  // Events: the fixed décor recipe (see getDecorSlots). When present it REPLACES
+  // free category invention — the model fills in placement/reason/colour per
+  // slot but cannot swap the balloon garland for paper fans.
+  decorSlots: DecorSlot[] = []
 ): Promise<string> {
   const productTypesList =
-    selectedProductTypes.length > 0
-      ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
-      : "";
+    decorSlots.length > 0
+      ? ""
+      : selectedProductTypes.length > 0
+        ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
+        : "";
+
+  // The authoritative slot list for events. Queries are pre-built and must come
+  // back verbatim so sourcing is deterministic run to run.
+  const slotBlock = decorSlots.length
+    ? `\n\nDECORATION PLAN — these are the exact pieces being sourced, listed in layering order (back to front). Return EXACTLY ${decorSlots.length} products, one per slot, in this order:
+${decorSlots
+        .map(
+          (s, i) =>
+            `${i + 1}. [${s.role}] category: "${s.category}" — searchQuery MUST be exactly: "${s.query}"`
+        )
+        .join("\n")}
+
+For each slot you decide ONLY the placement, reason and colorSuggestion. Copy its category and searchQuery VERBATIM — do not reword, re-order, add or drop slots.`
+    : "";
 
   // Existing furniture minus anything the user removed, so we don't design
   // around items that are no longer in the room.
@@ -1039,16 +1085,20 @@ Also write a clear 2-3 sentence designVision describing the overall color palett
 
 Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.
 
-${analysisBlock}
+${analysisBlock}${slotBlock}
 
 Think like a professional party stylist:
 1. Define a clear decoration direction matching the occasion, theme, and colors
 2. Pick decorations that work TOGETHER as a cohesive festive set
-3. Tie each item to a zone in the space
+3. Tie each item to a zone in the space — these pieces combine into ONE backdrop installation on the main focal wall, not scattered decorations, so place them relative to each other (garland sweeping over the backdrop panel, focal piece centred on it, lights framing it)
 
-For each product provide:
+For each product provide:${
+    decorSlots.length
+      ? ""
+      : `
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
-- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
+- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.`
+  }
 - placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme

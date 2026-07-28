@@ -16,6 +16,7 @@ import type {
 import { useSession } from "next-auth/react";
 import { track } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
+import { getDecorSlots } from "@/lib/events";
 import {
   saveFlowSnapshot,
   loadFlowSnapshot,
@@ -420,6 +421,15 @@ export function useRoomFlow() {
     const isEvent = mode === "event";
     const eventLabel = eventConfig?.eventLabel || "event";
     const subTheme = eventConfig?.subTheme || "";
+    // Events source from a fixed décor recipe rather than AI-invented categories,
+    // so every backdrop gets the high-impact anchors (panel, garland, focal piece)
+    // instead of whatever the model happened to think of.
+    const decorSlots = isEvent && eventConfig
+      ? getDecorSlots(eventConfig.eventType, {
+          theme: eventConfig.subTheme,
+          color: eventConfig.colorScheme,
+        })
+      : [];
 
     const callStep = async (url: string, body: unknown, failMsg: string) => {
       const res = await fetch(url, {
@@ -521,6 +531,7 @@ export function useRoomFlow() {
               selectedProductTypes: selected.map((s) => s.label),
               eventContext,
               removeLabels: removedLabels,
+              decorSlots,
             },
             "We couldn't create a design plan. Please try again."
           );

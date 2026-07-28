@@ -26,6 +26,85 @@ export interface EventDefinition {
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
+  // The décor recipe for this occasion. Overrides DEFAULT_DECOR_SLOTS for events
+  // whose setup isn't a balloon backdrop (Diwali, Christmas…). See getDecorSlots.
+  decorSlots?: DecorSlot[];
+}
+
+/**
+ * A décor slot's job in the composition, ordered back-to-front as a stylist
+ * would build the backdrop. The renderer uses this to layer the installation
+ * instead of scattering items across the wall.
+ */
+export type DecorRole =
+  | "anchor" // the backdrop panel/cloth the whole setup is built on
+  | "garland" // the dominant sweep — balloon arch, flower garland
+  | "focal" // the centred hero piece — number balloon, wreath, rangoli
+  | "lighting"
+  | "depth" // hanging danglers/lanterns that give the wall dimension
+  | "props";
+
+export interface DecorSlot {
+  role: DecorRole;
+  category: string;
+  /** Amazon query. Supports {event} {theme} {color} {age} placeholders. */
+  query: string;
+  /** Used instead of `query` when it needs {age} and no age was supplied. */
+  queryNoAge?: string;
+}
+
+/**
+ * The balloon-backdrop recipe — birthdays, baby showers, anniversaries,
+ * annaprasan, graduations and the rest of the "decorate one wall" family.
+ *
+ * These slots are FIXED rather than invented per design. Letting the model
+ * freely choose 6-8 categories is why one render got a backdrop panel plus a
+ * dense balloon garland (and looked professional) while another got eight paper
+ * fans (and did not). The high-impact anchors are no longer left to chance.
+ */
+const DEFAULT_DECOR_SLOTS: DecorSlot[] = [
+  { role: "anchor", category: "Backdrop panel", query: "{event} {theme} backdrop cloth" },
+  { role: "garland", category: "Balloon garland", query: "{color} balloon garland arch kit 100 pcs" },
+  {
+    role: "focal",
+    category: "Focal foil balloon",
+    query: "{age} number foil balloon {color}",
+    queryNoAge: "{event} foil balloon {color}",
+  },
+  { role: "lighting", category: "Fairy lights", query: "warm white fairy string lights" },
+  { role: "depth", category: "Hanging danglers", query: "{theme} hanging swirls ceiling decoration" },
+  { role: "props", category: "Themed props", query: "{theme} party props cutouts" },
+];
+
+function fillSlotQuery(tpl: string, vars: Record<string, string | undefined>): string {
+  return tpl
+    .replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * The décor recipe for an event, with {placeholders} resolved from the user's
+ * theme/colour/age choices. Falls back to the balloon-backdrop default for any
+ * event without its own override.
+ */
+export function getDecorSlots(
+  eventId: string,
+  vars: { theme?: string; color?: string; age?: string } = {}
+): DecorSlot[] {
+  const event = getEvent(eventId);
+  const slots = event?.decorSlots ?? DEFAULT_DECOR_SLOTS;
+  const age = vars.age?.trim() || undefined;
+  return slots.map((slot) => ({
+    role: slot.role,
+    category: slot.category,
+    query: fillSlotQuery(!age && slot.queryNoAge ? slot.queryNoAge : slot.query, {
+      event: event?.label.toLowerCase() ?? "party",
+      theme: vars.theme?.toLowerCase(),
+      color: vars.color?.toLowerCase(),
+      age,
+    }),
+  }));
 }
 
 export const EVENTS: EventDefinition[] = [
@@ -112,6 +191,14 @@ export const EVENTS: EventDefinition[] = [
       { category: "Gift hamper", query: "diwali gift hamper" },
       { category: "Pooja thali", query: "pooja thali set" },
       { category: "Lights", query: "led string lights" },
+    ],
+    decorSlots: [
+      { role: "anchor", category: "Door toran", query: "diwali door toran hanging" },
+      { role: "garland", category: "Marigold garland", query: "artificial marigold garland decoration long" },
+      { role: "focal", category: "Rangoli", query: "rangoli stencil colours set" },
+      { role: "lighting", category: "Diya set", query: "decorative diya set diwali" },
+      { role: "depth", category: "Hanging lanterns", query: "diwali paper lantern kandil hanging" },
+      { role: "props", category: "String lights", query: "led string lights diwali decoration" },
     ],
   },
   {
@@ -242,6 +329,14 @@ export const EVENTS: EventDefinition[] = [
       { category: "Sweets", query: "modak sweets box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
     ],
+    decorSlots: [
+      { role: "anchor", category: "Makhar backdrop", query: "ganpati decoration makhar backdrop" },
+      { role: "garland", category: "Flower garland", query: "artificial flower garland decoration long" },
+      { role: "focal", category: "Idol platform decor", query: "ganpati singhasan decoration" },
+      { role: "lighting", category: "Festival lights", query: "led string lights festival warm" },
+      { role: "depth", category: "Bandhanwar toran", query: "bandhanwar toran door hanging" },
+      { role: "props", category: "Festive props", query: "ganesh chaturthi decoration items set" },
+    ],
   },
   {
     id: "navratri",
@@ -257,6 +352,14 @@ export const EVENTS: EventDefinition[] = [
       { category: "Torans", query: "marigold toran door hanging" },
       { category: "Sweets", query: "indian sweets gift box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
+    ],
+    decorSlots: [
+      { role: "anchor", category: "Garba backdrop", query: "navratri garba backdrop cloth" },
+      { role: "garland", category: "Flower garland", query: "artificial flower garland colourful long" },
+      { role: "focal", category: "Chaniya / matki decor", query: "navratri matki decoration hanging" },
+      { role: "lighting", category: "Festival lights", query: "led string lights festival colourful" },
+      { role: "depth", category: "Mirror-work toran", query: "mirror work toran hanging decoration" },
+      { role: "props", category: "Dandiya props", query: "navratri decoration props set" },
     ],
   },
   {
@@ -308,6 +411,14 @@ export const EVENTS: EventDefinition[] = [
       { category: "Props", query: "halloween props" },
       { category: "Party tableware", query: "halloween party tableware" },
     ],
+    decorSlots: [
+      { role: "anchor", category: "Backdrop panel", query: "halloween {theme} backdrop cloth" },
+      { role: "garland", category: "Spooky garland", query: "halloween garland decoration long" },
+      { role: "focal", category: "Hero prop", query: "halloween large prop decoration" },
+      { role: "lighting", category: "Eerie lights", query: "halloween orange purple string lights" },
+      { role: "depth", category: "Hanging bats & ghosts", query: "halloween hanging bats ghosts decoration" },
+      { role: "props", category: "Themed props", query: "halloween props set cutouts" },
+    ],
   },
   {
     id: "thanksgiving",
@@ -340,6 +451,14 @@ export const EVENTS: EventDefinition[] = [
       { category: "Wrapping paper", query: "christmas wrapping paper" },
       { category: "Treats", query: "christmas chocolate gift" },
       { category: "Lights", query: "christmas string lights" },
+    ],
+    decorSlots: [
+      { role: "anchor", category: "Backdrop panel", query: "christmas {theme} backdrop cloth" },
+      { role: "garland", category: "Pine garland", query: "christmas pine garland decoration long" },
+      { role: "focal", category: "Wreath", query: "christmas wreath large {color}" },
+      { role: "lighting", category: "Fairy lights", query: "christmas string lights warm white" },
+      { role: "depth", category: "Hanging ornaments", query: "christmas hanging ornaments set" },
+      { role: "props", category: "Stockings & props", query: "christmas stockings decoration set" },
     ],
   },
   {
