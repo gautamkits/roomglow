@@ -141,6 +141,12 @@ async function ensureDesignColumns() {
   // Items the user chose to remove in the tidy-up step (labels), shown on the
   // design page alongside selected_items ("what changed").
   await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS removed_items JSONB`;
+  // Lineage root for regenerated designs. Only ever created by
+  // scripts/migrate.mjs, which has never been run against production — so
+  // setRestyledFrom/countRestyles blew up with "column restyled_from does not
+  // exist" the first time anything actually called them. Self-init it here with
+  // the other drifted columns.
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS restyled_from UUID`;
   designColumnsReady = true;
 }
 
@@ -1004,10 +1010,13 @@ export async function setFeature(key: string, enabled: boolean) {
 }
 
 // ─── Restyle lineage (save-as-new) ───
-// The restyled_from column is created by scripts/migrate.mjs.
+// restyled_from is self-initialised by ensureDesignColumns(). Both helpers call
+// it first: they can run before any insert in this process (the admin
+// regenerate path does exactly that), and production predates the column.
 
 /** Number of restyles already created from a given root design. */
 export async function countRestyles(rootId: string): Promise<number> {
+  await ensureDesignColumns();
   const { rows } = await sql`
     SELECT COUNT(*)::int AS n FROM designs WHERE restyled_from = ${rootId}
   `;
@@ -1015,5 +1024,6 @@ export async function countRestyles(rootId: string): Promise<number> {
 }
 
 export async function setRestyledFrom(designId: string, rootId: string) {
+  await ensureDesignColumns();
   await sql`UPDATE designs SET restyled_from = ${rootId} WHERE id = ${designId}`;
 }

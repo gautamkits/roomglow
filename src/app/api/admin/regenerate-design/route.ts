@@ -204,9 +204,20 @@ export async function POST(request: Request) {
       selectedItems: asJson<string[]>(design.selected_items) ?? null,
     });
 
-    await setRestyledFrom(newId, (design.restyled_from as string) || designId);
-    // Logged against the admin who spent it, matching /api/restyle-design.
-    await recordImageGen("design", session!.user!.id);
+    // Lineage and cost logging are bookkeeping. The image is already generated
+    // and saved by this point, so a failure here must never cost the admin a
+    // billed generation or swallow the user's email — record and carry on.
+    try {
+      await setRestyledFrom(newId, (design.restyled_from as string) || designId);
+    } catch (e) {
+      console.error("[admin/regenerate] lineage write failed:", e);
+    }
+    try {
+      // Logged against the admin who spent it, matching /api/restyle-design.
+      await recordImageGen("design", session!.user!.id);
+    } catch {
+      /* cost analytics only */
+    }
     if (free && newId) onDesignUnlocked(newId);
 
     // Price label for the locked variant, from the same DB-driven pricing the
