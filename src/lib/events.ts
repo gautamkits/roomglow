@@ -10,6 +10,18 @@ import type { EventConfig } from "@/lib/types";
  * regenerate-and-send path builds it server-side too — both callers must
  * produce byte-identical context or the two paths would drift.
  */
+// Relationship words people type into the name field. They read fine in a
+// sentence ("It is for my son") but terrible printed two feet tall on a
+// backdrop — a real render came back reading HAPPY BIRTHDAY SON. Clearer
+// labelling reduces this; this catches the rest.
+const RELATIONSHIP_WORDS =
+  /^(my |our )?(son|daughter|kid|child|baby|boy|girl|dad|daddy|father|papa|mom|mum|mummy|mommy|mother|maa|wife|husband|hubby|partner|brother|sister|bro|sis|bhai|behen|didi|friend|bestie|boss|uncle|aunt|aunty|grandma|grandpa|nana|nani|dada|dadi|self|me|myself|him|her|them)$/i;
+
+/** True when the value looks like an actual name we can print on a backdrop. */
+function isPrintableName(name: string): boolean {
+  return !RELATIONSHIP_WORDS.test(name.trim());
+}
+
 export function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
   const name = cfg.honoree?.trim();
@@ -26,8 +38,13 @@ export function buildEventContext(cfg: EventConfig | null): string | undefined {
   const milestone = age
     ? ` The milestone number is ${age} — a large "${age}" foil number is the focal piece of the backdrop.`
     : "";
+  // Only put the name on the backdrop when it IS a name. "son" still helps the
+  // stylist pick a palette (it stays in the sentence above), but it must not be
+  // printed on the wall.
   const signage = name
-    ? ` The backdrop signage must read exactly "Happy ${cfg.eventLabel} ${name}" — render that text once, spelled exactly.`
+    ? isPrintableName(name)
+      ? ` The backdrop signage must read exactly "Happy ${cfg.eventLabel} ${name}" — render that text once, spelled exactly.`
+      : ` The backdrop signage must read exactly "Happy ${cfg.eventLabel}" — render that text once, and do NOT print any person's name or relationship word on the backdrop.`
     : "";
   return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree}${milestone}${signage} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
 }
@@ -58,6 +75,12 @@ export interface EventDefinition {
   // Milestone events where a number is the hero of the backdrop — a birthday
   // age, an anniversary year. Shows the age field and fills the {age} slot.
   askAge?: boolean;
+  // Labels for the personalisation inputs. Both values get printed onto the
+  // design, so the wording has to make that obvious — users were typing "son"
+  // into a field labelled "Who's it for?" and getting HAPPY BIRTHDAY SON on the
+  // backdrop. Defaults suit most occasions; override where it reads better.
+  honoreeLabel?: string;
+  ageLabel?: string;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
@@ -153,6 +176,8 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     gendered: true,
     askAge: true,
+    honoreeLabel: "Name for the backdrop",
+    ageLabel: "Turning which age?",
     completionItems: [
       { category: "Gift", query: "birthday gift" },
       { category: "Party tableware", query: "birthday party tableware set" },
@@ -172,6 +197,8 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Red & gold", "Rose & white", "Burgundy", "Gold & white"],
     markets: ["IN", "US"],
     askAge: true,
+    honoreeLabel: "Names for the backdrop",
+    ageLabel: "Which anniversary?",
     completionItems: [
       { category: "Gift", query: "anniversary gift" },
       { category: "Flowers", query: "rose bouquet" },
