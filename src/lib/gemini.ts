@@ -244,6 +244,7 @@ export interface AmazonCandidate {
   affiliateUrl: string;
   rating: number;
   asin: string;
+  ratingCount?: number;
 }
 
 export interface CategoryCandidates {
@@ -285,7 +286,9 @@ export async function curateProducts(
       const options = cat.candidates
         .map(
           (c, i) =>
-            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating})`
+            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating}${
+              c.ratingCount ? ` from ${c.ratingCount} reviews` : ", unrated"
+            })`
         )
         .join("\n");
       return `Category ${catIdx}: ${cat.category} (for ${cat.placement})\n  Design need: ${cat.reason}\n  Ideal color/finish: ${cat.colorSuggestion}\n  Amazon options:\n${options}`;
@@ -483,7 +486,12 @@ BACKDROP COMPOSITION — this is ONE installation, not scattered items:
 
 DENSITY — decorations must look professionally installed, not sparse:
 - Render each product at the real quantity its title implies. A garland/arch kit is 100+ balloons and must appear as a full, lush, densely packed garland — never a handful of separate balloons. A set or multi-pack renders as the whole set.
-- Sparse, evenly-spaced decor is the main failure to avoid. When in doubt, render MORE of an item, clustered, rather than fewer spread out.`
+- Sparse, evenly-spaced decor is the main failure to avoid. When in doubt, render MORE of an item, clustered, rather than fewer spread out.
+
+STAGING — make it look like a real event about to start:
+- Beyond the listed products you MAY add a few small, believable finishing touches so the scene reads as a prepared celebration rather than a product display: a cake or dessert on a surface that already exists, fresh flowers, plates or cups set out, and warm ambient glow from the lights spilling onto nearby surfaces.
+- Staging stays SECONDARY: keep it small and near the base of the backdrop, and never let it obscure, replace, or outshine the listed products.
+- Do NOT add furniture, and do not stage anything in the walkway or on the open floor.`
     : "";
 
   // Events only. The model reads "floor" as any open surface and treats the
@@ -553,10 +561,12 @@ Each item must look EXACTLY like its reference image — same color, shape, mate
       eventContext
         ? `
 
-CRITICAL TEXT RULE:
+TEXT & PERSONALISATION:
+- If the event description above specifies exact backdrop signage, render EXACTLY that text, ONCE, centred on the backdrop in a clean readable party font suited to the theme. Copy it character for character — do not reword, translate, abbreviate, or repeat it elsewhere in the image.
+- If a milestone number is given above, render it as a large foil number as the focal piece.
 - Do NOT add, render, or reproduce ANY printed words, letters, banners, or signage that name a DIFFERENT occasion than the event described above.
-- If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — leave the banner/backdrop blank or show only generic decorative patterns.
-- Any visible signage must match the event described above, or contain no readable text at all. Never invent gibberish text.`
+- If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — replace it with the signage specified above, or leave that surface blank.
+- Never render gibberish, misspelled, duplicated, or overlapping text. Apart from the signage and number above, any other visible surface must carry no readable text at all.`
         : ""
     }`,
   });

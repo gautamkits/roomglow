@@ -23,6 +23,9 @@ export interface EventDefinition {
   // are centered on a person, so they still ask "who's it for?" — but not a date
   // (that's set by the calendar). Personal events imply this via `!season`.
   askHonoree?: boolean;
+  // Milestone events where a number is the hero of the backdrop — a birthday
+  // age, an anniversary year. Shows the age field and fills the {age} slot.
+  askAge?: boolean;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
@@ -117,11 +120,14 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Pastel", "Bright & bold", "Gold & white", "Rainbow"],
     markets: ["IN", "US"],
     gendered: true,
+    askAge: true,
     completionItems: [
       { category: "Gift", query: "birthday gift" },
       { category: "Party tableware", query: "birthday party tableware set" },
       { category: "Snacks", query: "party snacks pack" },
       { category: "Cake topper", query: "birthday cake topper" },
+      { category: "Cake stand", query: "cake stand display" },
+      { category: "Backdrop stand", query: "adjustable backdrop stand kit" },
       { category: "Return favors", query: "return gift party favors" },
       { category: "Candles", query: "birthday number candles" },
     ],
@@ -133,6 +139,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Romantic red", "Golden 25th", "Garden", "Minimal"],
     colorSchemes: ["Red & gold", "Rose & white", "Burgundy", "Gold & white"],
     markets: ["IN", "US"],
+    askAge: true,
     completionItems: [
       { category: "Gift", query: "anniversary gift" },
       { category: "Flowers", query: "rose bouquet" },

@@ -50,6 +50,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [subTheme, setSubTheme] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState<string | null>(null);
   const [honoree, setHonoree] = useState("");
+  const [age, setAge] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
@@ -90,6 +91,9 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   // relationship festivals (Raksha Bandhan, Valentine's) via askHonoree.
   const showDate = !!event && !event.season;
   const showHonoree = !!event && (!event.season || !!event.askHonoree);
+  // Milestone number (birthday age, anniversary year). Becomes the big foil
+  // number on the backdrop, so it's the one field that visibly changes the design.
+  const showAge = !!event?.askAge;
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -104,6 +108,7 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           : undefined,
       eventDate: !event.season && eventDate ? eventDate : undefined,
       gender: showGender && gender ? gender : undefined,
+      age: showAge && age.trim() ? age.trim() : undefined,
     };
   };
 
@@ -238,6 +243,20 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                   value={honoree}
                   onChange={(e) => setHonoree(e.target.value)}
                   placeholder="Who's it for? (optional)"
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                />
+              )}
+              {showAge && (
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={age}
+                  // Digits only, max 3 — this becomes a foil number on the
+                  // backdrop, so anything longer can't render as one.
+                  onChange={(e) =>
+                    setAge(e.target.value.replace(/\D/g, "").slice(0, 3))
+                  }
+                  placeholder="Which number? e.g. 5 (optional)"
                   className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
                 />
               )}

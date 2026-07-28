@@ -27,9 +27,18 @@ export async function getCompletionProducts(
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.products;
 
+  // The render now stages a cake, flowers and table settings in front of the
+  // backdrop, so this grid is what makes those staged touches actually buyable.
+  // subTheme used to only enter the cache key — feeding it into the query keeps
+  // the suggestions on-theme ("unicorn birthday cake topper", not a generic one).
+  const theme = subTheme?.trim().toLowerCase();
   const results = await Promise.all(
     event.completionItems.map(async (item) => {
-      const found = await searchProducts(item.query, 2, locale);
+      const themed = theme ? `${theme} ${item.query}` : item.query;
+      // Themed queries are narrower and can come back empty on a niche combo,
+      // so fall back to the plain query rather than dropping the category.
+      let found = await searchProducts(themed, 2, locale);
+      if (!found.length && theme) found = await searchProducts(item.query, 2, locale);
       return found.map((p) => ({ ...p, category: item.category }));
     })
   );

@@ -128,6 +128,9 @@ export interface EventConfig {
   honoree?: string;
   eventDate?: string;
   gender?: string;
+  // Milestone number for the occasion — a birthday age, an anniversary year.
+  // Drives both the backdrop signage and the {age} foil-number décor slot.
+  age?: string;
 }
 
 export type FlowStep =
