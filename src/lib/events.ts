@@ -6,47 +6,18 @@ import type { EventConfig } from "@/lib/types";
  * recommend, render). A string here vs `undefined` IS the event-vs-room branch
  * server-side.
  *
- * Lives in lib rather than the create-flow hook because the admin
+ * Lives in lib rather than the create-flow hook only because the admin
  * regenerate-and-send path builds it server-side too — both callers must
  * produce byte-identical context or the two paths would drift.
  */
-// Relationship words people type into the name field. They read fine in a
-// sentence ("It is for my son") but terrible printed two feet tall on a
-// backdrop — a real render came back reading HAPPY BIRTHDAY SON. Clearer
-// labelling reduces this; this catches the rest.
-const RELATIONSHIP_WORDS =
-  /^(my |our )?(son|daughter|kid|child|baby|boy|girl|dad|daddy|father|papa|mom|mum|mummy|mommy|mother|maa|wife|husband|hubby|partner|brother|sister|bro|sis|bhai|behen|didi|friend|bestie|boss|uncle|aunt|aunty|grandma|grandpa|nana|nani|dada|dadi|self|me|myself|him|her|them)$/i;
-
-/** True when the value looks like an actual name we can print on a backdrop. */
-function isPrintableName(name: string): boolean {
-  return !RELATIONSHIP_WORDS.test(name.trim());
-}
-
 export function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
-  const name = cfg.honoree?.trim();
-  const age = cfg.age?.trim();
-  const honoree = name ? ` It is for ${name}.` : "";
+  const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
   const gender =
     cfg.gender && cfg.gender !== "Either / neutral"
       ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
       : "";
-  // Personalisation is the strongest reason a render feels worth paying for —
-  // it's the user's own wall with their own name on it. Spell the wanted text
-  // out exactly so the renderer copies rather than composes it (image models
-  // garble text they have to invent).
-  const milestone = age
-    ? ` The milestone number is ${age} — a large "${age}" foil number is the focal piece of the backdrop.`
-    : "";
-  // Only put the name on the backdrop when it IS a name. "son" still helps the
-  // stylist pick a palette (it stays in the sentence above), but it must not be
-  // printed on the wall.
-  const signage = name
-    ? isPrintableName(name)
-      ? ` The backdrop signage must read exactly "Happy ${cfg.eventLabel} ${name}" — render that text once, spelled exactly.`
-      : ` The backdrop signage must read exactly "Happy ${cfg.eventLabel}" — render that text once, and do NOT print any person's name or relationship word on the backdrop.`
-    : "";
-  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree}${milestone}${signage} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
+  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
 }
 
 export interface EventDefinition {
@@ -72,97 +43,9 @@ export interface EventDefinition {
   // are centered on a person, so they still ask "who's it for?" — but not a date
   // (that's set by the calendar). Personal events imply this via `!season`.
   askHonoree?: boolean;
-  // Milestone events where a number is the hero of the backdrop — a birthday
-  // age, an anniversary year. Shows the age field and fills the {age} slot.
-  askAge?: boolean;
-  // Labels for the personalisation inputs. Both values get printed onto the
-  // design, so the wording has to make that obvious — users were typing "son"
-  // into a field labelled "Who's it for?" and getting HAPPY BIRTHDAY SON on the
-  // backdrop. Defaults suit most occasions; override where it reads better.
-  honoreeLabel?: string;
-  ageLabel?: string;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   completionItems?: { category: string; query: string }[];
-  // The décor recipe for this occasion. Overrides DEFAULT_DECOR_SLOTS for events
-  // whose setup isn't a balloon backdrop (Diwali, Christmas…). See getDecorSlots.
-  decorSlots?: DecorSlot[];
-}
-
-/**
- * A décor slot's job in the composition, ordered back-to-front as a stylist
- * would build the backdrop. The renderer uses this to layer the installation
- * instead of scattering items across the wall.
- */
-export type DecorRole =
-  | "anchor" // the backdrop panel/cloth the whole setup is built on
-  | "garland" // the dominant sweep — balloon arch, flower garland
-  | "focal" // the centred hero piece — number balloon, wreath, rangoli
-  | "lighting"
-  | "depth" // hanging danglers/lanterns that give the wall dimension
-  | "props";
-
-export interface DecorSlot {
-  role: DecorRole;
-  category: string;
-  /** Amazon query. Supports {event} {theme} {color} {age} placeholders. */
-  query: string;
-  /** Used instead of `query` when it needs {age} and no age was supplied. */
-  queryNoAge?: string;
-}
-
-/**
- * The balloon-backdrop recipe — birthdays, baby showers, anniversaries,
- * annaprasan, graduations and the rest of the "decorate one wall" family.
- *
- * These slots are FIXED rather than invented per design. Letting the model
- * freely choose 6-8 categories is why one render got a backdrop panel plus a
- * dense balloon garland (and looked professional) while another got eight paper
- * fans (and did not). The high-impact anchors are no longer left to chance.
- */
-const DEFAULT_DECOR_SLOTS: DecorSlot[] = [
-  { role: "anchor", category: "Backdrop panel", query: "{event} {theme} backdrop cloth" },
-  { role: "garland", category: "Balloon garland", query: "{color} balloon garland arch kit 100 pcs" },
-  {
-    role: "focal",
-    category: "Focal foil balloon",
-    query: "{age} number foil balloon {color}",
-    queryNoAge: "{event} foil balloon {color}",
-  },
-  { role: "lighting", category: "Fairy lights", query: "warm white fairy string lights" },
-  { role: "depth", category: "Hanging danglers", query: "{theme} hanging swirls ceiling decoration" },
-  { role: "props", category: "Themed props", query: "{theme} party props cutouts" },
-];
-
-function fillSlotQuery(tpl: string, vars: Record<string, string | undefined>): string {
-  return tpl
-    .replace(/\{(\w+)\}/g, (_, key: string) => vars[key] ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-/**
- * The décor recipe for an event, with {placeholders} resolved from the user's
- * theme/colour/age choices. Falls back to the balloon-backdrop default for any
- * event without its own override.
- */
-export function getDecorSlots(
-  eventId: string,
-  vars: { theme?: string; color?: string; age?: string } = {}
-): DecorSlot[] {
-  const event = getEvent(eventId);
-  const slots = event?.decorSlots ?? DEFAULT_DECOR_SLOTS;
-  const age = vars.age?.trim() || undefined;
-  return slots.map((slot) => ({
-    role: slot.role,
-    category: slot.category,
-    query: fillSlotQuery(!age && slot.queryNoAge ? slot.queryNoAge : slot.query, {
-      event: event?.label.toLowerCase() ?? "party",
-      theme: vars.theme?.toLowerCase(),
-      color: vars.color?.toLowerCase(),
-      age,
-    }),
-  }));
 }
 
 export const EVENTS: EventDefinition[] = [
@@ -175,16 +58,11 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Pastel", "Bright & bold", "Gold & white", "Rainbow"],
     markets: ["IN", "US"],
     gendered: true,
-    askAge: true,
-    honoreeLabel: "Name for the backdrop",
-    ageLabel: "Turning which age?",
     completionItems: [
       { category: "Gift", query: "birthday gift" },
       { category: "Party tableware", query: "birthday party tableware set" },
       { category: "Snacks", query: "party snacks pack" },
       { category: "Cake topper", query: "birthday cake topper" },
-      { category: "Cake stand", query: "cake stand display" },
-      { category: "Backdrop stand", query: "adjustable backdrop stand kit" },
       { category: "Return favors", query: "return gift party favors" },
       { category: "Candles", query: "birthday number candles" },
     ],
@@ -196,9 +74,6 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Romantic red", "Golden 25th", "Garden", "Minimal"],
     colorSchemes: ["Red & gold", "Rose & white", "Burgundy", "Gold & white"],
     markets: ["IN", "US"],
-    askAge: true,
-    honoreeLabel: "Names for the backdrop",
-    ageLabel: "Which anniversary?",
     completionItems: [
       { category: "Gift", query: "anniversary gift" },
       { category: "Flowers", query: "rose bouquet" },
@@ -257,14 +132,6 @@ export const EVENTS: EventDefinition[] = [
       { category: "Gift hamper", query: "diwali gift hamper" },
       { category: "Pooja thali", query: "pooja thali set" },
       { category: "Lights", query: "led string lights" },
-    ],
-    decorSlots: [
-      { role: "anchor", category: "Door toran", query: "diwali door toran hanging" },
-      { role: "garland", category: "Marigold garland", query: "artificial marigold garland decoration long" },
-      { role: "focal", category: "Rangoli", query: "rangoli stencil colours set" },
-      { role: "lighting", category: "Diya set", query: "decorative diya set diwali" },
-      { role: "depth", category: "Hanging lanterns", query: "diwali paper lantern kandil hanging" },
-      { role: "props", category: "String lights", query: "led string lights diwali decoration" },
     ],
   },
   {
@@ -395,14 +262,6 @@ export const EVENTS: EventDefinition[] = [
       { category: "Sweets", query: "modak sweets box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
     ],
-    decorSlots: [
-      { role: "anchor", category: "Makhar backdrop", query: "ganpati decoration makhar backdrop" },
-      { role: "garland", category: "Flower garland", query: "artificial flower garland decoration long" },
-      { role: "focal", category: "Idol platform decor", query: "ganpati singhasan decoration" },
-      { role: "lighting", category: "Festival lights", query: "led string lights festival warm" },
-      { role: "depth", category: "Bandhanwar toran", query: "bandhanwar toran door hanging" },
-      { role: "props", category: "Festive props", query: "ganesh chaturthi decoration items set" },
-    ],
   },
   {
     id: "navratri",
@@ -418,14 +277,6 @@ export const EVENTS: EventDefinition[] = [
       { category: "Torans", query: "marigold toran door hanging" },
       { category: "Sweets", query: "indian sweets gift box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
-    ],
-    decorSlots: [
-      { role: "anchor", category: "Garba backdrop", query: "navratri garba backdrop cloth" },
-      { role: "garland", category: "Flower garland", query: "artificial flower garland colourful long" },
-      { role: "focal", category: "Chaniya / matki decor", query: "navratri matki decoration hanging" },
-      { role: "lighting", category: "Festival lights", query: "led string lights festival colourful" },
-      { role: "depth", category: "Mirror-work toran", query: "mirror work toran hanging decoration" },
-      { role: "props", category: "Dandiya props", query: "navratri decoration props set" },
     ],
   },
   {
@@ -477,14 +328,6 @@ export const EVENTS: EventDefinition[] = [
       { category: "Props", query: "halloween props" },
       { category: "Party tableware", query: "halloween party tableware" },
     ],
-    decorSlots: [
-      { role: "anchor", category: "Backdrop panel", query: "halloween {theme} backdrop cloth" },
-      { role: "garland", category: "Spooky garland", query: "halloween garland decoration long" },
-      { role: "focal", category: "Hero prop", query: "halloween large prop decoration" },
-      { role: "lighting", category: "Eerie lights", query: "halloween orange purple string lights" },
-      { role: "depth", category: "Hanging bats & ghosts", query: "halloween hanging bats ghosts decoration" },
-      { role: "props", category: "Themed props", query: "halloween props set cutouts" },
-    ],
   },
   {
     id: "thanksgiving",
@@ -517,14 +360,6 @@ export const EVENTS: EventDefinition[] = [
       { category: "Wrapping paper", query: "christmas wrapping paper" },
       { category: "Treats", query: "christmas chocolate gift" },
       { category: "Lights", query: "christmas string lights" },
-    ],
-    decorSlots: [
-      { role: "anchor", category: "Backdrop panel", query: "christmas {theme} backdrop cloth" },
-      { role: "garland", category: "Pine garland", query: "christmas pine garland decoration long" },
-      { role: "focal", category: "Wreath", query: "christmas wreath large {color}" },
-      { role: "lighting", category: "Fairy lights", query: "christmas string lights warm white" },
-      { role: "depth", category: "Hanging ornaments", query: "christmas hanging ornaments set" },
-      { role: "props", category: "Stockings & props", query: "christmas stockings decoration set" },
     ],
   },
   {

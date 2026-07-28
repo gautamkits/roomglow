@@ -16,8 +16,8 @@ import type {
 import { useSession } from "next-auth/react";
 import { track } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
-import { getDecorSlots, buildEventContext } from "@/lib/events";
-import { isBareWall } from "@/lib/roomShape";
+// Shared with the admin regenerate path so both build the same event brief.
+import { buildEventContext } from "@/lib/events";
 import {
   saveFlowSnapshot,
   loadFlowSnapshot,
@@ -34,8 +34,6 @@ const MAX_RESTYLES = 5;
 // (or tester) from triggering unlimited generations. These are client-side
 // guards for UX; the API routes enforce a hard per-user/IP cap server-side.
 const MAX_PIPELINE_RETRIES = 3;
-
-// Shared with the admin regenerate-and-send path — see @/lib/events.
 
 export function useRoomFlow() {
   // Deferred sign-in: anonymous users can pick a mode and upload a photo; we
@@ -414,16 +412,6 @@ export function useRoomFlow() {
     const isEvent = mode === "event";
     const eventLabel = eventConfig?.eventLabel || "event";
     const subTheme = eventConfig?.subTheme || "";
-    // Events source from a fixed décor recipe rather than AI-invented categories,
-    // so every backdrop gets the high-impact anchors (panel, garland, focal piece)
-    // instead of whatever the model happened to think of.
-    const decorSlots = isEvent && eventConfig
-      ? getDecorSlots(eventConfig.eventType, {
-          theme: eventConfig.subTheme,
-          color: eventConfig.colorScheme,
-          age: eventConfig.age,
-        })
-      : [];
 
     const callStep = async (url: string, body: unknown, failMsg: string) => {
       const res = await fetch(url, {
@@ -525,7 +513,6 @@ export function useRoomFlow() {
               selectedProductTypes: selected.map((s) => s.label),
               eventContext,
               removeLabels: removedLabels,
-              decorSlots,
             },
             "We couldn't create a design plan. Please try again."
           );
@@ -617,9 +604,6 @@ export function useRoomFlow() {
                 geometry: roomAnalysis?.geometry,
                 // Space redesigns may rearrange kept furniture (default on).
                 optimizeLayout: mode === "space" ? optimizeLayout : false,
-                // Blank wall → compose a backdrop; furnished room → decorate
-                // it without touching the layout.
-                bareWall: isBareWall(roomAnalysis),
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -921,7 +905,6 @@ export function useRoomFlow() {
           eventContext,
           geometry: roomAnalysis?.geometry,
           optimizeLayout: mode === "space" ? optimizeLayout : false,
-          bareWall: isBareWall(roomAnalysis),
           products: products.map((p: ProductResult) => ({
             category: p.recommendation.category,
             placement: p.recommendation.placement,

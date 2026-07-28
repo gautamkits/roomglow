@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import type { RoomAnalysis, RoomGeometry } from "./types";
-import type { DecorSlot } from "./events";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -125,7 +124,6 @@ Fill in:
   - approxCeilingFt: floor-to-ceiling height in feet
   - scaleReferences: 1-3 visible objects you used as rulers, each with its assumed size (e.g. "door on left wall (~6.7 ft tall)", "dining table (~2.5 ft tall)")
   Be conservative: if unsure, estimate SMALLER rather than larger.
-  IMPORTANT: if the photo shows only a bare wall or has NO object of known size in it, return an EMPTY scaleReferences array and your roughest guess for the dimensions. Do NOT invent rulers that aren't visible — an empty array tells us to skip scale constraints rather than trust fabricated numbers.
 - existingFurniture: key furniture/surfaces you see (sofa, table, wall, etc.)
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
@@ -244,7 +242,6 @@ export interface AmazonCandidate {
   affiliateUrl: string;
   rating: number;
   asin: string;
-  ratingCount?: number;
 }
 
 export interface CategoryCandidates {
@@ -286,9 +283,7 @@ export async function curateProducts(
       const options = cat.candidates
         .map(
           (c, i) =>
-            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating}${
-              c.ratingCount ? ` from ${c.ratingCount} reviews` : ", unrated"
-            })`
+            `    Option ${i}: "${c.title}" — ${c.price} (rating: ${c.rating})`
         )
         .join("\n");
       return `Category ${catIdx}: ${cat.category} (for ${cat.placement})\n  Design need: ${cat.reason}\n  Ideal color/finish: ${cat.colorSuggestion}\n  Amazon options:\n${options}`;
@@ -407,12 +402,7 @@ export async function generateDesignImage(
   // Space redesigns only: when true the AI may reposition existing/kept furniture
   // for the best layout (identity/appearance preserved). Off for events (decorate,
   // don't rearrange the venue) and for the "keep my layout" opt-out.
-  optimizeLayout: boolean = false,
-  // Events only. A blank-wall photo has nothing to preserve, so the renderer is
-  // free to compose a full backdrop installation. A FURNISHED room must only be
-  // decorated — asking for a composed backdrop there made the model restage the
-  // scene (moved the sofa, dropped the windows) to fit its composition.
-  bareWall: boolean = false
+  optimizeLayout: boolean = false
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -472,53 +462,8 @@ Decorate this EXACT space for the event. This is a STRICT photo editing task —
 Edit the room photo to add these products. This is a STRICT photo editing task.`;
 
   const addLine = eventContext
-    ? bareWall
-      ? `ONLY ADD these decorations (use their EXACT appearance from the product images). They are the pieces of ONE backdrop installation — compose them per the layering rules below, not as separate items dropped around the room:`
-      : `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally on the walls and surfaces that already exist:`
+    ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
-
-  // BARE-WALL EVENTS ONLY. A blank wall has nothing to preserve, so the renderer
-  // can compose freely — and must, or it tiles the products evenly like
-  // wallpaper. Never sent for a furnished room: asking for a composed backdrop
-  // there made the model restage the room (sofa recentred, windows deleted) to
-  // fit the composition it was told to build.
-  const backdropComposition =
-    eventContext && bareWall
-      ? `
-
-BACKDROP COMPOSITION — this is ONE installation, not scattered items:
-- The photo is a blank wall. That wall IS the backdrop — fill it as one composed setup, the way a professional party stylist would.
-- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) props at the base, tucked against the wall. Never invent furniture that isn't in the photo.
-- The finished setup must read as ONE piece with a clear focal centre. Do NOT spread items evenly across the wall like wallpaper or a grid.
-- Keep the area directly in front of the backdrop clear, so people can stand there and be photographed.
-- Sparse, evenly-spaced decor is the main failure to avoid. When in doubt, render MORE of an item, clustered, rather than fewer spread out.
-
-STAGING — make it look like a real event about to start:
-- Beyond the listed products you MAY add a few small, believable finishing touches: fresh flowers, a cake or dessert on a surface that already exists, warm ambient glow from the lights spilling onto nearby surfaces.
-- Staging stays SECONDARY: keep it small and near the base of the backdrop, and never let it obscure, replace, or outshine the listed products.
-- Do NOT add furniture, and do not stage anything in the walkway or on the open floor.`
-      : "";
-
-  // FURNISHED-ROOM EVENTS. The job here is decoration, not staging: the user's
-  // room must come back recognisably itself. This replaces the composition block
-  // rather than sitting alongside it — the two pull in opposite directions, and
-  // when both were present the composition won and the room got rebuilt.
-  const roomPreservation =
-    eventContext && !bareWall
-      ? `
-
-ROOM PRESERVATION — this is a FURNISHED ROOM. Decorate it; do NOT restage it:
-- Fit the decorations into the wall and surface space that ALREADY exists — above and between the existing furniture. If there is not enough clear wall for a full-size backdrop, use a smaller one or hang it off-centre. NEVER clear, move or cover furniture, windows or curtains to make room for a decoration.
-- The finished image must be recognisably the SAME room as Image 1, photographed from the same spot, with decorations added to it.`
-      : "";
-
-  // Both event branches: quantity is a property of the PRODUCT, not the room, so
-  // a multipack should render as a multipack either way.
-  const densityBlock = eventContext
-    ? `
-
-DENSITY: render each product at the real quantity its title implies. A garland/arch kit is 100+ balloons and must appear as a full, lush, densely packed garland — never a handful of separate balloons. A set or multi-pack renders as the whole set.`
-    : "";
 
   // Events only. The model reads "floor" as any open surface and treats the
   // centre rug and walkways as empty space to fill, which strands cutouts and
@@ -530,13 +475,7 @@ DENSITY: render each product at the real quantity its title implies. A garland/a
 FLOOR CLEARANCE & WALKWAY RULE: Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props placed on the floor must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter items loose across open floor areas or pathways where people would walk.`
     : "";
 
-  // Events: no visible rulers (a bare-wall photo) means analyzeRoom's dimensions
-  // are invented, and constraining decor against fabricated feet is part of why
-  // it came out undersized. Empty scaleReferences is the model's signal that it
-  // had nothing to measure. Space redesigns keep the old behaviour — geometry
-  // alone is enough there, and those photos essentially always have rulers.
-  const useScaleBlock = eventContext ? !!geometry?.scaleReferences?.length : !!geometry;
-  const scaleBlock = geometry && useScaleBlock
+  const scaleBlock = geometry
     ? `
 
 SCALE CONSTRAINTS (critical — respect the room's REAL size):
@@ -577,7 +516,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}${roomPreservation}${backdropComposition}${densityBlock}${floorClearance}
+${productList}${floorClearance}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -587,12 +526,10 @@ Each item must look EXACTLY like its reference image — same color, shape, mate
       eventContext
         ? `
 
-TEXT & PERSONALISATION:
-- If the event description above specifies exact backdrop signage, render EXACTLY that text, ONCE, centred on the backdrop in a clean readable party font suited to the theme. Copy it character for character — do not reword, translate, abbreviate, or repeat it elsewhere in the image.
-- If a milestone number is given above, render it as a large foil number as the focal piece.
+CRITICAL TEXT RULE:
 - Do NOT add, render, or reproduce ANY printed words, letters, banners, or signage that name a DIFFERENT occasion than the event described above.
-- If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — replace it with the signage specified above, or leave that surface blank.
-- Never render gibberish, misspelled, duplicated, or overlapping text. Apart from the signage and number above, any other visible surface must carry no readable text at all.`
+- If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — leave the banner/backdrop blank or show only generic decorative patterns.
+- Any visible signage must match the event described above, or contain no readable text at all. Never invent gibberish text.`
         : ""
     }`,
   });
@@ -600,10 +537,9 @@ TEXT & PERSONALISATION:
   // Step 1: Generate the redesigned room image.
   //
   // The model intermittently answers with TEXT only and no image part — a
-  // refusal, a safety block, or it "explaining" instead of rendering. That used
-  // to surface as a bare "couldn't be rendered" with no clue why, because the
-  // text part was discarded. Capture finishReason + the text so the admin alert
-  // says what actually happened.
+  // refusal, a safety block, or it "explaining" instead of rendering. The text
+  // part used to be discarded, so the admin alert couldn't say which. Capture
+  // finishReason + the text so the next failure is diagnosable.
   async function renderOnce(): Promise<{
     image: string;
     finishReason: string;
@@ -630,9 +566,9 @@ TEXT & PERSONALISATION:
   }
 
   let attempt = await renderOnce();
-  // One automatic retry. The failure is usually transient, and until now the
-  // user had to notice the error and press "Try again" themselves — on a paid
-  // step, after already waiting through the whole pipeline.
+  // One automatic retry. The failure is usually transient, and otherwise the
+  // user has to notice the error and press "Try again" themselves — on a paid
+  // step, after waiting through the whole pipeline.
   if (!attempt.image) {
     console.warn(
       `[generateDesignImage] no image (finishReason=${attempt.finishReason}) — retrying once. Model said: ${attempt.text.slice(0, 300)}`
@@ -645,8 +581,8 @@ TEXT & PERSONALISATION:
   // Still nothing: do NOT silently save the untouched original — that ships a
   // "design" that did nothing to the photo (and wastes the user's unlock).
   // Throw so the pipeline surfaces an error + offers a retry. The route shows
-  // the user a generic message and emails admins this one, so put the
-  // diagnostics here.
+  // the user a generic message and emails admins this one, so the diagnostics
+  // go here.
   if (!generatedImageBase64) {
     throw new Error(
       `The design couldn't be rendered this time. Please try again. [finishReason=${attempt.finishReason}; model said: ${attempt.text.slice(0, 400) || "(nothing)"}]`
@@ -1076,32 +1012,12 @@ export async function recommendProducts(
   // Items the user chose to remove in the tidy-up step. They are gone from the
   // canvas, so recommendations must treat them as absent (and may fill the
   // freed space).
-  removeLabels: string[] = [],
-  // Events: the fixed décor recipe (see getDecorSlots). When present it REPLACES
-  // free category invention — the model fills in placement/reason/colour per
-  // slot but cannot swap the balloon garland for paper fans.
-  decorSlots: DecorSlot[] = []
+  removeLabels: string[] = []
 ): Promise<string> {
   const productTypesList =
-    decorSlots.length > 0
-      ? ""
-      : selectedProductTypes.length > 0
-        ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
-        : "";
-
-  // The authoritative slot list for events. Queries are pre-built and must come
-  // back verbatim so sourcing is deterministic run to run.
-  const slotBlock = decorSlots.length
-    ? `\n\nDECORATION PLAN — these are the exact pieces being sourced, listed in layering order (back to front). Return EXACTLY ${decorSlots.length} products, one per slot, in this order:
-${decorSlots
-        .map(
-          (s, i) =>
-            `${i + 1}. [${s.role}] category: "${s.category}" — searchQuery MUST be exactly: "${s.query}"`
-        )
-        .join("\n")}
-
-For each slot you decide ONLY the placement, reason and colorSuggestion. Copy its category and searchQuery VERBATIM — do not reword, re-order, add or drop slots.`
-    : "";
+    selectedProductTypes.length > 0
+      ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
+      : "";
 
   // Existing furniture minus anything the user removed, so we don't design
   // around items that are no longer in the room.
@@ -1143,20 +1059,16 @@ Also write a clear 2-3 sentence designVision describing the overall color palett
 
 Based on the space analysis and the requested items below, create a decoration vision and recommend specific DECORATION products to style this space for the event.
 
-${analysisBlock}${slotBlock}
+${analysisBlock}
 
 Think like a professional party stylist:
 1. Define a clear decoration direction matching the occasion, theme, and colors
 2. Pick decorations that work TOGETHER as a cohesive festive set
-3. Tie each item to a zone in the space — these pieces combine into ONE backdrop installation on the main focal wall, not scattered decorations, so place them relative to each other (garland sweeping over the backdrop panel, focal piece centred on it, lights framing it)
+3. Tie each item to a zone in the space
 
-For each product provide:${
-    decorSlots.length
-      ? ""
-      : `
+For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
-- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.`
-  }
+- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
 - placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme

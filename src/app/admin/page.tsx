@@ -25,7 +25,6 @@ interface StoredEventConfig {
   subTheme?: string;
   colorScheme?: string;
   honoree?: string;
-  age?: string;
 }
 
 interface AllDesign {
@@ -47,9 +46,8 @@ const ALL_PAGE = 60;
 /**
  * Regenerate a design for the user who owns it and email it to them, either
  * free (unlocked on arrival) or locked at the normal price. Event designs get
- * theme/colour/name/age overrides — those are the knobs that actually change
- * what the décor recipe sources, so re-rolling without them just repeats the
- * same brief.
+ * theme/colour/name overrides — without them, re-rolling just repeats the same
+ * brief and relies on luck.
  */
 function RegenerateSend({ design }: { design: AllDesign }) {
   const cfg = design.event_config || {};
@@ -58,7 +56,6 @@ function RegenerateSend({ design }: { design: AllDesign }) {
   const [subTheme, setSubTheme] = useState(cfg.subTheme || "");
   const [colorScheme, setColorScheme] = useState(cfg.colorScheme || "");
   const [honoree, setHonoree] = useState(cfg.honoree || "");
-  const [age, setAge] = useState(cfg.age || "");
   const [note, setNote] = useState("");
   const [free, setFree] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -77,7 +74,7 @@ function RegenerateSend({ design }: { design: AllDesign }) {
           designId: design.id,
           free,
           note,
-          overrides: isEvent ? { subTheme, colorScheme, honoree, age } : undefined,
+          overrides: isEvent ? { subTheme, colorScheme, honoree } : undefined,
         }),
       });
       const data = await res.json();
@@ -123,14 +120,7 @@ function RegenerateSend({ design }: { design: AllDesign }) {
             <div className="grid grid-cols-2 gap-1.5">
               <input className={field} value={subTheme} onChange={(e) => setSubTheme(e.target.value)} placeholder="Theme" />
               <input className={field} value={colorScheme} onChange={(e) => setColorScheme(e.target.value)} placeholder="Colours" />
-              <input className={field} value={honoree} onChange={(e) => setHonoree(e.target.value)} placeholder="Name" />
-              <input
-                className={field}
-                value={age}
-                onChange={(e) => setAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
-                inputMode="numeric"
-                placeholder="Age / number"
-              />
+              <input className={`${field} col-span-2`} value={honoree} onChange={(e) => setHonoree(e.target.value)} placeholder="Name" />
             </div>
           )}
           <input className={field} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Personal note in the email (optional)" />

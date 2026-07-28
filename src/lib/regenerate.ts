@@ -5,8 +5,7 @@ import {
   type CategoryCandidates,
 } from "@/lib/gemini";
 import { searchProducts } from "@/lib/amazon";
-import { buildEventContext, getDecorSlots } from "@/lib/events";
-import { isBareWall } from "@/lib/roomShape";
+import { buildEventContext } from "@/lib/events";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import type { Locale } from "@/lib/locale";
 import type {
@@ -80,24 +79,15 @@ export async function regenerateDesign(opts: {
 
   const isEvent = opts.mode === "event";
   const eventContext = buildEventContext(isEvent ? opts.eventConfig : null);
-  const decorSlots =
-    isEvent && opts.eventConfig
-      ? getDecorSlots(opts.eventConfig.eventType, {
-          theme: opts.eventConfig.subTheme,
-          color: opts.eventConfig.colorScheme,
-          age: opts.eventConfig.age,
-        })
-      : [];
 
-  // 1. What to buy. For events the décor recipe is authoritative; for rooms we
-  //    reuse whatever the user originally picked.
+  // 1. What to buy — same call the create flow makes, reusing whatever the user
+  //    originally picked as the requested item types.
   const recsRaw = await recommendProducts(
     opts.roomAnalysis,
     {},
     opts.selectedItems,
     eventContext,
-    [],
-    decorSlots
+    []
   );
   const { products: recs, designVision } = parseJsonish<{
     products: ProductRecommendation[];
@@ -171,8 +161,7 @@ export async function regenerateDesign(opts: {
     undefined,
     opts.detect,
     opts.roomAnalysis?.geometry,
-    false,
-    isBareWall(opts.roomAnalysis)
+    false
   );
 
   return {

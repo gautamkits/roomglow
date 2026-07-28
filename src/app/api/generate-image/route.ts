@@ -10,7 +10,7 @@ import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
   try {
-    const { originalImage, products, eventContext, styleHint, geometry, optimizeLayout, bareWall } = await request.json();
+    const { originalImage, products, eventContext, styleHint, geometry, optimizeLayout } = await request.json();
     if (!originalImage || !products?.length) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
@@ -56,8 +56,7 @@ export async function POST(request: Request) {
       styleHint || undefined,
       detect,
       geometry || undefined,
-      !!optimizeLayout,
-      !!bareWall
+      !!optimizeLayout
     );
 
     // Track the billed image-gen call (restyle vs fresh design) for cost analytics.

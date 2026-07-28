@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       free?: boolean;
       note?: string;
       overrides?: Partial<
-        Pick<EventConfig, "subTheme" | "colorScheme" | "honoree" | "age">
+        Pick<EventConfig, "subTheme" | "colorScheme" | "honoree">
       >;
     };
     const designId = String(body.designId || "");
@@ -135,9 +135,6 @@ export async function POST(request: Request) {
             : {}),
           ...(body.overrides?.honoree !== undefined
             ? { honoree: body.overrides.honoree || undefined }
-            : {}),
-          ...(body.overrides?.age !== undefined
-            ? { age: body.overrides.age || undefined }
             : {}),
         }
       : null;

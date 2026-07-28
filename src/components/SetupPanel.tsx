@@ -50,7 +50,6 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   const [subTheme, setSubTheme] = useState<string | null>(null);
   const [colorScheme, setColorScheme] = useState<string | null>(null);
   const [honoree, setHonoree] = useState("");
-  const [age, setAge] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
@@ -91,9 +90,6 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   // relationship festivals (Raksha Bandhan, Valentine's) via askHonoree.
   const showDate = !!event && !event.season;
   const showHonoree = !!event && (!event.season || !!event.askHonoree);
-  // Milestone number (birthday age, anniversary year). Becomes the big foil
-  // number on the backdrop, so it's the one field that visibly changes the design.
-  const showAge = !!event?.askAge;
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -108,7 +104,6 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
           : undefined,
       eventDate: !event.season && eventDate ? eventDate : undefined,
       gender: showGender && gender ? gender : undefined,
-      age: showAge && age.trim() ? age.trim() : undefined,
     };
   };
 
@@ -238,66 +233,24 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
                 </div>
               )}
               {showHonoree && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
-                    {event?.honoreeLabel || "Name for the backdrop"} (optional)
-                  </p>
-                  <input
-                    type="text"
-                    value={honoree}
-                    onChange={(e) => setHonoree(e.target.value)}
-                    placeholder="e.g. Aarav"
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
-                  />
-                  {/* Users were typing "son"/"dad" here and getting HAPPY
-                      BIRTHDAY SON printed across the backdrop. */}
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    Printed on the design — use the actual name, not
-                    &ldquo;son&rdquo; or &ldquo;dad&rdquo;.
-                  </p>
-                </div>
-              )}
-              {showAge && (
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
-                    {event?.ageLabel || "Milestone number"} (optional)
-                  </p>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={age}
-                    // Digits only, max 3 — this becomes a foil number on the
-                    // backdrop, so anything longer can't render as one.
-                    onChange={(e) =>
-                      setAge(e.target.value.replace(/\D/g, "").slice(0, 3))
-                    }
-                    placeholder="e.g. 5"
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
-                  />
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    Becomes the big foil number in the design.
-                  </p>
-                </div>
+                <input
+                  type="text"
+                  value={honoree}
+                  onChange={(e) => setHonoree(e.target.value)}
+                  placeholder="Who's it for? (optional)"
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                />
               )}
               {showDate && (
-                <div>
-                  {/* Distinct from the age above: this is when the party is,
-                      and only drives the reminder email. */}
-                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
-                    Date of the celebration (optional)
-                  </p>
-                  <div className="relative">
-                    <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
-                    <input
-                      type="date"
-                      value={eventDate}
-                      onChange={(e) => setEventDate(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
-                    />
-                  </div>
-                  <p className="text-[11px] text-zinc-400 mt-1">
-                    We&apos;ll email you a reminder before it.
-                  </p>
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                  <input
+                    type="date"
+                    value={eventDate}
+                    onChange={(e) => setEventDate(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 rounded-lg text-sm border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors"
+                    placeholder="Event date (optional)"
+                  />
                 </div>
               )}
             </div>

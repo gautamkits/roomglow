@@ -10,7 +10,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
     }
 
-    const { roomAnalysis, userAnswers, selectedProductTypes, eventContext, removeLabels, decorSlots } =
+    const { roomAnalysis, userAnswers, selectedProductTypes, eventContext, removeLabels } =
       await request.json();
     if (!roomAnalysis || !userAnswers) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
@@ -21,8 +21,7 @@ export async function POST(request: Request) {
       userAnswers,
       selectedProductTypes || [],
       eventContext,
-      Array.isArray(removeLabels) ? removeLabels : [],
-      Array.isArray(decorSlots) ? decorSlots : []
+      Array.isArray(removeLabels) ? removeLabels : []
     );
     const recommendations = JSON.parse(recommendationsJson);
 
