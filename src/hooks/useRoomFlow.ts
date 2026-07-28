@@ -17,6 +17,7 @@ import { useSession } from "next-auth/react";
 import { track } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import { getDecorSlots, buildEventContext } from "@/lib/events";
+import { isBareWall } from "@/lib/roomShape";
 import {
   saveFlowSnapshot,
   loadFlowSnapshot,
@@ -616,6 +617,9 @@ export function useRoomFlow() {
                 geometry: roomAnalysis?.geometry,
                 // Space redesigns may rearrange kept furniture (default on).
                 optimizeLayout: mode === "space" ? optimizeLayout : false,
+                // Blank wall → compose a backdrop; furnished room → decorate
+                // it without touching the layout.
+                bareWall: isBareWall(roomAnalysis),
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -917,6 +921,7 @@ export function useRoomFlow() {
           eventContext,
           geometry: roomAnalysis?.geometry,
           optimizeLayout: mode === "space" ? optimizeLayout : false,
+          bareWall: isBareWall(roomAnalysis),
           products: products.map((p: ProductResult) => ({
             category: p.recommendation.category,
             placement: p.recommendation.placement,

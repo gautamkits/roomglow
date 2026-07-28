@@ -6,6 +6,7 @@ import {
 } from "@/lib/gemini";
 import { searchProducts } from "@/lib/amazon";
 import { buildEventContext, getDecorSlots } from "@/lib/events";
+import { isBareWall } from "@/lib/roomShape";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import type { Locale } from "@/lib/locale";
 import type {
@@ -170,7 +171,8 @@ export async function regenerateDesign(opts: {
     undefined,
     opts.detect,
     opts.roomAnalysis?.geometry,
-    false
+    false,
+    isBareWall(opts.roomAnalysis)
   );
 
   return {

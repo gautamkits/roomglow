@@ -407,7 +407,12 @@ export async function generateDesignImage(
   // Space redesigns only: when true the AI may reposition existing/kept furniture
   // for the best layout (identity/appearance preserved). Off for events (decorate,
   // don't rearrange the venue) and for the "keep my layout" opt-out.
-  optimizeLayout: boolean = false
+  optimizeLayout: boolean = false,
+  // Events only. A blank-wall photo has nothing to preserve, so the renderer is
+  // free to compose a full backdrop installation. A FURNISHED room must only be
+  // decorated — asking for a composed backdrop there made the model restage the
+  // scene (moved the sofa, dropped the windows) to fit its composition.
+  bareWall: boolean = false
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -467,31 +472,54 @@ Decorate this EXACT space for the event. This is a STRICT photo editing task —
 Edit the room photo to add these products. This is a STRICT photo editing task.`;
 
   const addLine = eventContext
-    ? `ONLY ADD these decorations (use their EXACT appearance from the product images). They are the pieces of ONE backdrop installation — compose them per the layering rules below, not as separate items dropped around the room:`
+    ? bareWall
+      ? `ONLY ADD these decorations (use their EXACT appearance from the product images). They are the pieces of ONE backdrop installation — compose them per the layering rules below, not as separate items dropped around the room:`
+      : `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally on the walls and surfaces that already exist:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
-  // Events only. Without this the model treats the products as N independent
-  // stickers and tiles them evenly across the wall like wallpaper. Real party
-  // setups are ONE layered installation with a focal centre — that difference
-  // is most of what separates a render worth paying for from a scatter of fans.
-  const backdropComposition = eventContext
-    ? `
+  // BARE-WALL EVENTS ONLY. A blank wall has nothing to preserve, so the renderer
+  // can compose freely — and must, or it tiles the products evenly like
+  // wallpaper. Never sent for a furnished room: asking for a composed backdrop
+  // there made the model restage the room (sofa recentred, windows deleted) to
+  // fit the composition it was told to build.
+  const backdropComposition =
+    eventContext && bareWall
+      ? `
 
 BACKDROP COMPOSITION — this is ONE installation, not scattered items:
-- Build a single cohesive backdrop, the way a professional party stylist would.
-- Choosing the backdrop wall: if the photo shows a FURNISHED ROOM, build the backdrop on the clearest, most photogenic wall — typically behind the sofa, bed or main table — and leave the rest of the room exactly as it is. Do NOT drape the backdrop over a TV, shelving, a window or artwork; work around them, or use a clearer wall. If the photo shows only a BARE WALL, that wall IS the backdrop — fill it as one composed setup.
-- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) props at the base, tucked against the wall — and if a table or surface ALREADY exists in front of that wall, dress it as part of the setup. Never invent furniture that isn't in the photo.
+- The photo is a blank wall. That wall IS the backdrop — fill it as one composed setup, the way a professional party stylist would.
+- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) props at the base, tucked against the wall. Never invent furniture that isn't in the photo.
 - The finished setup must read as ONE piece with a clear focal centre. Do NOT spread items evenly across the wall like wallpaper or a grid.
 - Keep the area directly in front of the backdrop clear, so people can stand there and be photographed.
-
-DENSITY — decorations must look professionally installed, not sparse:
-- Render each product at the real quantity its title implies. A garland/arch kit is 100+ balloons and must appear as a full, lush, densely packed garland — never a handful of separate balloons. A set or multi-pack renders as the whole set.
 - Sparse, evenly-spaced decor is the main failure to avoid. When in doubt, render MORE of an item, clustered, rather than fewer spread out.
 
 STAGING — make it look like a real event about to start:
-- Beyond the listed products you MAY add a few small, believable finishing touches so the scene reads as a prepared celebration rather than a product display: a cake or dessert on a surface that already exists, fresh flowers, plates or cups set out, and warm ambient glow from the lights spilling onto nearby surfaces.
+- Beyond the listed products you MAY add a few small, believable finishing touches: fresh flowers, a cake or dessert on a surface that already exists, warm ambient glow from the lights spilling onto nearby surfaces.
 - Staging stays SECONDARY: keep it small and near the base of the backdrop, and never let it obscure, replace, or outshine the listed products.
 - Do NOT add furniture, and do not stage anything in the walkway or on the open floor.`
+      : "";
+
+  // FURNISHED-ROOM EVENTS. The job here is decoration, not staging: the user's
+  // room must come back recognisably itself. This replaces the composition block
+  // rather than sitting alongside it — the two pull in opposite directions, and
+  // when both were present the composition won and the room got rebuilt.
+  const roomPreservation =
+    eventContext && !bareWall
+      ? `
+
+ROOM PRESERVATION — this is a FURNISHED ROOM. Decorate it; do NOT restage it:
+- The layout is FIXED. Every existing item stays EXACTLY where it is, at its exact size, angle and position: sofa, chairs, tables, TV, console, shelves, lamps, rugs, plants, curtains, blinds, windows and doors. Do NOT move, rotate, resize, replace, remove, hide or re-arrange any of them, and never swap one for a different item.
+- Do NOT change the camera position, framing or perspective, and do not redraw or re-imagine the room.
+- Fit the decorations into the wall and surface space that ALREADY exists — above and between the existing furniture. If there is not enough clear wall for a full-size backdrop, use a smaller one or hang it off-centre. NEVER clear, move or cover furniture, windows or curtains to make room for a decoration.
+- The finished image must be recognisably the SAME room as Image 1, photographed from the same spot, with decorations added to it.`
+      : "";
+
+  // Both event branches: quantity is a property of the PRODUCT, not the room, so
+  // a multipack should render as a multipack either way.
+  const densityBlock = eventContext
+    ? `
+
+DENSITY: render each product at the real quantity its title implies. A garland/arch kit is 100+ balloons and must appear as a full, lush, densely packed garland — never a handful of separate balloons. A set or multi-pack renders as the whole set.`
     : "";
 
   // Events only. The model reads "floor" as any open surface and treats the
@@ -551,7 +579,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}${backdropComposition}${floorClearance}
+${productList}${roomPreservation}${backdropComposition}${densityBlock}${floorClearance}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
