@@ -9,6 +9,18 @@ export async function findUserByGoogleId(googleId: string) {
   return rows[0] || null;
 }
 
+/**
+ * Look up a user by id — needed when acting on someone's behalf (an admin
+ * generating and emailing a design to the design's owner) rather than on the
+ * signed-in session.
+ */
+export async function getUserById(userId: string) {
+  const { rows } = await sql`
+    SELECT id, email, name FROM users WHERE id = ${userId} LIMIT 1
+  `;
+  return rows[0] || null;
+}
+
 export async function createUser(googleId: string, email: string, name: string, avatarUrl: string) {
   const { rows } = await sql`
     INSERT INTO users (google_id, email, name, avatar_url)
@@ -403,6 +415,7 @@ export async function getAllDesigns(opts: { limit?: number; offset?: number } = 
   const { rows } = await sql.query(
     `SELECT d.id, d.mode, d.design_narrative, d.original_image_url,
             d.generated_image_url, d.created_at, d.is_unlocked, d.gallery_status,
+            d.event_config, d.user_id,
             u.email AS user_email
      FROM designs d
      LEFT JOIN users u ON u.id = d.user_id

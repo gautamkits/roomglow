@@ -586,6 +586,122 @@ export async function sendDecorLeadNotification(data: {
 
 /** Invite sent when an owner shares a private design with an email address.
  *  The recipient must sign in with Google using that same email to view. */
+/**
+ * "We made you a new design" — sent when an admin regenerates a design for a
+ * user and sends it over.
+ *
+ * Deliberately NOT sendDesignReadyEmail: that one embeds the full-size render
+ * plus every product with prices and buy links, which would hand over a paid
+ * design's entire value in the email. Here the hero is CSS-blurred and the
+ * product list withheld whenever the design is locked — the same treatment the
+ * abandoned-checkout series uses.
+ */
+export async function sendAdminDesignEmail(data: {
+  to: string;
+  name?: string;
+  designId: string;
+  generatedImageUrl: string;
+  eventLabel?: string;
+  free: boolean;
+  priceLabel?: string; // e.g. "₹99" — shown only when locked
+  note?: string; // optional personal line from the admin
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+  const link = `${SITE_URL}/design/${data.designId}`;
+  const occasion = data.eventLabel ? esc(data.eventLabel) : "";
+  const heroStyle = data.free
+    ? "display:block;width:100%;height:auto;"
+    : "display:block;width:100%;height:auto;filter:blur(7px);transform:scale(1.05);";
+
+  const headline = data.free
+    ? `We made you a new ${occasion || "design"} — on us 🎁`
+    : `We made you a new ${occasion || "design"} ✨`;
+  const lede = data.free
+    ? `We weren't happy with how your last one turned out, so our team put together a fresh version${occasion ? ` for your ${occasion.toLowerCase()}` : ""}. It's unlocked and waiting — no charge.`
+    : `Our team put together a fresh version${occasion ? ` for your ${occasion.toLowerCase()}` : ""}, with every piece picked and ready to shop. Take a look and unlock it whenever you're ready.`;
+
+  const noteBlock = data.note
+    ? `<tr><td style="padding:0 28px 4px;">
+        <div style="border-left:3px solid ${CLAY};padding:10px 14px;background:${LINEN};border-radius:0 8px 8px 0;">
+          <p style="font-size:14px;color:${TEXT};margin:0;line-height:1.6;font-style:italic;">${esc(data.note)}</p>
+        </div>
+      </td></tr>`
+    : "";
+
+  const priceBlock =
+    !data.free && data.priceLabel
+      ? `<p style="font-size:13px;color:${MUTED};margin:14px 0 0;">Unlock the full design and shopping list for <strong style="color:${TEXT};">${esc(data.priceLabel)}</strong>.</p>`
+      : "";
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+<body style="margin:0;padding:0;background:${LINEN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${esc(headline)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};padding:24px 12px;"><tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid ${BORDER};">
+      <tr><td style="background:${INK};padding:18px 28px;">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td valign="middle"><img src="${esc(LOGO_URL)}" width="34" height="34" alt="Noosho" style="display:block;width:34px;height:34px;border-radius:9px;" /></td>
+          <td valign="middle" style="padding-left:10px;"><span style="font-size:21px;font-weight:700;letter-spacing:-0.02em;color:${LINEN};">noosho</span></td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:26px 28px 0;">
+        <p style="font-size:12px;font-weight:700;letter-spacing:0.10em;color:${CLAY_CTA};margin:0 0 8px;">${data.free ? "A NEW DESIGN, FREE" : "A NEW DESIGN FOR YOU"}</p>
+        <h1 style="font-size:25px;font-weight:700;color:${TEXT};margin:0 0 10px;line-height:1.25;">${esc(headline)}</h1>
+        <p style="font-size:15px;color:${MUTED};margin:0 0 18px;line-height:1.65;">${esc(lede)}</p>
+      </td></tr>
+      ${noteBlock}
+      <tr><td style="padding:14px 28px 0;">
+        <div style="border-radius:14px;overflow:hidden;border:1px solid ${BORDER};">
+          <img src="${esc(data.generatedImageUrl)}" alt="Your new design" style="${heroStyle}" />
+        </div>
+      </td></tr>
+      <tr><td style="padding:20px 28px 28px;">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:11px;background:${CLAY_CTA};">
+          <a href="${esc(link)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${data.free ? "See your design" : "View and unlock"}</a>
+        </td></tr></table>
+        ${priceBlock}
+      </td></tr>
+      <tr><td style="padding:0 28px 24px;border-top:1px solid ${BORDER};">
+        <p style="font-size:11px;color:${FAINT};margin:16px 0 0;line-height:1.6;">
+          Sign in with this email address (${esc(data.to)}) to view it.<br />© ${new Date().getFullYear()} Noosho.
+        </p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body></html>`;
+
+  try {
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        from: { address: FROM_ADDRESS, name: FROM_NAME },
+        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
+        subject: data.free
+          ? `A new ${data.eventLabel || "design"} for you — on us 🎁`
+          : `We made you a new ${data.eventLabel || "design"} ✨`,
+        htmlbody: html,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[email] Admin design send failed: ${res.status} ${body.slice(0, 200)}`);
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (e) {
+    console.error("[email] Admin design send threw:", e);
+    return { ok: false };
+  }
+}
+
 export async function sendDesignShareInvite(data: {
   to: string;
   ownerName: string;

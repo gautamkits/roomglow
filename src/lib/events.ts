@@ -1,4 +1,36 @@
 import type { Locale } from "@/lib/locale";
+import type { EventConfig } from "@/lib/types";
+
+/**
+ * The one-paragraph event brief threaded into every AI step (analyze,
+ * recommend, render). A string here vs `undefined` IS the event-vs-room branch
+ * server-side.
+ *
+ * Lives in lib rather than the create-flow hook because the admin
+ * regenerate-and-send path builds it server-side too — both callers must
+ * produce byte-identical context or the two paths would drift.
+ */
+export function buildEventContext(cfg: EventConfig | null): string | undefined {
+  if (!cfg) return undefined;
+  const name = cfg.honoree?.trim();
+  const age = cfg.age?.trim();
+  const honoree = name ? ` It is for ${name}.` : "";
+  const gender =
+    cfg.gender && cfg.gender !== "Either / neutral"
+      ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
+      : "";
+  // Personalisation is the strongest reason a render feels worth paying for —
+  // it's the user's own wall with their own name on it. Spell the wanted text
+  // out exactly so the renderer copies rather than composes it (image models
+  // garble text they have to invent).
+  const milestone = age
+    ? ` The milestone number is ${age} — a large "${age}" foil number is the focal piece of the backdrop.`
+    : "";
+  const signage = name
+    ? ` The backdrop signage must read exactly "Happy ${cfg.eventLabel} ${name}" — render that text once, spelled exactly.`
+    : "";
+  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree}${milestone}${signage} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
+}
 
 export interface EventDefinition {
   id: string;

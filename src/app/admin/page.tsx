@@ -20,6 +20,14 @@ type ApprovedDesign = RevealDesign & {
   original_image_url: string;
 };
 
+interface StoredEventConfig {
+  eventLabel?: string;
+  subTheme?: string;
+  colorScheme?: string;
+  honoree?: string;
+  age?: string;
+}
+
 interface AllDesign {
   id: string;
   mode: string;
@@ -30,9 +38,138 @@ interface AllDesign {
   is_unlocked: boolean;
   gallery_status: string;
   user_email: string | null;
+  user_id: string | null;
+  event_config: StoredEventConfig | null;
 }
 
 const ALL_PAGE = 60;
+
+/**
+ * Regenerate a design for the user who owns it and email it to them, either
+ * free (unlocked on arrival) or locked at the normal price. Event designs get
+ * theme/colour/name/age overrides — those are the knobs that actually change
+ * what the décor recipe sources, so re-rolling without them just repeats the
+ * same brief.
+ */
+function RegenerateSend({ design }: { design: AllDesign }) {
+  const cfg = design.event_config || {};
+  const isEvent = design.mode === "event";
+  const [open, setOpen] = useState(false);
+  const [subTheme, setSubTheme] = useState(cfg.subTheme || "");
+  const [colorScheme, setColorScheme] = useState(cfg.colorScheme || "");
+  const [honoree, setHonoree] = useState(cfg.honoree || "");
+  const [age, setAge] = useState(cfg.age || "");
+  const [note, setNote] = useState("");
+  const [free, setFree] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const send = async () => {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/regenerate-design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          designId: design.id,
+          free,
+          note,
+          overrides: isEvent ? { subTheme, colorScheme, honoree, age } : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to regenerate.");
+      } else {
+        setResult(
+          `Sent to ${data.sentTo} — ${data.productCount} products, ${
+            data.free ? "free" : "locked"
+          }.`
+        );
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!design.user_email) {
+    return (
+      <p className="text-[11px] text-zinc-400 mt-2">
+        Anonymous design — no one to send to.
+      </p>
+    );
+  }
+
+  const field =
+    "w-full px-2 py-1.5 rounded-md text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 outline-none focus:border-orange-700";
+
+  return (
+    <div className="mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-2">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="text-[11px] font-medium text-orange-700 hover:text-orange-800"
+        >
+          Regenerate &amp; send…
+        </button>
+      ) : (
+        <div className="space-y-2">
+          {isEvent && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <input className={field} value={subTheme} onChange={(e) => setSubTheme(e.target.value)} placeholder="Theme" />
+              <input className={field} value={colorScheme} onChange={(e) => setColorScheme(e.target.value)} placeholder="Colours" />
+              <input className={field} value={honoree} onChange={(e) => setHonoree(e.target.value)} placeholder="Name" />
+              <input
+                className={field}
+                value={age}
+                onChange={(e) => setAge(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                inputMode="numeric"
+                placeholder="Age / number"
+              />
+            </div>
+          )}
+          <input className={field} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Personal note in the email (optional)" />
+          <div className="flex items-center gap-3 text-[11px]">
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={free} onChange={() => setFree(true)} />
+              <span className="text-zinc-700 dark:text-zinc-300">Free (unlocked)</span>
+            </label>
+            <label className="flex items-center gap-1 cursor-pointer">
+              <input type="radio" checked={!free} onChange={() => setFree(false)} />
+              <span className="text-zinc-700 dark:text-zinc-300">Paid (locked)</span>
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={send}
+              disabled={busy}
+              className="px-3 py-1.5 rounded-md bg-orange-700 hover:bg-orange-800 text-white text-[11px] font-medium disabled:opacity-50"
+            >
+              {busy ? "Generating…" : `Generate & email ${design.user_email}`}
+            </button>
+            {!busy && (
+              <button onClick={() => setOpen(false)} className="text-[11px] text-zinc-500 hover:text-zinc-700">
+                Cancel
+              </button>
+            )}
+          </div>
+          {busy && (
+            <p className="text-[11px] text-zinc-500">
+              Sourcing products and rendering — this takes a minute or two.
+            </p>
+          )}
+          {result && <p className="text-[11px] text-green-700 dark:text-green-400">{result}</p>}
+          {error && <p className="text-[11px] text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AdminContent() {
   const { data: session, status } = useSession();
@@ -367,17 +504,16 @@ function AdminContent() {
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-3 gap-5">
                 {all.map((d) => (
-                  <a
+                  <div
                     key={d.id}
-                    href={`/design/${d.id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden hover:border-orange-700 transition-colors"
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden"
                   >
-                    <div className="grid grid-cols-2">
-                      <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
-                      <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
-                    </div>
+                    <a href={`/design/${d.id}`} target="_blank" rel="noreferrer" className="block">
+                      <div className="grid grid-cols-2">
+                        <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
+                        <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+                      </div>
+                    </a>
                     <div className="p-3">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] uppercase tracking-wide text-zinc-400">
@@ -405,8 +541,9 @@ function AdminContent() {
                       <p className="text-[11px] text-zinc-400 mt-0.5">
                         {new Date(d.created_at).toLocaleString()}
                       </p>
+                      <RegenerateSend design={d} />
                     </div>
-                  </a>
+                  </div>
                 ))}
               </div>
               {allHasMore && (
