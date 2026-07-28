@@ -508,8 +508,6 @@ STAGING — make it look like a real event about to start:
       ? `
 
 ROOM PRESERVATION — this is a FURNISHED ROOM. Decorate it; do NOT restage it:
-- The layout is FIXED. Every existing item stays EXACTLY where it is, at its exact size, angle and position: sofa, chairs, tables, TV, console, shelves, lamps, rugs, plants, curtains, blinds, windows and doors. Do NOT move, rotate, resize, replace, remove, hide or re-arrange any of them, and never swap one for a different item.
-- Do NOT change the camera position, framing or perspective, and do not redraw or re-imagine the room.
 - Fit the decorations into the wall and surface space that ALREADY exists — above and between the existing furniture. If there is not enough clear wall for a full-size backdrop, use a smaller one or hang it off-centre. NEVER clear, move or cover furniture, windows or curtains to make room for a decoration.
 - The finished image must be recognisably the SAME room as Image 1, photographed from the same spot, with decorations added to it.`
       : "";
@@ -599,38 +597,59 @@ TEXT & PERSONALISATION:
     }`,
   });
 
-  // Step 1: Generate the redesigned room image
-  const imageResponse = await ai.models.generateContent({
-    model: "gemini-3.1-flash-image",
-    contents: [{ role: "user", parts }],
-    config: {
-      responseModalities: ["TEXT", "IMAGE"],
-    },
-  });
-
-  // Extract generated image from response
-  let generatedImageBase64 = "";
-  const candidates = imageResponse.candidates;
-  if (candidates && candidates.length > 0) {
-    const responseParts = candidates[0].content?.parts;
-    if (responseParts) {
-      for (const part of responseParts) {
-        if (part.inlineData?.data) {
-          generatedImageBase64 = part.inlineData.data;
-          break;
-        }
-      }
+  // Step 1: Generate the redesigned room image.
+  //
+  // The model intermittently answers with TEXT only and no image part — a
+  // refusal, a safety block, or it "explaining" instead of rendering. That used
+  // to surface as a bare "couldn't be rendered" with no clue why, because the
+  // text part was discarded. Capture finishReason + the text so the admin alert
+  // says what actually happened.
+  async function renderOnce(): Promise<{
+    image: string;
+    finishReason: string;
+    text: string;
+  }> {
+    const res = await ai.models.generateContent({
+      model: "gemini-3.1-flash-image",
+      contents: [{ role: "user", parts }],
+      config: { responseModalities: ["TEXT", "IMAGE"] },
+    });
+    const candidate = res.candidates?.[0];
+    const responseParts = candidate?.content?.parts ?? [];
+    let image = "";
+    const texts: string[] = [];
+    for (const part of responseParts) {
+      if (!image && part.inlineData?.data) image = part.inlineData.data;
+      if (part.text) texts.push(part.text);
     }
+    return {
+      image,
+      finishReason: String(candidate?.finishReason ?? "unknown"),
+      text: texts.join(" ").trim(),
+    };
   }
 
-  // If the model returned no image (refusal, safety filter, overloaded composite,
-  // timeout), do NOT silently save the untouched original — that ships a "design"
-  // that did nothing to the photo (and wastes the user's unlock). Throw so the
-  // pipeline surfaces an error + offers a retry (the model is flaky, so a retry
-  // usually succeeds), and admins get alerted via the route's notifyAdminError.
+  let attempt = await renderOnce();
+  // One automatic retry. The failure is usually transient, and until now the
+  // user had to notice the error and press "Try again" themselves — on a paid
+  // step, after already waiting through the whole pipeline.
+  if (!attempt.image) {
+    console.warn(
+      `[generateDesignImage] no image (finishReason=${attempt.finishReason}) — retrying once. Model said: ${attempt.text.slice(0, 300)}`
+    );
+    attempt = await renderOnce();
+  }
+
+  const generatedImageBase64 = attempt.image;
+
+  // Still nothing: do NOT silently save the untouched original — that ships a
+  // "design" that did nothing to the photo (and wastes the user's unlock).
+  // Throw so the pipeline surfaces an error + offers a retry. The route shows
+  // the user a generic message and emails admins this one, so put the
+  // diagnostics here.
   if (!generatedImageBase64) {
     throw new Error(
-      "The design couldn't be rendered this time. Please try again."
+      `The design couldn't be rendered this time. Please try again. [finishReason=${attempt.finishReason}; model said: ${attempt.text.slice(0, 400) || "(nothing)"}]`
     );
   }
 
