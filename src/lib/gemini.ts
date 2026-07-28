@@ -475,8 +475,9 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `
 
 BACKDROP COMPOSITION — this is ONE installation, not scattered items:
-- Build a single cohesive backdrop centred on the main focal wall, the way a professional party stylist would. If the photo shows only a wall, that wall IS the backdrop — fill it as one composed setup.
-- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) any table or props at the base, tucked against the wall.
+- Build a single cohesive backdrop, the way a professional party stylist would.
+- Choosing the backdrop wall: if the photo shows a FURNISHED ROOM, build the backdrop on the clearest, most photogenic wall — typically behind the sofa, bed or main table — and leave the rest of the room exactly as it is. Do NOT drape the backdrop over a TV, shelving, a window or artwork; work around them, or use a clearer wall. If the photo shows only a BARE WALL, that wall IS the backdrop — fill it as one composed setup.
+- Layer back to front: (1) the backdrop cloth/panel flat against the wall as the anchor; (2) the balloon or flower garland sweeping ASYMMETRICALLY across it — dense and organic, entering at one top corner, arcing over the panel and cascading down one side, with clustered items of varied size; never a thin even line, an evenly spaced row, or a symmetrical border; (3) the focal piece centred at standing eye level; (4) hanging danglers and lights adding depth above and around; (5) props at the base, tucked against the wall — and if a table or surface ALREADY exists in front of that wall, dress it as part of the setup. Never invent furniture that isn't in the photo.
 - The finished setup must read as ONE piece with a clear focal centre. Do NOT spread items evenly across the wall like wallpaper or a grid.
 - Keep the area directly in front of the backdrop clear, so people can stand there and be photographed.
 
