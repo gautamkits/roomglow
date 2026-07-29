@@ -1,5 +1,42 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import sharp from "sharp";
 import type { RoomAnalysis, RoomGeometry } from "./types";
+
+// Aspect ratios gemini-3.1-flash-image accepts (SDK ImageConfig).
+const SUPPORTED_ASPECTS: ReadonlyArray<readonly [string, number]> = [
+  ["1:1", 1], ["2:3", 2 / 3], ["3:2", 3 / 2], ["3:4", 3 / 4],
+  ["4:3", 4 / 3], ["9:16", 9 / 16], ["16:9", 16 / 9], ["21:9", 21 / 9],
+];
+
+/** Nearest supported ratio, compared in log space so 2:3 vs 3:2 aren't mixed up. */
+function nearestAspect(width: number, height: number): string {
+  const r = width / height;
+  let best = SUPPORTED_ASPECTS[0];
+  for (const cand of SUPPORTED_ASPECTS) {
+    if (Math.abs(Math.log(cand[1] / r)) < Math.abs(Math.log(best[1] / r))) best = cand;
+  }
+  return best[0];
+}
+
+/**
+ * Pin the output to the input photo's shape.
+ *
+ * Without this the model picks its own aspect ratio, and it drifts hard when
+ * reference product images are attached — a 576x1024 room photo with 7 (mostly
+ * square) Amazon catalog images came back 1030x1024, a 79% drift. Widening the
+ * frame forces the model to invent scene beyond the photo's edges, which is
+ * where phantom windows and re-proportioned rooms come from. Measured locally;
+ * costs no extra API call.
+ */
+async function aspectOf(imageBase64: string): Promise<string | undefined> {
+  try {
+    const meta = await sharp(Buffer.from(imageBase64, "base64")).metadata();
+    if (meta.width && meta.height) return nearestAspect(meta.width, meta.height);
+  } catch {
+    // Unreadable header — fall through and let the model choose, as before.
+  }
+  return undefined;
+}
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 
@@ -133,8 +170,13 @@ Fill in:
 
 CRITICAL RULES for suggestedProducts:
 - Suggest ONLY event DECORATIONS appropriate to the occasion and theme — NOT permanent furniture
-- Think in decoratable ZONES you can see: focal/backdrop wall, table surfaces, entryway, floor & ceiling for hanging items
-- Examples: balloon sets/arches, themed backdrop or banner, fairy/string lights, table centerpiece, garlands, themed props, cake-table decor, welcome sign
+- ONLY suggest decorations that fit a surface VISIBLE in THIS photo. Never invent a surface, and never suggest something that needs one the photo does not show:
+  - NEVER suggest ceiling-hung décor of ANY kind — no hanging lanterns, swirls, danglers, pom-poms, streamers from the ceiling, or ceiling balloons. Wall, floor and table décor ONLY. This rule is absolute: apply it even if the ceiling or a ceiling fan appears visible.
+  - Do NOT suggest a table centerpiece, dessert-table or cake-table decor unless a table is clearly visible. Never invent a table, dessert stand or cake table that is not already in the photo.
+  - Do NOT suggest a full-wall backdrop unless a clear, largely unobstructed wall is visible — otherwise suggest a smaller banner sized to the wall space that actually exists
+  - Do NOT suggest anything requiring structural changes, new fixtures, or rearranging the room
+- Think in decoratable ZONES you can actually see: focal/backdrop wall, table surfaces, entryway
+- Examples, but only where the matching surface is visible: balloon sets/arches, themed backdrop or banner, fairy/string lights, table centerpiece, garlands, themed props, cake-table decor, welcome sign
 - Match the theme and colors specified above
 - Each "description" must reference a zone you ACTUALLY see in the photo (e.g. "balloon arch for the bare wall behind the sofa")
 - "icon" is a single relevant emoji character
@@ -540,6 +582,8 @@ CRITICAL TEXT RULE:
   // refusal, a safety block, or it "explaining" instead of rendering. The text
   // part used to be discarded, so the admin alert couldn't say which. Capture
   // finishReason + the text so the next failure is diagnosable.
+  const aspectRatio = await aspectOf(roomImageBase64);
+
   async function renderOnce(): Promise<{
     image: string;
     finishReason: string;
@@ -548,7 +592,10 @@ CRITICAL TEXT RULE:
     const res = await ai.models.generateContent({
       model: "gemini-3.1-flash-image",
       contents: [{ role: "user", parts }],
-      config: { responseModalities: ["TEXT", "IMAGE"] },
+      config: {
+        responseModalities: ["TEXT", "IMAGE"],
+        ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
+      },
     });
     const candidate = res.candidates?.[0];
     const responseParts = candidate?.content?.parts ?? [];

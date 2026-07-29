@@ -42,3 +42,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# Local render harness output (scripts/render-test.ts)
+.render-test/
