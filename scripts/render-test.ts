@@ -18,16 +18,9 @@
  *   npx tsx scripts/render-test.ts "<blob-url>" --analyze --runs=0   # analyze only, ~free
  *   npx tsx scripts/render-test.ts <photo> --analyze                 # analyze + 1 render
  *   npx tsx scripts/render-test.ts <photo> --runs=3                  # check consistency
- *   npx tsx scripts/render-test.ts <photo> --analyze --recommend --runs=0
- *   npx tsx scripts/render-test.ts <photo> --analyze --occasion=ganesh_chaturthi --runs=0
  *
  * --runs=0 skips image generation entirely, so the analyzer can be tested for
  * roughly nothing (one gemini-2.5-flash call) before spending on a render.
- *
- * --recommend adds the recommendProducts step — the stage that turns suggestions
- * into Amazon search queries. It is where a "balloon arch kit 200 pcs" query is
- * born, and it was untested by anything before this flag existed. Still only
- * gemini-2.5-flash, so it stays in the ~free tier with --runs=0.
  *
  * Output lands in .render-test/ (gitignored).
  */
@@ -35,7 +28,6 @@ import dotenv from "dotenv";
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { basename, extname } from "path";
 import sharp from "sharp";
-import { buildEventContext, getEvent } from "../src/lib/events";
 
 // Must load before importing gemini.ts — it reads GOOGLE_AI_API_KEY at module
 // load time, and ESM imports hoist above ordinary statements.
@@ -48,11 +40,7 @@ if (!process.env.GOOGLE_AI_API_KEY) {
 const args = process.argv.slice(2);
 const photoArg = args.find((a) => !a.startsWith("--"));
 if (!photoArg) {
-  console.error(
-    "Usage: npx tsx scripts/render-test.ts <photo> [--analyze] [--recommend] [--amazon]\n" +
-      "       [--occasion=birthday] [--theme=Jungle] [--colors=\"Pastel mix\"] [--locale=IN]\n" +
-      "       [--products=N] [--runs=N]"
-  );
+  console.error("Usage: npx tsx scripts/render-test.ts <photo> [--products=N] [--event=birthday] [--runs=N]");
   process.exit(1);
 }
 // Re-bind so the type is `string` inside main() — TS doesn't carry the
@@ -64,18 +52,8 @@ const flag = (name: string, dflt: string) =>
 const productCount = parseInt(flag("products", "6"), 10);
 const eventName = flag("event", "birthday");
 const runs = parseInt(flag("runs", "1"), 10);
-// Which EVENTS entry to build the brief from. Festivals decorate nothing like
-// birthdays, so a change that looks fine on a birthday can still wreck
-// ganesh_chaturthi — that case needs to be runnable.
-const occasionId = flag("occasion", "birthday");
-const subTheme = flag("theme", "Jungle");
-const colorScheme = flag("colors", "Pastel mix");
-const locale = flag("locale", "IN") === "US" ? "US" : "IN";
 // Run analyzeRoom first and use its suggestions, instead of the hardcoded list.
 const useAnalyze = args.includes("--analyze");
-// Run recommendProducts on the suggestions and print the Amazon queries it
-// writes (implies --analyze). gemini-2.5-flash only — no image cost.
-const useRecommend = args.includes("--recommend");
 // Resolve suggestions to real Amazon products and render with their catalog
 // photos as references (implies --analyze). Needs RAPIDAPI_KEY.
 const useAmazon = args.includes("--amazon");
@@ -94,53 +72,9 @@ const PRODUCTS = [
   { category: "Themed props", placement: "against the base of the main wall", title: `${eventName} party props cutouts`, colorSuggestion: "themed", imageUrl: "" },
 ].slice(0, productCount);
 
-/**
- * The event brief, built by PRODUCTION's own buildEventContext.
- *
- * This used to be a hardcoded copy of that string, and it had already drifted —
- * it was missing the "never another country's version of the same-named holiday"
- * clause added in 515d180. A harness testing a stale copy of the prompt tests
- * nothing, so call the real thing. events.ts reads no env, so importing it at
- * module scope is safe (unlike gemini.ts, see the dotenv note above).
- */
-const event = getEvent(occasionId);
-if (!event) {
-  console.error(`Unknown --occasion=${occasionId}. See EVENTS in src/lib/events.ts.`);
-  process.exit(1);
-}
-const EVENT_CONTEXT = buildEventContext({
-  eventType: event.id,
-  eventLabel: event.label,
-  subTheme,
-  colorScheme,
-})!;
-
-/**
- * Families the décor should be drawn from. Reported per run so a prompt change
- * can be judged on what it produced, not just on what it stopped producing —
- * a design with zero balloons and zero of these is a regression, not a win.
- * Tested against non-balloon suggestions only, so "balloon garland" cannot
- * count as a floral.
- */
-const FAMILIES: [string, RegExp][] = [
-  ["fabric", /fabric|drape|backdrop|curtain|cloth|skirt|runner|sheer|satin/i],
-  ["floral", /floral|flower|marigold|genda|garland|toran|greenery|leaf|vase|petal/i],
-  ["lights", /light|lantern|diya|candle|fairy|led|lamp/i],
-  ["paper", /paper|honeycomb|fan|tassel|bunting|banner|cutout|sign|standee|rangoli|decal|streamer/i],
-];
-
-/**
- * Query shapes that mean hours of inflation for the user. Two kinds:
- * explicit bulk packs, and balloon STRUCTURES — "balloon arch" contains no
- * piece count and reads innocent, but an arch is 100+ balloons by definition.
- */
-const BANNED_QUERY =
-  /arch kit|garland kit|combo kit|\b\d{2,}\s*(pcs|pieces|pc)\b|balloon\s*(arch|garland|wall|pillar|column|backdrop)/i;
-
-/** Is this suggestion itself a balloon product? Matched on the LABEL only — a
- *  fairy-light item whose description says "outline the balloon arch" is not a
- *  balloon slot, and counting it as one hides the real number. */
-const isBalloon = (s: { label: string }) => /balloon/i.test(s.label);
+const EVENT_CONTEXT =
+  `This space will host a Birthday with a "${eventName}" theme using a pastel color scheme. ` +
+  `All signage and décor must match a Birthday — never a different occasion.`;
 
 /** Accept a local path or a URL — the stored original of a real design is a public Blob link. */
 async function loadPhoto(src: string): Promise<Buffer> {
@@ -173,12 +107,9 @@ async function main() {
   if (useAnalyze) {
     const started = Date.now();
     const raw = await analyzeRoom(inputBuf.toString("base64"), EVENT_CONTEXT);
-    // Keep the WHOLE analysis, not two fields — --recommend feeds it back into
-    // recommendProducts, which reads roomType/currentStyle/dimensions/lighting.
     const analysis = JSON.parse(raw) as {
       existingFurniture?: string[];
       suggestedProducts?: { label: string; description: string }[];
-      [k: string]: unknown;
     };
     const suggested = analysis.suggestedProducts ?? [];
     console.log(`analyze   ${suggested.length} suggestions in ${((Date.now() - started) / 1000).toFixed(1)}s`);
@@ -199,28 +130,6 @@ async function main() {
         ? `\n⚠  ${risky.length} suggestion(s) need a ceiling/table surface: ${risky.map((r) => r.label).join(", ")}`
         : `\n✓  no ceiling/table-dependent suggestions`
     );
-
-    // Balloon budget. These prompts are stochastic, so one run proves nothing —
-    // run this 5+ times and compare the counts, not a single verdict.
-    const balloons = suggested.filter(isBalloon);
-    console.log(
-      balloons.length <= 1
-        ? `✓  balloons ${balloons.length}/${suggested.length} suggestions (cap 1)`
-        : `✗  BALLOON CAP EXCEEDED — ${balloons.length}/${suggested.length} suggestions: ${balloons.map((b) => b.label).join(", ")}`
-    );
-
-    // What replaced the balloon volume. Zero balloons AND zero families means
-    // the design went sparse, which is the regression this change risks most.
-    const nonBalloon = suggested.filter((s) => !isBalloon(s));
-    const present = FAMILIES.filter(([, re]) =>
-      nonBalloon.some((s) => re.test(`${s.label} ${s.description}`))
-    ).map(([name]) => name);
-    console.log(
-      present.length
-        ? `${present.length >= 2 ? "✓" : "⚠"}  families ${present.length}/4: ${present.join(", ")}`
-        : `✗  NO alternative décor families present — design will look sparse`
-    );
-
     products = suggested.map((s) => ({
       category: s.label,
       placement: s.description,
@@ -228,56 +137,6 @@ async function main() {
       colorSuggestion: "themed",
       imageUrl: "",
     }));
-
-    // --recommend: the missing middle. Production turns these suggestions into
-    // Amazon SEARCH QUERIES via recommendProducts, and that is what decides what
-    // the user actually buys — a "balloon arch kit 200 pcs" query is 200 balloons
-    // to inflate no matter how restrained the render looks. Nothing tested this
-    // stage before. Text model only, so it is ~free.
-    if (useRecommend) {
-      const { recommendProducts } = await import("../src/lib/gemini");
-      const started2 = Date.now();
-      const recRaw = await recommendProducts(
-        analysis as never,
-        {},
-        suggested.map((s) => s.label),
-        EVENT_CONTEXT,
-        [],
-        locale
-      );
-      const rec = JSON.parse(recRaw) as {
-        products?: { category: string; searchQuery: string; placement: string }[];
-        designVision?: string;
-      };
-      const recs = rec.products ?? [];
-      console.log(`\nrecommend ${recs.length} products in ${((Date.now() - started2) / 1000).toFixed(1)}s  (${locale})`);
-      for (const p of recs) {
-        const bad = BANNED_QUERY.test(p.searchQuery);
-        console.log(`   ${bad ? "✗" : " "} ${p.category}\n       -> "${p.searchQuery}"  @ ${p.placement}`);
-      }
-      const balloonQ = recs.filter((p) => /balloon/i.test(p.searchQuery));
-      const bannedQ = recs.filter((p) => BANNED_QUERY.test(p.searchQuery));
-      // PLACEMENTS, not just queries. analyzeRoom carries the ceiling ban and
-      // its own detector above covers that, but recommendProducts writes the
-      // placement text and had no ceiling rule at all — two photos came back
-      // "suspended from the ceiling" and this check was blind to it.
-      const ceilingP = recs.filter((p) => /ceiling|suspend|hang(ing)? from/i.test(p.placement));
-      console.log(
-        ceilingP.length
-          ? `✗  CEILING PLACEMENTS: ${ceilingP.map((p) => p.category).join(", ")}`
-          : `✓  no ceiling placements`
-      );
-      console.log(
-        balloonQ.length <= 1
-          ? `✓  balloon queries ${balloonQ.length}/${recs.length} (cap 1)`
-          : `✗  BALLOON QUERY CAP EXCEEDED — ${balloonQ.length}/${recs.length}`
-      );
-      console.log(
-        bannedQ.length
-          ? `✗  BULK-PACK QUERIES: ${bannedQ.map((p) => `"${p.searchQuery}"`).join(", ")}`
-          : `✓  no bulk-pack queries (arch kit / garland kit / NN pcs)`
-      );
-    }
 
     // --amazon: resolve each suggestion to a real Amazon product and use its
     // catalog photo as the render reference, like production does. Also PROBES
@@ -289,9 +148,9 @@ async function main() {
       const { searchProducts } = await import("../src/lib/amazon");
       const resolved: typeof products = [];
       let imgFail = 0;
-      console.log(`\nresolving to real Amazon products (locale ${locale})…`);
+      console.log(`\nresolving to real Amazon products (locale IN)…`);
       for (const s of suggested) {
-        const cands = await searchProducts(s.label, 5, locale);
+        const cands = await searchProducts(s.label, 5, "IN");
         const top = cands[0];
         if (!top) {
           console.log(`   ✗ no Amazon result — ${s.label}`);
