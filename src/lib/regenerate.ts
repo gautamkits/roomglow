@@ -87,7 +87,8 @@ export async function regenerateDesign(opts: {
     {},
     opts.selectedItems,
     eventContext,
-    []
+    [],
+    opts.locale
   );
   const { products: recs, designVision } = parseJsonish<{
     products: ProductRecommendation[];

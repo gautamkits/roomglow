@@ -32,8 +32,13 @@ export async function getCompletionProducts(
   // subTheme used to only enter the cache key — feeding it into the query keeps
   // the suggestions on-theme ("unicorn birthday cake topper", not a generic one).
   const theme = subTheme?.trim().toLowerCase();
+  // Drop items that don't belong in this marketplace — an event can ship to both
+  // markets while an individual buyable is market-specific.
+  const items = event.completionItems.filter(
+    (item) => !item.markets || item.markets.includes(locale)
+  );
   const results = await Promise.all(
-    event.completionItems.map(async (item) => {
+    items.map(async (item) => {
       const themed = theme ? `${theme} ${item.query}` : item.query;
       // Themed queries are narrower and can come back empty on a niche combo,
       // so fall back to the plain query rather than dropping the category.

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { recommendProducts } from "@/lib/gemini";
+import { localeFromRequest } from "@/lib/locale";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -16,12 +17,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
     }
 
+    // Same locale the downstream /api/search-products call uses, so the query
+    // wording matches the marketplace it will actually be searched against.
     const recommendationsJson = await recommendProducts(
       roomAnalysis,
       userAnswers,
       selectedProductTypes || [],
       eventContext,
-      Array.isArray(removeLabels) ? removeLabels : []
+      Array.isArray(removeLabels) ? removeLabels : [],
+      localeFromRequest(request)
     );
     const recommendations = JSON.parse(recommendationsJson);
 

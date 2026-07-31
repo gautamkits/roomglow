@@ -1,6 +1,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import sharp from "sharp";
 import type { RoomAnalysis, RoomGeometry } from "./types";
+import type { Locale } from "./locale";
+
+/**
+ * How to name the user's Amazon marketplace inside a prompt. Every prompt that
+ * asks the model for a search query must go through this — hardcoding "Amazon
+ * India" sent US shoppers India-flavoured queries.
+ */
+function marketplaceName(locale: string | undefined): string {
+  return locale === "US" ? "Amazon US" : "Amazon India";
+}
 
 // Aspect ratios gemini-3.1-flash-image accepts (SDK ImageConfig).
 const SUPPORTED_ASPECTS: ReadonlyArray<readonly [string, number]> = [
@@ -879,7 +889,7 @@ export async function recommendMakeoverExtras(
 ): Promise<{ items: { category: string; query: string }[] }> {
   const genderWord =
     gender === "Women" ? "women's" : gender === "Men" ? "men's" : "unisex";
-  const marketplace = locale === "US" ? "Amazon US" : "Amazon India";
+  const marketplace = marketplaceName(locale);
 
   const prompt = `You are an expert personal stylist finishing a "${styleLabel}" look for a ${genderWord} outfit.
 
@@ -1059,8 +1069,13 @@ export async function recommendProducts(
   // Items the user chose to remove in the tidy-up step. They are gone from the
   // canvas, so recommendations must treat them as absent (and may fill the
   // freed space).
-  removeLabels: string[] = []
+  removeLabels: string[] = [],
+  // Which Amazon marketplace the search queries are written for. Defaults to IN
+  // to match `searchProducts`, but every caller should pass the real locale —
+  // the query wording, not just the marketplace routing, has to match.
+  locale: Locale = "IN"
 ): Promise<string> {
+  const marketplace = marketplaceName(locale);
   const productTypesList =
     selectedProductTypes.length > 0
       ? `\nThe user has specifically requested these item types: ${selectedProductTypes.join(", ")}. You MUST include one product for each of these types. You may suggest additional complementary items if needed.`
@@ -1095,7 +1110,7 @@ Think like a professional designer:
 
 For each product provide:
 - category: specific product type, e.g. 'geometric patterned area rug'
-- searchQuery: SHORT Amazon India search query (3-5 words max, e.g. 'geometric rug grey yellow'). Keep it generic enough to find results.
+- searchQuery: SHORT ${marketplace} search query (3-5 words max, e.g. 'geometric rug grey yellow'). Keep it generic enough to find results.
 - placement: where in the room, e.g. 'center of the room in front of the sofa'
 - reason: why this product improves the space and how it connects to the others
 - colorSuggestion: specific color/finish, e.g. 'grey with mustard yellow accents'
@@ -1115,7 +1130,7 @@ Think like a professional party stylist:
 
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
-- searchQuery: SHORT Amazon India search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
+- searchQuery: SHORT ${marketplace} search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
 - placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme

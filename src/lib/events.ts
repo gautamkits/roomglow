@@ -57,7 +57,10 @@ export interface EventDefinition {
   askHonoree?: boolean;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
-  completionItems?: { category: string; query: string }[];
+  // `markets` narrows an individual item within an event that itself ships to
+  // both markets (a housewarming pooja kit means nothing to a US shopper);
+  // omit it and the item shows everywhere the event does.
+  completionItems?: { category: string; query: string; markets?: Locale[] }[];
 }
 
 export const EVENTS: EventDefinition[] = [
@@ -320,7 +323,7 @@ export const EVENTS: EventDefinition[] = [
     completionItems: [
       { category: "Gift", query: "housewarming gift" },
       { category: "Indoor plant", query: "indoor plant" },
-      { category: "Pooja kit", query: "pooja samagri kit" },
+      { category: "Pooja kit", query: "pooja samagri kit", markets: ["IN"] },
       { category: "Scented candles", query: "scented candle set" },
       { category: "Doormat", query: "welcome doormat" },
     ],
