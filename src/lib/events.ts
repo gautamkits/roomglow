@@ -417,7 +417,7 @@ export const EVENTS: EventDefinition[] = [
     icon: "❤️",
     subThemes: ["Romantic", "Floral", "Modern minimal", "Galentine's"],
     colorSchemes: ["Red & pink", "Blush & gold", "Burgundy", "White & rose"],
-    markets: ["US"],
+    markets: ["IN", "US"],
     season: { month: 2, day: 14 },
     askHonoree: true, // Valentine's is for a partner
     completionItems: [
@@ -426,6 +426,9 @@ export const EVENTS: EventDefinition[] = [
       { category: "Chocolates", query: "chocolate gift box" },
       { category: "Card", query: "valentine greeting card" },
       { category: "Jewelry", query: "valentine jewelry gift" },
+      // Teddy Day is part of Valentine's Week in India — a soft toy is the
+      // archetypal gift there and barely registers in the US.
+      { category: "Soft toy", query: "teddy bear gift", markets: ["IN"] },
     ],
   },
   {
@@ -434,7 +437,7 @@ export const EVENTS: EventDefinition[] = [
     icon: "🎉",
     subThemes: ["Gold glam", "Black tie", "Confetti party", "Minimal chic"],
     colorSchemes: ["Black & gold", "Silver & white", "Rose gold", "Midnight blue"],
-    markets: ["US"],
+    markets: ["IN", "US"],
     season: { month: 12, day: 31 },
     completionItems: [
       { category: "Party supplies", query: "new years eve party supplies" },
@@ -449,14 +452,18 @@ export const EVENTS: EventDefinition[] = [
     label: "Graduation",
     icon: "🎓",
     subThemes: ["Classic", "Modern", "Floral", "Bold"],
+    // "School colors" is a US tradition; India reads the same slot as convocation
+    // regalia, so keep both and let the user pick.
     colorSchemes: ["Black & gold", "School colors", "Navy & silver", "Pastel"],
-    markets: ["US"],
+    markets: ["IN", "US"],
     completionItems: [
       { category: "Gift", query: "graduation gift" },
       { category: "Party supplies", query: "graduation party supplies" },
       { category: "Photo props", query: "graduation photo props" },
       { category: "Flowers", query: "graduation flower bouquet" },
       { category: "Card", query: "graduation card" },
+      // Indian convocations centre on the sash/stole rather than the US cap-toss.
+      { category: "Convocation sash", query: "convocation graduation stole", markets: ["IN"] },
     ],
   },
 ];
