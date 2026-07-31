@@ -19,7 +19,7 @@ import { getEvents } from "@/lib/events";
 import { getClientLocale, type Locale } from "@/lib/locale";
 
 const EVENT_HOOKS: Record<string, string> = {
-  birthday: "Balloon arches, backdrops & themed décor",
+  birthday: "Backdrops, fairy lights & themed décor",
   anniversary: "Romantic, elegant celebration setups",
   baby_shower: "Sweet, cohesive welcome themes",
   annaprasan: "Traditional rice-ceremony décor",
@@ -214,7 +214,7 @@ export default function Landing({ onStart }: { onStart?: () => void } = {}) {
             </h2>
             <p className="text-zinc-500">
               Upload a photo of your venue and get a themed decoration plan —
-              balloons, backdrops, lights and more — every item shoppable in one
+              backdrops, florals, lights and more — every item shoppable in one
               tap.
             </p>
           </div>

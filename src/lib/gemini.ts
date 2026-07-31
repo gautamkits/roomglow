@@ -12,6 +12,28 @@ function marketplaceName(locale: string | undefined): string {
   return locale === "US" ? "Amazon US" : "Amazon India";
 }
 
+/**
+ * Balloon budget, shared by the three event prompts.
+ *
+ * Users told us the designs were unbuildable: hundreds of balloons, hours of
+ * inflation, and a burst balloon ruins the setup. Measuring with
+ * scripts/render-test.ts showed the count of balloon SUGGESTIONS was already
+ * about one — the damage came from that one slot being a STRUCTURE. "Balloon
+ * arch" and "balloon column" carry no piece count and read innocent, but they
+ * are 100+ balloons by definition, and everything else then gets composed
+ * around them ("woven through the balloon arch"). So the lever is the noun,
+ * not the number.
+ *
+ * Deliberately NOT in buildEventContext: that string is built in the browser
+ * and POSTed in (so a stale PWA bundle would ship a stale policy), and it lands
+ * inside the render intro — the prompt whose length has twice traded against
+ * room fidelity (see the reverts in 4ace108 and d5cf7a7).
+ *
+ * Lowercase start so each site can prefix its own label.
+ */
+const BALLOON_CAP =
+  "balloons are an ACCENT, never the structure — at most ONE small balloon feature in the whole design (a single cluster no wider than a seat cushion, or a pair of floor-standing balloon stands; about 25 balloons in total, never more). NEVER a balloon arch, balloon garland, balloon column, balloon pillar, balloon wall or balloon ceiling. Any ARCH or covered focal wall must be built from draped fabric, a floral or greenery garland, or a light-wrapped frame instead.";
+
 // Aspect ratios gemini-3.1-flash-image accepts (SDK ImageConfig).
 const SUPPORTED_ASPECTS: ReadonlyArray<readonly [string, number]> = [
   ["1:1", 1], ["2:3", 2 / 3], ["3:2", 3 / 2], ["3:4", 3 / 4],
@@ -186,9 +208,16 @@ CRITICAL RULES for suggestedProducts:
   - Do NOT suggest a full-wall backdrop unless a clear, largely unobstructed wall is visible — otherwise suggest a smaller banner sized to the wall space that actually exists
   - Do NOT suggest anything requiring structural changes, new fixtures, or rearranging the room
 - Think in decoratable ZONES you can actually see: focal/backdrop wall, table surfaces, entryway
-- Examples, but only where the matching surface is visible: balloon sets/arches, themed backdrop or banner, fairy/string lights, table centerpiece, garlands, themed props, cake-table decor, welcome sign
+- Examples, but only where the matching surface is visible — draw MOST of your list from these four families:
+  (a) FABRIC: draped backdrop cloth, shimmer or curtain panels, table skirting, table runner
+  (b) FLORALS & GREENERY: marigold / genda phool garlands, artificial flower-wall panels, flower or leaf toran across a door frame, vase and table arrangements
+  (c) LIGHTS & LANTERNS: fairy / string lights run along wall edges and furniture, diyas or candles on tables and ledges, floor-standing or table lanterns
+  (d) PAPER & QUICK DÉCOR: honeycomb balls and paper fans mounted flat on a wall, tassel garland or bunting strung wall-to-wall, themed cutouts, name / number signage, standee, welcome sign, rangoli or floor decal at an entryway
+- BALLOON BUDGET: ${BALLOON_CAP} Exactly ONE of your suggestions may be a balloon item, and one is welcome — make it a small balloon cluster or a foil number / letter / theme balloon set. Spend every other slot on the families above. Never suggest a balloon arch, balloon column, balloon garland kit, balloon wall, or a 50+ piece balloon pack, and never describe another item as attached to or arranged around one.
+- COVERAGE: whatever covers the focal wall is the design's main visual mass. When a clear, largely unobstructed wall IS visible, one suggestion must be a large fabric backdrop, flower-wall panel, or a banner sized to that wall — this is what replaces the balloon arch. When no such wall is visible, do not invent one (see the rule above); spread the décor across the door frame, table surfaces and perimeter instead.
+- Everything you suggest must fix to a WALL, a DOOR FRAME, a TABLE or a LEDGE, or stand on the FLOOR against a wall or in a corner. A garland or toran fixed across a door frame or a wall is wall décor and is fine; the same garland swagged from the ceiling is not. Rangoli and flat floor decals lie flush with the floor, are not obstacles, and may go at an entryway.
 - Match the theme and colors specified above
-- Each "description" must reference a zone you ACTUALLY see in the photo (e.g. "balloon arch for the bare wall behind the sofa")
+- Each "description" must reference a zone you ACTUALLY see in the photo (e.g. "draped fabric backdrop for the bare wall behind the sofa", "marigold toran across the visible door frame")
 - "icon" is a single relevant emoji character
 - "id" is a short snake_case identifier`;
 
@@ -514,7 +543,7 @@ Decorate this EXACT space for the event. This is a STRICT photo editing task —
 Edit the room photo to add these products. This is a STRICT photo editing task.`;
 
   const addLine = eventContext
-    ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — balloon arches/clusters on the focal wall, backdrop behind the main area, centerpiece on the table, fairy lights along edges:`
+    ? `ONLY ADD these decorations (use their EXACT appearance from the product images), placed naturally — the backdrop or fabric drape on the focal wall, garlands and lights along wall edges and door frames, centerpiece on the table, floor-standing pieces tucked into corners:`
     : `ONLY ADD these products (use their EXACT appearance from the product images):`;
 
   // Events only. The model reads "floor" as any open surface and treats the
@@ -525,6 +554,17 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
     ? `
 
 FLOOR CLEARANCE & WALKWAY RULE: Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props placed on the floor must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter items loose across open floor areas or pathways where people would walk.`
+    : "";
+
+  // Events only. This prompt used to name "balloon arches/clusters on the focal
+  // wall" in addLine, so the renderer drew them on EVERY event design whether or
+  // not a balloon product had been curated. Kept SHORT on purpose: this prompt's
+  // length has twice traded against room fidelity (4ace108, d5cf7a7), and the
+  // real cap is upstream anyway — the renderer can only draw what it is handed.
+  const balloonBudget = eventContext
+    ? `
+
+BALLOON BUDGET (hard limit): ${BALLOON_CAP} Do NOT invent balloons that are not in the product list above — if no balloon product is listed, draw NO balloons at all. If a listed balloon product's packaging photo shows an arch, column or 100-piece garland, draw a single small cluster of it instead.`
     : "";
 
   const scaleBlock = geometry
@@ -568,7 +608,7 @@ ${furnitureBlock}
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
-${productList}${floorClearance}
+${productList}${floorClearance}${balloonBudget}
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
@@ -1130,12 +1170,17 @@ Think like a professional party stylist:
 
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
-- searchQuery: SHORT ${marketplace} search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
+- searchQuery: SHORT ${marketplace} search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan marigold garland' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results. NEVER write a query for a balloon arch, balloon column, balloon garland kit, balloon wall or a bulk balloon pack — no "arch kit", "garland kit", "combo kit", "50 pcs", "100 pcs". The one balloon query you are allowed, if any, must read like 'X foil balloon set' or 'X balloon bouquet'.
 - placement: which zone in the space, e.g. 'on the wall behind the main table'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
-- FLOOR & PLACEMENT CONSTRAINT: Never place items in open floor spaces, center-room rugs, or walking paths where guests need to walk. All floor-level items (such as standees, floor balloon clusters, or ground props) must be explicitly assigned to room perimeters, corners, against the base of walls, or directly tucked against heavy furniture (e.g., "anchored tightly against the base of the TV console").
+- BALLOON BUDGET: ${BALLOON_CAP} At most ONE of your recommended products may be balloons, and no other product's placement may be described relative to it. Every other product must come from: fabric & drapes; florals & greenery (marigold / genda phool garlands, torans, flower-wall panels); lights & lanterns (fairy lights, diyas, floor or table lanterns); or quick paper décor (honeycomb balls, paper fans, tassel garlands, bunting, signage, standees, rangoli / floor decals). Pick families actually sold on ${marketplace} and right for the occasion — marigold garlands, torans and diyas for Indian festivals; bunting, paper fans and signage for birthdays and Western parties.
+- COVERAGE: the focal wall is the design's main visual mass and must be covered by a fabric backdrop or drape, a flower-wall panel, or a large themed banner sized to the wall — never by balloons. Put the real size in that product's searchQuery where you can (e.g. 'birthday backdrop cloth 6x8 ft').
+- If a requested item type above names a balloon arch, balloon column, balloon garland or balloon wall, satisfy it with the accent version (one small cluster or a foil balloon set) AND a fabric / floral / light alternative for the wall. The balloon budget overrides the requested type.
+
+- FLOOR & PLACEMENT CONSTRAINT: Never place items in open floor spaces, center-room rugs, or walking paths where guests need to walk. All floor-level items (such as standees, a floor-standing balloon stand, or ground props) must be explicitly assigned to room perimeters, corners, against the base of walls, or directly tucked against heavy furniture (e.g., "anchored tightly against the base of the TV console").
+- CEILING CONSTRAINT: NOTHING may hang from the ceiling. Never write a placement containing "suspended from the ceiling", "hanging from the ceiling", or "from the ceiling" at all. Honeycomb balls, paper fans, pom-poms, danglers and swirls are usually sold as ceiling décor — here they must be mounted FLAT AGAINST A WALL. Garlands, bunting and tassel garlands must be strung along a wall, across a door frame, or along a railing or furniture edge — never ceiling-to-ceiling. Every placement must name a WALL, DOOR FRAME, TABLE, LEDGE, RAILING, or a FLOOR position against a wall or in a corner.
 
 Also write a clear 2-3 sentence designVision describing the styling — color palette, theme, and mood.`;
 

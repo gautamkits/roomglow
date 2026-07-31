@@ -27,8 +27,9 @@ export async function getCompletionProducts(
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.products;
 
-  // The render now stages a cake, flowers and table settings in front of the
-  // backdrop, so this grid is what makes those staged touches actually buyable.
+  // The render decorates walls, tables and the perimeter only — no ceiling
+  // décor, no cake or food staging (that staging was removed in d5cf7a7) — so
+  // this grid is where the cake, gifts, tableware and treats become buyable.
   // subTheme used to only enter the cache key — feeding it into the query keeps
   // the suggestions on-theme ("unicorn birthday cake topper", not a generic one).
   const theme = subTheme?.trim().toLowerCase();
