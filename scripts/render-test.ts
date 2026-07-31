@@ -257,6 +257,16 @@ async function main() {
       }
       const balloonQ = recs.filter((p) => /balloon/i.test(p.searchQuery));
       const bannedQ = recs.filter((p) => BANNED_QUERY.test(p.searchQuery));
+      // PLACEMENTS, not just queries. analyzeRoom carries the ceiling ban and
+      // its own detector above covers that, but recommendProducts writes the
+      // placement text and had no ceiling rule at all — two photos came back
+      // "suspended from the ceiling" and this check was blind to it.
+      const ceilingP = recs.filter((p) => /ceiling|suspend|hang(ing)? from/i.test(p.placement));
+      console.log(
+        ceilingP.length
+          ? `✗  CEILING PLACEMENTS: ${ceilingP.map((p) => p.category).join(", ")}`
+          : `✓  no ceiling placements`
+      );
       console.log(
         balloonQ.length <= 1
           ? `✓  balloon queries ${balloonQ.length}/${recs.length} (cap 1)`
