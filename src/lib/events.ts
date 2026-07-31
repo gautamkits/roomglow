@@ -175,8 +175,8 @@ export const EVENTS: EventDefinition[] = [
     season: { month: 1, day: 26 },
     completionItems: [
       { category: "Flags", query: "indian flag tricolour" },
-      { category: "Drapes & bunting", query: "tricolour fabric bunting banner" },
-      { category: "Balloons", query: "tricolour foil balloon set" },
+      { category: "Decorations", query: "tricolour party decorations" },
+      { category: "Balloons", query: "tricolour balloons" },
       { category: "Badges", query: "tricolour flag badges" },
       { category: "Sweets", query: "indian sweets gift box" },
     ],
@@ -242,8 +242,8 @@ export const EVENTS: EventDefinition[] = [
     season: { month: 8, day: 15 },
     completionItems: [
       { category: "Flags", query: "indian flag tricolour" },
-      { category: "Drapes & bunting", query: "tricolour fabric bunting banner" },
-      { category: "Balloons", query: "tricolour foil balloon set" },
+      { category: "Decorations", query: "tricolour party decorations" },
+      { category: "Balloons", query: "tricolour balloons" },
       { category: "Badges", query: "tricolour flag badges" },
       { category: "Sweets", query: "indian sweets gift box" },
     ],
@@ -261,7 +261,7 @@ export const EVENTS: EventDefinition[] = [
       { category: "Jhula", query: "krishna jhula cradle" },
       { category: "Flute", query: "decorative bansuri flute" },
       { category: "Sweets", query: "makhan mishri sweets" },
-      { category: "Backdrop", query: "janmashtami backdrop cloth" },
+      { category: "Decorations", query: "janmashtami decoration items" },
     ],
   },
   {
@@ -274,7 +274,7 @@ export const EVENTS: EventDefinition[] = [
     season: { month: 9, day: 5 }, // movable (Aug–Sep)
     completionItems: [
       { category: "Ganesh idol", query: "eco friendly ganesh idol" },
-      { category: "Backdrop", query: "ganpati decoration backdrop cloth" },
+      { category: "Decorations", query: "ganpati decoration items" },
       { category: "Modak mould", query: "modak mould" },
       { category: "Sweets", query: "modak sweets box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
@@ -290,7 +290,7 @@ export const EVENTS: EventDefinition[] = [
     season: { month: 9, day: 29 }, // movable (Sep–Oct)
     completionItems: [
       { category: "Dandiya", query: "dandiya sticks decorated" },
-      { category: "Lights", query: "navratri decoration led lights" },
+      { category: "Decorations", query: "navratri decoration items" },
       { category: "Torans", query: "marigold toran door hanging" },
       { category: "Sweets", query: "indian sweets gift box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
@@ -305,7 +305,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 10, day: 11 }, // movable (October)
     completionItems: [
-      { category: "Backdrop", query: "traditional festive backdrop cloth" },
+      { category: "Decorations", query: "dussehra decoration items" },
       { category: "Torans", query: "marigold toran door hanging" },
       { category: "Sweets", query: "indian sweets gift box" },
       { category: "Pooja kit", query: "pooja samagri kit" },
@@ -408,7 +408,7 @@ export const EVENTS: EventDefinition[] = [
       { category: "Flags", query: "american flags" },
       { category: "BBQ tools", query: "bbq grill tools" },
       { category: "Snacks", query: "party snacks pack" },
-      { category: "Decorations", query: "patriotic bunting banner" },
+      { category: "Decorations", query: "patriotic party supplies" },
     ],
   },
   {
@@ -440,16 +440,11 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     season: { month: 12, day: 31 },
     completionItems: [
-      // "new years eve party supplies" was a balloon magnet; split by market so
-      // each side still sees five rows. Balloons sit third on purpose —
-      // getCompletionProducts caps the grid at 8 products in array order, so a
-      // fifth row is only ever partly shown.
-      { category: "Fairy lights", query: "led fairy string lights", markets: ["IN"] },
-      { category: "Table décor", query: "new year table centerpiece", markets: ["US"] },
+      { category: "Party supplies", query: "new years eve party supplies" },
       { category: "Champagne flutes", query: "champagne flutes set" },
-      { category: "Balloons", query: "new year foil balloon set" },
       { category: "Party hats", query: "new year party hats" },
       { category: "Confetti poppers", query: "confetti poppers" },
+      { category: "Balloons", query: "new year balloons" },
     ],
   },
   {
@@ -463,7 +458,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     completionItems: [
       { category: "Gift", query: "graduation gift" },
-      { category: "Decorations", query: "graduation backdrop banner" },
+      { category: "Party supplies", query: "graduation party supplies" },
       { category: "Photo props", query: "graduation photo props" },
       { category: "Flowers", query: "graduation flower bouquet" },
       { category: "Card", query: "graduation card" },
