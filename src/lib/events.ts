@@ -12,12 +12,19 @@ import type { EventConfig } from "@/lib/types";
  */
 export function buildEventContext(cfg: EventConfig | null): string | undefined {
   if (!cfg) return undefined;
+  // The UI label is written for the user, who already knows which country they
+  // are in ("Independence Day"). The model does not, and it is told to put the
+  // occasion verbatim into the Amazon search query — so an ambiguous label
+  // returns the wrong country's merchandise (Indian Independence Day designs
+  // were pulling "God Bless America" props). Prefer an unambiguous promptLabel.
+  const label =
+    EVENTS.find((e) => e.id === cfg.eventType)?.promptLabel || cfg.eventLabel;
   const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
   const gender =
     cfg.gender && cfg.gender !== "Either / neutral"
       ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
       : "";
-  return `This space will host a ${cfg.eventLabel} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${cfg.eventLabel} — never a different occasion.`;
+  return `This space will host a ${label} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${label} — never a different occasion, and never another country's version of the same-named holiday.`;
 }
 
 export interface EventDefinition {
@@ -27,6 +34,11 @@ export interface EventDefinition {
   subThemes: string[];
   colorSchemes: string[];
   markets: Locale[]; // which marketplaces show this event
+  // Name given to the AI instead of `label`, for holidays whose label is
+  // ambiguous across markets. `label` is what the user sees and must stay
+  // natural in their market; `promptLabel` is what lands in the Amazon search
+  // query, so it has to name the country/date explicitly.
+  promptLabel?: string;
   gendered?: boolean; // show the boy/girl/neutral picker (child-centric events)
   // One-off life events (not annually recurring). Excluded from the recurring
   // "Upcoming events" reminders — see isOneTimeEvent / UpcomingEvents.
@@ -218,6 +230,8 @@ export const EVENTS: EventDefinition[] = [
   {
     id: "independence_day_in",
     label: "Independence Day",
+    // Bare "Independence Day" made the AI search Amazon for US July-4th goods.
+    promptLabel: "Indian Independence Day (15 August, tricolour / desh bhakti)",
     icon: "🇮🇳",
     subThemes: ["Tricolour", "Patriotic", "Modern minimal", "Floral"],
     colorSchemes: ["Saffron, white & green", "Tricolour & gold", "Navy & white"],
