@@ -302,6 +302,10 @@ export interface CategoryCandidates {
   reason: string;
   colorSuggestion: string;
   candidates: AmazonCandidate[];
+  /** Absent on designs sourced before per-category status tracking existed. */
+  status?: "ok" | "no_results" | "upstream_error";
+  searchQuery?: string;
+  searchUrl?: string;
 }
 
 const curationSchema = {
@@ -330,8 +334,22 @@ export async function curateProducts(
   categories: CategoryCandidates[],
   budgetInstruction?: string
 ): Promise<string> {
-  const candidateDescriptions = categories
-    .map((cat, catIdx) => {
+  // Only categories that actually have options are worth asking the model about.
+  // Rendering "Amazon options:" followed by an empty list asked it to choose from
+  // nothing, and it obliged by inventing a reason ("No Amazon options were
+  // provided for this category.") that surfaced to users as product copy.
+  const shoppable = categories
+    .map((cat, originalIndex) => ({ cat, originalIndex }))
+    .filter(({ cat }) => cat.candidates.length > 0);
+
+  if (!shoppable.length) {
+    // Every category came back empty — skip the vision call entirely rather
+    // than spend it on a request that is already fully degraded.
+    return JSON.stringify({ selections: [], designNarrative: "" });
+  }
+
+  const candidateDescriptions = shoppable
+    .map(({ cat }, catIdx) => {
       const options = cat.candidates
         .map(
           (c, i) =>
@@ -347,7 +365,7 @@ export async function curateProducts(
   > = [{ inlineData: { mimeType: "image/jpeg", data: roomImageBase64 } }];
 
   // Fetch all product images in parallel (batch fetch)
-  const allCandidates = categories.flatMap((cat) => cat.candidates);
+  const allCandidates = shoppable.flatMap(({ cat }) => cat.candidates);
   const imageResults = await Promise.allSettled(
     allCandidates.map(async (c) => {
       if (!c.imageUrl) return null;
@@ -393,7 +411,26 @@ For each category, return the chosen optionIndex and a short reason. Also write 
     },
   });
 
-  return response.text ?? "";
+  // The model numbered categories over the shoppable subset; translate those
+  // back to indices into the caller's full `categories` array.
+  const raw = response.text ?? "";
+  if (!raw) return raw;
+  try {
+    const parsed = JSON.parse(raw) as {
+      selections?: { categoryIndex: number; optionIndex: number; reason: string }[];
+      designNarrative?: string;
+    };
+    const selections = (parsed.selections || [])
+      .filter((sel) => shoppable[sel.categoryIndex] !== undefined)
+      .map((sel) => ({
+        ...sel,
+        categoryIndex: shoppable[sel.categoryIndex].originalIndex,
+      }));
+    return JSON.stringify({ ...parsed, selections });
+  } catch {
+    // Malformed JSON is the caller's problem to report, as before.
+    return raw;
+  }
 }
 
 const detectionSchema = {

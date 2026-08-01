@@ -87,7 +87,17 @@ export async function POST(request: Request) {
         );
         previewImageUrl = previewBlob.url;
       } catch (e) {
+        // Non-fatal (the gated image route falls back), but it means a locked
+        // design has no watermarked preview — worth an alert rather than a log
+        // line nobody reads.
         console.error("[save-design] preview generation failed:", e);
+        await notifyAdminError({
+          route: "save-design/preview",
+          error: e,
+          userId,
+          userEmail: session.user.email ?? undefined,
+          locale,
+        });
       }
     }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { searchProducts } from "@/lib/amazon";
+import { sourceCategoryCandidates } from "@/lib/amazon";
 import { localeFromRequest } from "@/lib/locale";
 import type { ProductRecommendation } from "@/lib/types";
 import { notifyAdminError } from "@/lib/email";
@@ -20,23 +20,28 @@ export async function POST(request: Request) {
 
     const locale = localeFromRequest(request);
 
-    // Get top 5 candidates per category for AI curation
+    // Get top 5 candidates per category for AI curation. Retry/backoff and the
+    // bare-category fallback both live in sourceCategoryCandidates so this path
+    // and the restyle path in lib/regenerate.ts cannot drift apart.
     const categories = await Promise.all(
-      products.map(async (rec) => {
-        let candidates = await searchProducts(rec.searchQuery, 5, locale);
-        // Retry with simpler query if no results
-        if (candidates.length === 0) {
-          candidates = await searchProducts(rec.category, 5, locale);
-        }
-        return {
-          category: rec.category,
-          placement: rec.placement,
-          reason: rec.reason,
-          colorSuggestion: rec.colorSuggestion,
-          candidates,
-        };
-      })
+      products.map((rec) => sourceCategoryCandidates(rec, locale, 5))
     );
+
+    // A partial outage used to be completely silent: the request returned 200
+    // with a category full of nothing, and no alert fired because nothing threw.
+    const degraded = categories.filter((c) => c.status === "upstream_error");
+    if (degraded.length) {
+      await notifyAdminError({
+        route: "search-products",
+        error: new Error(
+          `Amazon upstream unavailable for ${degraded.length}/${categories.length} categories`
+        ),
+        userId: session.user.id,
+        userEmail: session.user.email ?? undefined,
+        locale,
+        extra: { categories: degraded.map((c) => c.category).join(", ") },
+      });
+    }
 
     return NextResponse.json({ categories, locale });
   } catch (error) {

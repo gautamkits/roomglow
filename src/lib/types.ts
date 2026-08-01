@@ -63,9 +63,17 @@ export interface AmazonProduct {
   asin: string;
 }
 
+export type ProductMatchStatus = "ok" | "no_results" | "upstream_error";
+
 export interface ProductResult {
   recommendation: ProductRecommendation;
   amazonProduct: AmazonProduct | null;
+  /** Why `amazonProduct` is null, so the UI can offer a retry on a transient
+   *  outage instead of claiming nothing exists. Absent on designs saved before
+   *  status tracking existed — treat as "no_results". */
+  matchStatus?: ProductMatchStatus;
+  /** Tagged Amazon search URL, shown as the fallback when there is no match. */
+  searchUrl?: string;
 }
 
 // A complementary, occasion-specific buyable shown in the "Complete the occasion"

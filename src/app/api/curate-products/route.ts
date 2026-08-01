@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
+import type { ProductResult, ProductMatchStatus } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -31,24 +32,52 @@ export async function POST(request: Request) {
     );
     const curation = JSON.parse(curationJson);
 
-    // Build final product list from AI selections (guard against bad indices)
-    const selectedProducts = (curation.selections || [])
-      .map((sel: { categoryIndex: number; optionIndex: number; reason: string }) => {
-        const cat = categories[sel.categoryIndex];
-        if (!cat) return null;
-        const product = cat.candidates[sel.optionIndex] ?? cat.candidates[0] ?? null;
-        return {
-          recommendation: {
-            category: cat.category,
-            placement: cat.placement,
-            reason: sel.reason,
-            colorSuggestion: cat.colorSuggestion,
-            searchQuery: "",
-          },
-          amazonProduct: product,
-        };
-      })
-      .filter(Boolean);
+    // Build the final list from the categories themselves, not from the model's
+    // selections — a category the model forgot to return used to vanish silently,
+    // and categories with no candidates never reach the model at all.
+    const byCategory = new Map<
+      number,
+      { optionIndex: number; reason: string }
+    >();
+    for (const sel of (curation.selections || []) as {
+      categoryIndex: number;
+      optionIndex: number;
+      reason: string;
+    }[]) {
+      if (!byCategory.has(sel.categoryIndex)) {
+        byCategory.set(sel.categoryIndex, {
+          optionIndex: sel.optionIndex,
+          reason: sel.reason,
+        });
+      }
+    }
+
+    const selectedProducts: ProductResult[] = categories.map((cat, i) => {
+      const sel = byCategory.get(i);
+      const product =
+        (sel ? cat.candidates[sel.optionIndex] : undefined) ??
+        cat.candidates[0] ??
+        null;
+      const status: ProductMatchStatus = product
+        ? "ok"
+        : cat.status === "upstream_error"
+          ? "upstream_error"
+          : "no_results";
+      return {
+        recommendation: {
+          category: cat.category,
+          placement: cat.placement,
+          // Only trust the model's reason when it actually picked a product;
+          // otherwise it is text about a choice that was never offered.
+          reason: product && sel ? sel.reason : cat.reason,
+          colorSuggestion: cat.colorSuggestion,
+          searchQuery: cat.searchQuery ?? "",
+        },
+        amazonProduct: product,
+        matchStatus: status,
+        searchUrl: cat.searchUrl,
+      };
+    });
 
     return NextResponse.json({
       products: selectedProducts,

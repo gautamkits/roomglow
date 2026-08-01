@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { ExternalLink, Eye, EyeOff, Star, ShoppingBag } from "lucide-react";
+import { ExternalLink, Eye, EyeOff, Star, ShoppingBag, Search } from "lucide-react";
 import type { Hotspot, ProductResult } from "@/lib/types";
 import ProductCard from "./ProductCard";
+import NoMatchFallback, { matchStatusOf } from "./NoMatchFallback";
 import { outboundHref } from "@/lib/outbound";
 
 interface ImageWithHotspotsProps {
@@ -37,12 +38,57 @@ const formatTotal = (n: number, symbol: string) =>
 export default function ImageWithHotspots({
   imageSrc,
   hotspots,
-  products,
+  products: incomingProducts,
   hidePrices = false,
 }: ImageWithHotspotsProps) {
   const [activeHotspot, setActiveHotspot] = useState<number | null>(null);
   const [hiddenProducts, setHiddenProducts] = useState<Set<number>>(new Set());
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Rows repaired by a retry. Session-only — the design as saved is unchanged,
+  // so a reload shows the original state rather than a half-persisted mix.
+  const [repaired, setRepaired] = useState<Record<number, ProductResult>>({});
+  const [retryingIndex, setRetryingIndex] = useState<number | null>(null);
+
+  const products = useMemo(
+    () => incomingProducts.map((p, i) => repaired[i] ?? p),
+    [incomingProducts, repaired]
+  );
+
+  const retryProduct = useCallback(
+    async (index: number) => {
+      const product = incomingProducts[index];
+      if (!product) return;
+      setRetryingIndex(index);
+      try {
+        const res = await fetch("/api/retry-product", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: product.recommendation.category,
+            searchQuery: product.recommendation.searchQuery,
+          }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          product: ProductResult["amazonProduct"];
+          status: ProductResult["matchStatus"];
+          searchUrl?: string;
+        };
+        setRepaired((prev) => ({
+          ...prev,
+          [index]: {
+            ...product,
+            amazonProduct: data.product,
+            matchStatus: data.status,
+            searchUrl: data.searchUrl ?? product.searchUrl,
+          },
+        }));
+      } finally {
+        setRetryingIndex(null);
+      }
+    },
+    [incomingProducts]
+  );
 
   const toggleProduct = useCallback((productIndex: number) => {
     setHiddenProducts((prev) => {
@@ -192,6 +238,10 @@ export default function ImageWithHotspots({
                   <ProductCard
                     product={product}
                     onClose={() => setActiveHotspot(null)}
+                    onRetry={
+                      hidePrices ? undefined : () => retryProduct(hotspot.productIndex)
+                    }
+                    retrying={retryingIndex === hotspot.productIndex}
                     onHide={() => {
                       toggleProduct(hotspot.productIndex);
                       setActiveHotspot(null);
@@ -217,6 +267,10 @@ export default function ImageWithHotspots({
                 variant="sheet"
                 product={product}
                 hidePrices={hidePrices}
+                onRetry={
+                  hidePrices ? undefined : () => retryProduct(hotspot.productIndex)
+                }
+                retrying={retryingIndex === hotspot.productIndex}
                 onClose={() => setActiveHotspot(null)}
                 onHide={() => {
                   toggleProduct(hotspot.productIndex);
@@ -274,12 +328,21 @@ export default function ImageWithHotspots({
                     className="w-10 h-10 object-contain shrink-0 rounded-md bg-stone-50 dark:bg-zinc-800 p-0.5"
                   />
                 ) : (
-                  <div className="w-10 h-10 shrink-0 rounded-md bg-stone-100 dark:bg-zinc-800" />
+                  <div className="w-10 h-10 shrink-0 rounded-md bg-stone-100 dark:bg-zinc-800 flex items-center justify-center">
+                    <Search size={14} className="text-zinc-400" />
+                  </div>
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 line-clamp-2 leading-snug">
                     {ap?.title || product.recommendation.category}
                   </p>
+                  {!ap && (
+                    <p className="text-[10px] text-zinc-400 mt-0.5">
+                      {matchStatusOf(product) === "upstream_error"
+                        ? "Couldn't reach Amazon"
+                        : "No exact match"}
+                    </p>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5">
                     {ap && !hidePrices && (
                       <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-50">
@@ -295,7 +358,7 @@ export default function ImageWithHotspots({
                   </div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
-                  {ap && (
+                  {ap ? (
                     <a
                       href={outboundHref(ap.affiliateUrl)}
                       target="_blank"
@@ -305,6 +368,15 @@ export default function ImageWithHotspots({
                       {hidePrices ? "View" : "Buy"}
                       <ExternalLink size={11} />
                     </a>
+                  ) : (
+                    <NoMatchFallback
+                      compact
+                      product={product}
+                      // No re-sourcing behind the paywall — that's a paid API
+                      // call on a design the viewer hasn't unlocked.
+                      onRetry={hidePrices ? undefined : () => retryProduct(i)}
+                      retrying={retryingIndex === i}
+                    />
                   )}
                   <button
                     onClick={() => toggleProduct(i)}

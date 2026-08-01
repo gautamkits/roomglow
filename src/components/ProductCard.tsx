@@ -3,6 +3,7 @@
 import { X, ExternalLink, Star, EyeOff } from "lucide-react";
 import type { ProductResult } from "@/lib/types";
 import { outboundHref } from "@/lib/outbound";
+import NoMatchFallback from "./NoMatchFallback";
 
 interface ProductCardProps {
   product: ProductResult;
@@ -10,6 +11,9 @@ interface ProductCardProps {
   onHide?: () => void;
   variant?: "popup" | "sheet";
   hidePrices?: boolean;
+  /** Re-source this row after a transient Amazon outage. */
+  onRetry?: () => void;
+  retrying?: boolean;
 }
 
 export default function ProductCard({
@@ -18,6 +22,8 @@ export default function ProductCard({
   onHide,
   variant = "popup",
   hidePrices = false,
+  onRetry,
+  retrying = false,
 }: ProductCardProps) {
   const { recommendation, amazonProduct } = product;
 
@@ -109,9 +115,11 @@ export default function ProductCard({
           <p className="text-xs text-zinc-500 mb-2 leading-relaxed">
             {recommendation.reason}
           </p>
-          <p className="text-xs text-zinc-400 italic">
-            No exact match found on Amazon
-          </p>
+          <NoMatchFallback
+            product={product}
+            onRetry={onRetry}
+            retrying={retrying}
+          />
         </>
       )}
       {onHide && !isSheet && (

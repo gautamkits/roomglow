@@ -1,6 +1,25 @@
 import { getDesign } from "@/lib/db";
 import sharp from "sharp";
 
+/**
+ * Copy a sharp result into a JS-owned buffer before it is handed to fetch.
+ *
+ * sharp returns Buffers backed by *external* ArrayBuffers (libvips memory
+ * wrapped via napi_create_external_arraybuffer). On the Linux runtime,
+ * `util.types.isSharedArrayBuffer()` reports true for those, and undici's
+ * ArrayBufferView converter rejects them outright:
+ *
+ *   TypeError: ArrayBuffer: SharedArrayBuffer is not allowed.
+ *
+ * That is why uploading a sharp-produced preview failed while uploading the
+ * `Buffer.from(base64)` masters in the same request succeeded. A copy gives us
+ * an ordinary heap-allocated backing store that the converter accepts. It does
+ * not reproduce on the Windows build of sharp, which already copies.
+ */
+function toUploadable(buf: Buffer): Buffer {
+  return Buffer.from(new Uint8Array(buf));
+}
+
 /** Tiny blur-up placeholder (data URL) for next/image placeholder="blur". */
 export async function makeBlurDataUrl(buffer: Buffer): Promise<string> {
   const out = await sharp(buffer)
@@ -39,11 +58,12 @@ export async function makeWatermarkedPreview(buffer: Buffer): Promise<Buffer> {
     `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">${marks.join("")}</svg>`
   );
 
-  return sharp(resized)
+  const out = await sharp(resized)
     .blur(5)
     .composite([{ input: svg }])
     .jpeg({ quality: 62 })
     .toBuffer();
+  return toUploadable(out);
 }
 
 function decodeDataUrl(dataUrl: string): Buffer | null {

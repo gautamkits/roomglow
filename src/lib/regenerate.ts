@@ -4,7 +4,7 @@ import {
   generateDesignImage,
   type CategoryCandidates,
 } from "@/lib/gemini";
-import { searchProducts } from "@/lib/amazon";
+import { sourceCategoryCandidates } from "@/lib/amazon";
 import { buildEventContext } from "@/lib/events";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import type { Locale } from "@/lib/locale";
@@ -99,19 +99,7 @@ export async function regenerateDesign(opts: {
   // 2. Source candidates, mirroring /api/search-products (same 5-per-category
   //    and the same fall back to the bare category when a query finds nothing).
   const categories: CategoryCandidates[] = await Promise.all(
-    recs.map(async (rec) => {
-      let candidates = await searchProducts(rec.searchQuery, 5, opts.locale);
-      if (candidates.length === 0) {
-        candidates = await searchProducts(rec.category, 5, opts.locale);
-      }
-      return {
-        category: rec.category,
-        placement: rec.placement,
-        reason: rec.reason,
-        colorSuggestion: rec.colorSuggestion,
-        candidates,
-      };
-    })
+    recs.map((rec) => sourceCategoryCandidates(rec, opts.locale, 5))
   );
 
   // 3. Pick one per category.
@@ -130,21 +118,38 @@ export async function regenerateDesign(opts: {
 
   // Mirrors the reassembly in /api/curate-products, including the guard against
   // the model returning an out-of-range category or option index.
-  const products: ProductResult[] = [];
+  const selByCategory = new Map<number, { optionIndex: number; reason: string }>();
   for (const sel of curation.selections || []) {
-    const cat = categories[sel.categoryIndex];
-    if (!cat) continue;
-    products.push({
+    if (!selByCategory.has(sel.categoryIndex)) {
+      selByCategory.set(sel.categoryIndex, {
+        optionIndex: sel.optionIndex,
+        reason: sel.reason,
+      });
+    }
+  }
+  const products: ProductResult[] = categories.map((cat, i) => {
+    const sel = selByCategory.get(i);
+    const product =
+      (sel ? cat.candidates[sel.optionIndex] : undefined) ??
+      cat.candidates[0] ??
+      null;
+    return {
       recommendation: {
         category: cat.category,
         placement: cat.placement,
-        reason: sel.reason,
+        reason: product && sel ? sel.reason : cat.reason,
         colorSuggestion: cat.colorSuggestion,
-        searchQuery: "",
+        searchQuery: cat.searchQuery ?? "",
       },
-      amazonProduct: cat.candidates[sel.optionIndex] ?? cat.candidates[0] ?? null,
-    });
-  }
+      amazonProduct: product,
+      matchStatus: product
+        ? "ok"
+        : cat.status === "upstream_error"
+          ? "upstream_error"
+          : "no_results",
+      searchUrl: cat.searchUrl,
+    };
+  });
 
   if (!products.length) throw new Error("Curation returned no products");
 
