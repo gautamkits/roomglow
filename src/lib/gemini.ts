@@ -86,7 +86,11 @@ const removableObjectSchema = {
     blocksFocal: { type: Type.BOOLEAN },
     clearReason: { type: Type.STRING },
   },
-  required: ["id", "label", "effort", "blocksFocal"],
+  // Deliberately NOT required. The schema is shared with space redesigns, whose
+  // prompt says nothing about movability or focal zones — forcing the fields
+  // there would make the model invent values, and those values drive what
+  // tidy-up pre-ticks. Only the event branch is instructed to fill them.
+  required: ["id", "label"],
 };
 
 const stagingPlanSchema = {
@@ -1240,7 +1244,10 @@ export async function recommendProducts(
   // The staging plan is decided once, in analyzeRoom, from the photo. Echoing
   // it here is what stops each product getting a placement in isolation — the
   // failure mode that scattered one birthday across four walls and a console.
-  const plan = roomAnalysis.stagingPlan;
+  // Event-only. `analysisBlock` is shared with spacePrompt, which has no
+  // instructions for honouring a focal zone — injecting one there would just be
+  // noise in the prompt.
+  const plan = eventContext ? roomAnalysis.stagingPlan : undefined;
   const stagingBlock = plan?.focalZone
     ? `\n- FOCAL ZONE (the design is built here): ${plan.focalZone}${
         plan.focalReason ? ` — ${plan.focalReason}` : ""

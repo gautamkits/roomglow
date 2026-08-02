@@ -41,7 +41,20 @@ export interface RoomAnalysis {
  * asking someone to shift a sofa for a better backdrop is reasonable, asking
  * them to shift it for nothing is not.
  */
-export function recommendedClears(objects: RemovableObject[]): string[] {
+export function recommendedClears(
+  objects: RemovableObject[],
+  focalZone?: string
+): string[] {
+  // Gated on the staging plan, not on the fields being populated.
+  //
+  // `blocksFocal` is in a schema shared with space redesigns, whose prompt
+  // never mentions it — and the model fills it in anyway. Measured on a real
+  // space analysis: zero objects got an `effort`, but two got `blocksFocal`,
+  // which was enough to pre-tick two BEDS for removal. Without a focal zone the
+  // flag has nothing to be relative to, so it means nothing and we recommend
+  // nothing. Space keeps its long-standing keep-everything default.
+  if (!focalZone) return [];
+
   return objects
     .filter((o) => o.effort === "trivial" || o.blocksFocal)
     .map((o) => o.label);

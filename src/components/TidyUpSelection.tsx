@@ -22,7 +22,7 @@ export default function TidyUpSelection({
   focalZone,
   onComplete,
 }: TidyUpSelectionProps) {
-  const suggested = new Set(recommendedClears(items));
+  const suggested = new Set(recommendedClears(items, focalZone));
 
   // Pre-cleared by default, and this is the whole point of the screen.
   //
