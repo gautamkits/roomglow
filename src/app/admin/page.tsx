@@ -161,6 +161,109 @@ function RegenerateSend({ design }: { design: AllDesign }) {
   );
 }
 
+/**
+ * Touch up a finished design with one free-text instruction.
+ *
+ * Separate control from RegenerateSend because the two do different jobs:
+ * regenerate re-derives everything from the original photo (new Amazon
+ * products, new prices, new hotspots) and emails the result, whereas this
+ * corrects the render that already exists and leaves products, prices and
+ * hotspots exactly as they are. That's what makes it usable mid-review.
+ *
+ * `onEdited` swaps the card's image so the reviewer sees the result without a
+ * reload; the blob URL is fresh each time so there's no cache to bust.
+ */
+function EditDesign({
+  designId,
+  onEdited,
+}: {
+  designId: string;
+  onEdited: (url: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (!instruction.trim()) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("/api/admin/edit-design", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ designId, instruction }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to edit.");
+      } else {
+        onEdited(data.generatedImageUrl);
+        setResult("Updated. Edit again to refine further.");
+        setInstruction("");
+      }
+    } catch {
+      setError("Network error.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 border-t border-zinc-100 dark:border-zinc-800 pt-2">
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-1 text-[11px] font-medium text-orange-700 hover:text-orange-800"
+        >
+          <Wand2 size={12} />
+          Edit with a prompt…
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={2}
+            maxLength={600}
+            placeholder="e.g. Put the Indian flag back on the flagpole, exactly as it is in the original photo"
+            className="w-full px-2 py-1.5 rounded-md text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 outline-none focus:border-orange-700 resize-y"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={submit}
+              disabled={busy || !instruction.trim()}
+              className="px-3 py-1.5 rounded-md bg-orange-700 hover:bg-orange-800 text-white text-[11px] font-medium disabled:opacity-50"
+            >
+              {busy ? "Editing…" : "Apply edit"}
+            </button>
+            {!busy && (
+              <button
+                onClick={() => setOpen(false)}
+                className="text-[11px] text-zinc-500 hover:text-zinc-700"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+          {busy && (
+            <p className="text-[11px] text-zinc-500">
+              Re-rendering — products and hotspots are left untouched.
+            </p>
+          )}
+          {result && (
+            <p className="text-[11px] text-green-700 dark:text-green-400">{result}</p>
+          )}
+          {error && <p className="text-[11px] text-red-600">{error}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ADMIN_TABS = [
   { key: "pending", label: "Pending review" },
   { key: "published", label: "Published" },
@@ -480,6 +583,16 @@ function AdminContent() {
                         <X size={15} /> Reject
                       </button>
                     </div>
+                    <EditDesign
+                      designId={d.id}
+                      onEdited={(url) =>
+                        setDesigns((prev) =>
+                          prev.map((x) =>
+                            x.id === d.id ? { ...x, generated_image_url: url } : x
+                          )
+                        )
+                      }
+                    />
                   </div>
                 </div>
               ))}
@@ -508,6 +621,16 @@ function AdminContent() {
                     >
                       <X size={15} /> Remove from home page
                     </button>
+                    <EditDesign
+                      designId={d.id}
+                      onEdited={(url) =>
+                        setApproved((prev) =>
+                          prev.map((x) =>
+                            x.id === d.id ? { ...x, generated_image_url: url } : x
+                          )
+                        )
+                      }
+                    />
                   </div>
                 </div>
               ))}
@@ -562,6 +685,16 @@ function AdminContent() {
                       <p className="text-[11px] text-zinc-400 mt-0.5">
                         {new Date(d.created_at).toLocaleString()}
                       </p>
+                      <EditDesign
+                        designId={d.id}
+                        onEdited={(url) =>
+                          setAll((prev) =>
+                            prev.map((x) =>
+                              x.id === d.id ? { ...x, generated_image_url: url } : x
+                            )
+                          )
+                        }
+                      />
                       <RegenerateSend design={d} />
                     </div>
                   </div>

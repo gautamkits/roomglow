@@ -171,7 +171,8 @@ async function ensureImageGenSchema() {
 /**
  * Record one image-generation call. Best-effort: never throws into the caller,
  * so logging can't break (or delay-fail) the actual generation.
- * `kind` is one of "design" | "restyle" | "empty".
+ * `kind` is one of "design" | "restyle" | "empty" | "makeover" | "edit"
+ * ("edit" = an admin touch-up via admin/edit-design).
  */
 export async function recordImageGen(kind: string, userId?: string | null) {
   try {
@@ -379,6 +380,37 @@ export async function isDesignSharedWith(
 export async function setHotspots(designId: string, hotspots: unknown) {
   await sql`
     UPDATE designs SET hotspots = ${JSON.stringify(hotspots)} WHERE id = ${designId}
+  `;
+}
+
+/**
+ * Replace the rendered image of an existing design, in place.
+ *
+ * Every other regenerate/restyle path inserts a NEW row, which is right when
+ * the products change — the old design stays valid and gets its own link. An
+ * admin touch-up is the opposite case: same products, same hotspots, one
+ * corrected render, applied while the design sits in the review queue. Forking
+ * it there would leave a stale duplicate to moderate.
+ *
+ * Deliberately does NOT touch `hotspots` or `products`: the pins still point at
+ * the right things because the product set is unchanged and the edit preserves
+ * framing. Pass a preview only for locked designs.
+ */
+export async function updateDesignImage(
+  designId: string,
+  opts: {
+    generatedImageUrl: string;
+    generatedBlur?: string | null;
+    previewImageUrl?: string | null;
+  }
+) {
+  await ensureDesignColumns();
+  await sql`
+    UPDATE designs
+       SET generated_image_url = ${opts.generatedImageUrl},
+           generated_blur      = COALESCE(${opts.generatedBlur ?? null}, generated_blur),
+           preview_image_url   = COALESCE(${opts.previewImageUrl ?? null}, preview_image_url)
+     WHERE id = ${designId}
   `;
 }
 
@@ -734,7 +766,8 @@ export async function getAnalyticsStats() {
         COUNT(*) FILTER (WHERE kind = 'design') AS design,
         COUNT(*) FILTER (WHERE kind = 'restyle') AS restyle,
         COUNT(*) FILTER (WHERE kind = 'empty') AS empty,
-        COUNT(*) FILTER (WHERE kind = 'makeover') AS makeover
+        COUNT(*) FILTER (WHERE kind = 'makeover') AS makeover,
+        COUNT(*) FILTER (WHERE kind = 'edit') AS edit
       FROM image_gen_events
       WHERE created_at >= NOW() - INTERVAL '14 days'
       GROUP BY 1

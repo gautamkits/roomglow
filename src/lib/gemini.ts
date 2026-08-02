@@ -287,6 +287,81 @@ The result must look like a real photograph of the same empty room.`;
   return imageBase64;
 }
 
+/**
+ * Admin-only touch-up of an ALREADY GENERATED design.
+ *
+ * Unlike `regenerateDesign`, this never re-runs recommend/search/curate — it
+ * takes the finished render and applies one free-text instruction to it. The
+ * product list is therefore untouched, which is what lets the caller carry the
+ * existing hotspots across verbatim instead of re-detecting them.
+ *
+ * Two deliberate departures from `emptyRoom`, which is otherwise the same
+ * shape:
+ *  - Aspect is pinned to the input. Hotspots are stored as percentages, so they
+ *    survive a resolution change but NOT a reframe; letting the model pick its
+ *    own ratio would silently slide every pin off its product.
+ *  - Failure throws instead of returning the input. Silently handing back an
+ *    unedited image would look to the admin like the prompt did nothing.
+ */
+export async function editDesignImage(
+  imageBase64: string,
+  instruction: string
+): Promise<string> {
+  const prompt = `This is a finished interior/event design render. This is a STRICT photo editing task: apply ONLY the change requested below and leave everything else pixel-identical.
+
+REQUESTED CHANGE:
+${instruction}
+
+MUST PRESERVE EXACTLY:
+- The same framing, camera angle, perspective, and aspect ratio — do NOT crop, zoom, reframe, or letterbox.
+- The same walls, floor, ceiling, windows, doors, and lighting.
+- Every existing object and decoration that the requested change does not explicitly mention — same position, same size, same colour, same materials. Do not restyle, tidy, upgrade, or "improve" anything you were not asked to touch.
+- Overall colour grade and exposure.
+
+MUST NOT:
+- Do NOT add any object that was not asked for.
+- Do NOT move or resize existing items to make room for the change.
+- Do NOT invent readable text. If the change involves signage, render only what was asked for.
+
+The result must look like the same photograph with just the requested edit applied.`;
+
+  const aspectRatio = await aspectOf(imageBase64);
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-flash-image",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { inlineData: { mimeType: "image/png", data: imageBase64 } },
+          { text: prompt },
+        ],
+      },
+    ],
+    config: {
+      responseModalities: ["TEXT", "IMAGE"],
+      ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
+    },
+  });
+
+  const candidate = response.candidates?.[0];
+  for (const part of candidate?.content?.parts ?? []) {
+    if (part.inlineData?.data) return part.inlineData.data;
+  }
+
+  // Surface why, the way generateDesignImage does — a refusal or a safety block
+  // is actionable for the admin, "nothing happened" is not.
+  const reason = candidate?.finishReason ?? "unknown";
+  const text = (candidate?.content?.parts ?? [])
+    .map((p) => ("text" in p ? p.text : ""))
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 300);
+  throw new Error(
+    `Edit produced no image (finishReason: ${reason})${text ? `: ${text}` : ""}`
+  );
+}
+
 export interface AmazonCandidate {
   title: string;
   price: string;
@@ -561,7 +636,7 @@ Edit the room photo to add these products. This is a STRICT photo editing task.`
   const floorClearance = eventContext
     ? `
 
-FLOOR CLEARANCE & WALKWAY RULE: Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props placed on the floor must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter items loose across open floor areas or pathways where people would walk.`
+FLOOR CLEARANCE & WALKWAY RULE (applies to the products you ADD, never to what is already in the photo): Keep all central room floors, rugs, and walking paths completely clear. Standalone decorative items, cutouts, or props that YOU ADD must be tightly clustered against perimeter walls, corners, or furniture bases. Never scatter added items loose across open floor areas or pathways where people would walk. Décor already standing in the photo — a flagpole, a floor lamp, a plant, a shrine — stays exactly where it is; do NOT relocate or remove it to satisfy this rule.`
     : "";
 
   const scaleBlock = geometry
@@ -599,9 +674,10 @@ MUST PRESERVE EXACTLY (never change the architecture):
 - The exact same ceiling, ceiling fan, and light fixtures
 - The exact same room dimensions, boundaries, perspective, and camera angle — do NOT crop, zoom, or reframe
 - Whether windows and doors exist or not — do NOT add or remove them
+- EXISTING DÉCOR ALREADY IN THE PHOTO — flags and flagpoles, religious or devotional items, artwork, framed photos, wall hangings, mirrors, trophies, plants, and any other ornament the occupant has put there. Reproduce each one in place, unchanged, including its exact markings and colours. These belong to the occupant: they are NOT clutter, they are NOT props to be relocated, and an added product must never replace or obscure one.
 
 ${furnitureBlock}
-- Tidy the space as part of the redesign: clear away any small clutter and loose tabletop items (remotes, bottles, cups, food/fruit, papers, chargers, small stray objects) so surfaces look clean and styled. This does NOT apply to the main furniture above.
+- Tidy the space as part of the redesign: clear away any small clutter and loose tabletop items (remotes, bottles, cups, food/fruit, papers, chargers, small stray objects) so surfaces look clean and styled. This applies ONLY to disposable everyday objects — never to the main furniture above, and never to anything covered by MUST PRESERVE.
 - Nothing may hover in mid-air — if an item's previous support was removed, place it on a real surface or the floor.
 
 ${addLine}
@@ -615,8 +691,9 @@ Each item must look EXACTLY like its reference image — same color, shape, mate
       eventContext
         ? `
 
-CRITICAL TEXT RULE:
+CRITICAL TEXT RULE (about the products you ADD — it never overrides MUST PRESERVE):
 - Do NOT add, render, or reproduce ANY printed words, letters, banners, or signage that name a DIFFERENT occasion than the event described above.
+- This rule does NOT apply to markings already present in the room photo. A flag, emblem, artwork or sign that is already there is preserved exactly as-is, whatever it depicts.
 - If a product image contains text such as "Happy Birthday" (or any wording that does not match this event), do NOT copy that text — leave the banner/backdrop blank or show only generic decorative patterns.
 - Any visible signage must match the event described above, or contain no readable text at all. Never invent gibberish text.`
         : ""
