@@ -26,6 +26,13 @@ data (price/links), the paywall, locale-aware commerce, accountability, gallery/
   Verify with `npx vercel ls`. No CI; run `npx tsc --noEmit` before pushing. (Local prod build
   needs a dummy `STRIPE_SECRET_KEY` — Stripe client is lazy but build collects page data.)
 
+## ⚠️ Before changing anything, load the `noosho-change-safety` skill
+`.claude/skills/noosho-change-safety/SKILL.md` is the pre-change checklist for this repo —
+the non-obvious ways a reasonable change breaks something else (shared prompt schemas
+leaking across modes, positional hotspot indices, pre-payment image cost, transactional vs
+marketing mail, what can and cannot be verified locally). Each entry cost a real bug. Read
+it before editing the design pipeline, hotspots, emails/crons, entitlement, or the DB layer.
+
 ## ⚠️ Space mode is hands-off
 **Do not change `space` (room redesign) behaviour unless the user explicitly asks.** Event
 work must be verified not to leak into it. The leak paths are real, not theoretical:
