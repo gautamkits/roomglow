@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "db:migrate": "node scripts/migrate.mjs"
+    "db:migrate": "node scripts/migrate.mjs",
+    "docs:events": "tsx scripts/gen-event-prompts.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
