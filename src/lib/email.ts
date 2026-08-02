@@ -1,7 +1,9 @@
+import { createHmac, timingSafeEqual } from "crypto";
 import type { AppMode, EventConfig, ProductResult } from "@/lib/types";
 import { SITE_URL } from "@/lib/site";
 import { formatAmount } from "@/lib/locale";
 import { rateLimit } from "@/lib/rateLimit";
+import { isEmailOptedOut } from "@/lib/db";
 
 // ─── Config ───
 const ZEPTOMAIL_API_URL =
@@ -35,6 +37,154 @@ export interface DesignReadyEmailData {
   designNarrative?: string;
   generatedImageUrl: string;
   products: ProductResult[];
+}
+
+// ─── Send primitive ───
+// Every email in the app goes through this. It exists so there is exactly one
+// place that talks to ZeptoMail — previously the auth-header normalisation and
+// fetch block were copy-pasted into all nine senders, which is why there was
+// nowhere to hook a suppression check or an unsubscribe header.
+interface MailRecipient {
+  address: string;
+  name?: string | null;
+}
+
+export async function sendMail(opts: {
+  to: MailRecipient | MailRecipient[];
+  subject: string;
+  html: string;
+  replyTo?: MailRecipient;
+  /** Marketing mail passes the recipient's unsubscribe URL; transactional omits it. */
+  unsubscribeUrl?: string;
+  label: string;
+}): Promise<{ ok: boolean }> {
+  if (!ZEPTOMAIL_TOKEN) {
+    console.error(`[email] ZEPTOMAIL_TOKEN not set — skipping ${opts.label}`);
+    return { ok: false };
+  }
+  const recipients = (Array.isArray(opts.to) ? opts.to : [opts.to]).filter(
+    (r) => r.address
+  );
+  if (!recipients.length) return { ok: false };
+
+  try {
+    // Accept the token with or without the "Zoho-enczapikey " prefix —
+    // ZeptoMail's copy button is inconsistent about including it.
+    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
+      ? ZEPTOMAIL_TOKEN
+      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
+
+    const payload: Record<string, unknown> = {
+      from: { address: FROM_ADDRESS, name: FROM_NAME },
+      to: recipients.map((r) => ({
+        email_address: { address: r.address, name: r.name || r.address },
+      })),
+      subject: opts.subject,
+      htmlbody: opts.html,
+    };
+    if (opts.replyTo) {
+      payload.reply_to = [
+        { address: opts.replyTo.address, name: opts.replyTo.name || opts.replyTo.address },
+      ];
+    }
+    // RFC 8058 one-click unsubscribe. Gmail and Yahoo require this on bulk mail,
+    // and it is what stops a "this is spam" click from poisoning the sending
+    // domain that also carries our transactional mail.
+    if (opts.unsubscribeUrl) {
+      payload.headers = {
+        "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+      };
+    }
+
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(
+        `[email] ZeptoMail ${opts.label} failed: ${res.status} ${body.slice(0, 300)}`
+      );
+      return { ok: false };
+    }
+    return { ok: true };
+  } catch (err) {
+    console.error(`[email] ZeptoMail ${opts.label} threw:`, err);
+    return { ok: false };
+  }
+}
+
+// ─── Unsubscribe links ───
+// Stateless and HMAC-signed rather than a stored token: an unsubscribe link has
+// to keep working months later, from an inbox, with no session. Falls back to
+// NEXTAUTH_SECRET so this works without adding a new required env var.
+const UNSUB_SECRET =
+  process.env.UNSUB_SECRET || process.env.NEXTAUTH_SECRET || "";
+
+export function unsubscribeSignature(email: string): string {
+  return createHmac("sha256", UNSUB_SECRET)
+    .update(email.trim().toLowerCase())
+    .digest("hex")
+    .slice(0, 32);
+}
+
+export function verifyUnsubscribeSignature(email: string, sig: string): boolean {
+  if (!UNSUB_SECRET || !email || !sig) return false;
+  const expected = Buffer.from(unsubscribeSignature(email));
+  const given = Buffer.from(sig);
+  if (expected.length !== given.length) return false;
+  return timingSafeEqual(expected, given);
+}
+
+export function unsubscribeUrl(email: string): string {
+  const e = encodeURIComponent(email.trim().toLowerCase());
+  return `${SITE_URL}/api/unsubscribe?e=${e}&s=${unsubscribeSignature(email)}`;
+}
+
+/**
+ * Footer block shared by every template. Marketing mail passes `unsubUrl` and
+ * gets a working opt-out; transactional mail (sign-in links, share invites,
+ * the design they paid for) omits it and is never suppressed.
+ */
+function footerBlock(opts: {
+  reason: string;
+  unsubUrl?: string;
+  disclosure?: boolean;
+  padding?: string;
+}): string {
+  const year = new Date().getFullYear();
+  return `
+        <tr><td style="padding:${opts.padding || "22px 28px 28px"};">
+          <p style="font-size:11px;line-height:1.6;color:${FAINT};margin:0;border-top:1px solid ${BORDER};padding-top:14px;">
+            © ${year} Noosho.${opts.disclosure ? ` ${AFFILIATE_DISCLOSURE}` : ""}<br />
+            ${opts.reason}${
+              opts.unsubUrl
+                ? `<br /><a href="${esc(opts.unsubUrl)}" style="color:${FAINT};text-decoration:underline;">Unsubscribe from these emails</a>`
+                : ""
+            }
+          </p>
+        </td></tr>`;
+}
+
+/** Marketing sends funnel through this so opt-out is enforced in one place. */
+async function suppressed(email: string, label: string): Promise<boolean> {
+  try {
+    if (await isEmailOptedOut(email)) {
+      console.log(`[email] ${label} suppressed — ${email} opted out`);
+      return true;
+    }
+  } catch (err) {
+    // Never let a suppression-lookup failure block a send.
+    console.error(`[email] opt-out check failed for ${label}:`, err);
+  }
+  return false;
 }
 
 // Minimal HTML escaping for values interpolated into the template.
@@ -271,7 +421,6 @@ export function buildEventReminderHtml(data: EventReminderEmailData): string {
       ? "It's tomorrow!"
       : `It's in ${data.daysUntil} days.`;
   const createUrl = `${SITE_URL}/create`;
-  const year = new Date().getFullYear();
 
   return `<!DOCTYPE html>
 <html>
@@ -310,11 +459,12 @@ export function buildEventReminderHtml(data: EventReminderEmailData): string {
           </table>
         </td></tr>
 
-        <tr><td style="padding:8px 28px 28px;">
-          <p style="font-size:11px;line-height:1.6;color:${FAINT};margin:0;border-top:1px solid ${BORDER};padding-top:14px;">
-            © ${year} Noosho. You&rsquo;re receiving this because you saved an upcoming event on Noosho.
-          </p>
-        </td></tr>
+${footerBlock({
+          reason:
+            "You&rsquo;re receiving this because you saved an upcoming event on Noosho.",
+          unsubUrl: unsubscribeUrl(data.to),
+          padding: "8px 28px 28px",
+        })}
 
       </table>
     </td></tr>
@@ -348,7 +498,7 @@ function adminRecipients(): string[] {
 
 export async function notifyAdminError(ctx: AdminErrorContext): Promise<{ ok: boolean }> {
   const recipients = adminRecipients();
-  if (!ZEPTOMAIL_TOKEN || recipients.length === 0) return { ok: false };
+  if (recipients.length === 0) return { ok: false };
 
   const err = ctx.error;
   const message =
@@ -403,34 +553,12 @@ export async function notifyAdminError(ctx: AdminErrorContext): Promise<{ ok: bo
   </table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: recipients.map((address) => ({ email_address: { address, name: "Admin" } })),
-        subject: `⚠️ Noosho error in ${ctx.route}: ${message.slice(0, 80)}`,
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Admin error alert failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Admin error alert threw:", e);
-    return { ok: false };
-  }
+  return sendMail({
+    to: recipients.map((address) => ({ address, name: "Admin" })),
+    subject: `⚠️ Noosho error in ${ctx.route}: ${message.slice(0, 80)}`,
+    html,
+    label: "admin-error",
+  });
 }
 
 /** Delivers a contact-form message to the team inbox, with reply-to set to the
@@ -441,7 +569,6 @@ export async function sendContactMessage(data: {
   email: string;
   message: string;
 }): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN) return { ok: false };
   // Contact-form messages route to the shared inbox (which forwards to Gmail),
   // overridable via CONTACT_TO.
   const to = [process.env.CONTACT_TO || "designs@noosho.com"];
@@ -472,35 +599,13 @@ export async function sendContactMessage(data: {
   </table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: to.map((address) => ({ email_address: { address, name: "Noosho" } })),
-        reply_to: [{ address: data.email, name: data.name }],
-        subject: `New contact message from ${data.name}`,
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Contact send failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Contact send threw:", e);
-    return { ok: false };
-  }
+  return sendMail({
+    to: to.map((address) => ({ address, name: "Noosho" })),
+    replyTo: { address: data.email, name: data.name },
+    subject: `New contact message from ${data.name}`,
+    html,
+    label: "contact",
+  });
 }
 
 /** Notifies the team of a new "book a decorator" waitlist lead. Reply-to is set
@@ -517,7 +622,6 @@ export async function sendDecorLeadNotification(data: {
   currency?: string | null;
   durationLabel?: string | null;
 }): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN) return { ok: false };
   const to = [process.env.CONTACT_TO || "designs@noosho.com"];
 
   const price =
@@ -553,35 +657,13 @@ export async function sendDecorLeadNotification(data: {
   </table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: to.map((address) => ({ email_address: { address, name: "Noosho" } })),
-        reply_to: [{ address: data.email, name: data.email }],
-        subject: `New decorator waitlist lead${data.eventLabel ? ` — ${data.eventLabel}` : ""}`,
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Decor lead send failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Decor lead send threw:", e);
-    return { ok: false };
-  }
+  return sendMail({
+    to: to.map((address) => ({ address, name: "Noosho" })),
+    replyTo: { address: data.email },
+    subject: `New decorator waitlist lead${data.eventLabel ? ` — ${data.eventLabel}` : ""}`,
+    html,
+    label: "decor-lead",
+  });
 }
 
 /** Invite sent when an owner shares a private design with an email address.
@@ -605,8 +687,12 @@ export async function sendAdminDesignEmail(data: {
   free: boolean;
   priceLabel?: string; // e.g. "₹99" — shown only when locked
   note?: string; // optional personal line from the admin
-}): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+}): Promise<{ ok: boolean; suppressed?: boolean }> {
+  if (!data.to) return { ok: false };
+  // Promotional in tone and admin-initiated, so it honours the opt-out.
+  if (await suppressed(data.to, "admin-design")) {
+    return { ok: false, suppressed: true };
+  }
   const link = `${SITE_URL}/design/${data.designId}`;
   const occasion = data.eventLabel ? esc(data.eventLabel) : "";
   const heroStyle = data.free
@@ -670,36 +756,15 @@ export async function sendAdminDesignEmail(data: {
   </td></tr></table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
-        subject: data.free
-          ? `A new ${data.eventLabel || "design"} for you — on us 🎁`
-          : `We made you a new ${data.eventLabel || "design"} ✨`,
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Admin design send failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Admin design send threw:", e);
-    return { ok: false };
-  }
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject: data.free
+      ? `A new ${data.eventLabel || "design"} for you — on us 🎁`
+      : `We made you a new ${data.eventLabel || "design"} ✨`,
+    html,
+    unsubscribeUrl: unsubscribeUrl(data.to),
+    label: "admin-design",
+  });
 }
 
 export async function sendDesignShareInvite(data: {
@@ -707,7 +772,7 @@ export async function sendDesignShareInvite(data: {
   ownerName: string;
   designId: string;
 }): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+  if (!data.to) return { ok: false };
   const link = `${SITE_URL}/design/${data.designId}`;
   const owner = esc(data.ownerName || "Someone");
 
@@ -734,78 +799,34 @@ export async function sendDesignShareInvite(data: {
   </table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [{ email_address: { address: data.to, name: data.to } }],
-        subject: `${data.ownerName || "Someone"} shared a Noosho design with you`,
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Share invite failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Share invite threw:", e);
-    return { ok: false };
-  }
+  // Transactional — a person-to-person invite the owner explicitly triggered.
+  return sendMail({
+    to: { address: data.to },
+    subject: `${data.ownerName || "Someone"} shared a Noosho design with you`,
+    html,
+    label: "share-invite",
+  });
 }
 
 export async function sendEventReminderEmail(
   data: EventReminderEmailData
-): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN) return { ok: false };
+): Promise<{ ok: boolean; suppressed?: boolean }> {
   if (!data.to) return { ok: false };
+  if (await suppressed(data.to, "event-reminder")) {
+    return { ok: false, suppressed: true };
+  }
 
   const honoreeText = data.honoree ? ` for ${data.honoree}` : "";
-  const subject =
-    data.daysUntil <= 1
-      ? `Your ${data.eventLabel}${honoreeText} is ${data.daysUntil === 0 ? "today" : "tomorrow"}! 🎉`
-      : `${data.daysUntil} days until your ${data.eventLabel}${honoreeText} 🎉`;
-
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
-        subject,
-        htmlbody: buildEventReminderHtml(data),
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Reminder send failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (err) {
-    console.error("[email] Reminder send threw:", err);
-    return { ok: false };
-  }
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject:
+      data.daysUntil <= 1
+        ? `Your ${data.eventLabel}${honoreeText} is ${data.daysUntil === 0 ? "today" : "tomorrow"}! 🎉`
+        : `${data.daysUntil} days until your ${data.eventLabel}${honoreeText} 🎉`,
+    html: buildEventReminderHtml(data),
+    unsubscribeUrl: unsubscribeUrl(data.to),
+    label: "event-reminder",
+  });
 }
 
 /** One-time passwordless sign-in link. */
@@ -813,7 +834,7 @@ export async function sendMagicLinkEmail(data: {
   to: string;
   link: string;
 }): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
+  if (!data.to) return { ok: false };
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
 <body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
@@ -838,34 +859,116 @@ export async function sendMagicLinkEmail(data: {
   </table>
 </body></html>`;
 
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [{ email_address: { address: data.to, name: data.to } }],
-        subject: "Your Noosho sign-in link",
-        htmlbody: html,
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Magic link failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (e) {
-    console.error("[email] Magic link threw:", e);
-    return { ok: false };
+  // Transactional — a sign-in link must never be suppressed by a marketing
+  // opt-out, or opting out would lock the user out of their account.
+  return sendMail({
+    to: { address: data.to },
+    subject: "Your Noosho sign-in link",
+    html,
+    label: "magic-link",
+  });
+}
+
+// ─── Activation funnel (signed up, never designed) ───
+// Staged nudges for users who created an account but never made a design. The
+// series self-cancels: the cron's candidate query excludes anyone who has a
+// design, so creating one silently ends the funnel.
+
+export interface ActivationEmailData {
+  to: string;
+  name?: string | null;
+  stage: 1 | 2 | 3;
+}
+
+const ACTIVATION_COPY: Record<
+  1 | 2 | 3,
+  { eyebrow: string; subject: string; title: string; body: string; cta: string }
+> = {
+  1: {
+    eyebrow: "YOU'RE ALL SET",
+    subject: "Your first design is one photo away 📸",
+    title: "Ready when you are",
+    body: "Your account is set up — all that's left is a photo. Snap any room or venue and Noosho will restyle it and line up every piece to shop.",
+    cta: "Design your first room →",
+  },
+  2: {
+    eyebrow: "TAKES ABOUT A MINUTE",
+    subject: "Still thinking about it? Here's how it works 🛋️",
+    title: "One photo, one minute",
+    body: "Upload a photo, pick the pieces you want, and you'll get a full redesign with real, buyable products pinned to it. No measuring, no planning, no signup steps left.",
+    cta: "Try it now →",
+  },
+  3: {
+    eyebrow: "LAST NUDGE",
+    subject: "Your Noosho account is waiting 👋",
+    title: "We'll leave you to it",
+    body: "This is the last reminder we'll send. Your account stays ready whenever you want to try it — it only takes one photo to see what your space could look like.",
+    cta: "Design a room →",
+  },
+};
+
+export function buildActivationHtml(data: ActivationEmailData): string {
+  const c = ACTIVATION_COPY[data.stage];
+  const greeting = data.name ? `Hi ${esc(data.name.split(" ")[0])},` : "Hi there,";
+  const createUrl = `${SITE_URL}/create`;
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="color-scheme" content="light" /></head>
+<body style="margin:0;padding:0;background:${LINEN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(c.body)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid ${BORDER};">
+
+        <tr><td style="background:${INK};padding:18px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td valign="middle"><img src="${esc(LOGO_URL)}" width="34" height="34" alt="Noosho" style="display:block;width:34px;height:34px;border-radius:9px;" /></td>
+            <td valign="middle" style="padding-left:10px;"><span style="font-size:21px;font-weight:700;letter-spacing:-0.02em;color:${LINEN};">noosho</span></td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:28px 28px 0;">
+          <p style="font-size:11px;letter-spacing:0.12em;font-weight:700;color:${CLAY};margin:0 0 10px;">${esc(c.eyebrow)}</p>
+          <h1 style="font-size:26px;line-height:1.25;font-weight:700;color:${TEXT};margin:0 0 12px;letter-spacing:-0.02em;">${esc(c.title)}</h1>
+          <p style="font-size:15px;line-height:1.65;color:${MUTED};margin:0 0 6px;">${greeting}</p>
+          <p style="font-size:15px;line-height:1.65;color:${MUTED};margin:0;">${esc(c.body)}</p>
+        </td></tr>
+
+        <tr><td style="padding:24px 28px 4px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius:11px;background:${CLAY_CTA};">
+            <a href="${esc(createUrl)}" style="display:inline-block;padding:13px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">${esc(c.cta)}</a>
+          </td></tr></table>
+        </td></tr>
+
+${footerBlock({
+          reason:
+            "You're receiving this because you created a Noosho account.",
+          unsubUrl: unsubscribeUrl(data.to),
+          padding: "22px 28px 28px",
+        })}
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendActivationEmail(
+  data: ActivationEmailData
+): Promise<{ ok: boolean; suppressed?: boolean }> {
+  if (!data.to) return { ok: false };
+  if (await suppressed(data.to, "activation")) {
+    return { ok: false, suppressed: true };
   }
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject: ACTIVATION_COPY[data.stage].subject,
+    html: buildActivationHtml(data),
+    unsubscribeUrl: unsubscribeUrl(data.to),
+    label: `activation-${data.stage}`,
+  });
 }
 
 export interface AbandonedCheckoutEmailData {
@@ -877,28 +980,48 @@ export interface AbandonedCheckoutEmailData {
   amount: number; // smallest currency unit
   currency: string;
   stage: 1 | 2 | 3; // 1=day1, 2=day3, 3=final/day4
+  /** The cron always selected d.mode but never passed it, so someone who
+   *  abandoned a birthday design was told to finish their "room redesign". */
+  mode?: AppMode | string | null;
 }
 
-const ABANDON_COPY: Record<1 | 2 | 3, { eyebrow: string; subject: string; title: string; body: string }> = {
-  1: {
-    eyebrow: "YOUR DESIGN IS WAITING",
-    subject: "Your design is still waiting ✨",
-    title: "You're one step from the full look",
-    body: "You started unlocking your design but didn't finish. It's saved and ready — unlock it to see the full room and shop every piece.",
-  },
-  2: {
-    eyebrow: "DON'T LOSE YOUR DESIGN",
-    subject: "Still want your room redesign? 🛋️",
-    title: "Your design — and shopping list — are ready",
-    body: "Unlock to reveal the full-resolution redesign, the before & after, and live buy links for every piece in the room.",
-  },
-  3: {
-    eyebrow: "LAST CHANCE · 20% OFF",
-    subject: "Last chance — here's 20% off your design",
-    title: "Your final reminder — and a discount",
-    body: "This is the last nudge we'll send. To make it easy, here's 20% off — unlock now to see the full look and shop every piece before it slips off your list.",
-  },
-};
+interface AbandonCopy {
+  eyebrow: string;
+  subject: string;
+  title: string;
+  body: string;
+}
+
+function abandonCopy(stage: 1 | 2 | 3, isEvent: boolean): AbandonCopy {
+  const thing = isEvent ? "decorations" : "room";
+  switch (stage) {
+    case 1:
+      return {
+        eyebrow: "YOUR DESIGN IS WAITING",
+        subject: "Your design is still waiting ✨",
+        title: "You're one step from the full look",
+        body: `You started unlocking your design but didn't finish. It's saved and ready — unlock it to see the full ${
+          isEvent ? "setup" : "room"
+        } and shop every piece.`,
+      };
+    case 2:
+      return {
+        eyebrow: "DON'T LOSE YOUR DESIGN",
+        subject: isEvent
+          ? "Still want your event decorations? 🎉"
+          : "Still want your room redesign? 🛋️",
+        title: "Your design — and shopping list — are ready",
+        body: `Unlock to reveal the full-resolution design, the before & after, and live buy links for every piece in the ${thing}.`,
+      };
+    case 3:
+      return {
+        eyebrow: "LAST CHANCE · 20% OFF",
+        subject: "Last chance — here's 20% off your design",
+        title: "Your final reminder — and a discount",
+        body: "This is the last nudge we'll send. To make it easy, here's 20% off — unlock now to see the full look and shop every piece before it slips off your list.",
+      };
+  }
+}
 
 // Final (day-4) reminder carries a last-chance discount code. The matching
 // coupon must exist in the admin coupon manager for it to actually apply.
@@ -906,7 +1029,7 @@ const FINAL_COUPON_CODE = process.env.ABANDON_FINAL_COUPON || "DESIGN20";
 const FINAL_COUPON_PCT = 20;
 
 export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): string {
-  const c = ABANDON_COPY[data.stage];
+  const c = abandonCopy(data.stage, data.mode === "event");
   const greeting = data.name ? `Hi ${esc(data.name.split(" ")[0])},` : "Hi there,";
   const isFinal = data.stage === 3;
   // Final email pre-applies the discount via the link so it's auto-filled.
@@ -918,7 +1041,6 @@ export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): st
     Math.round(data.amount * (1 - FINAL_COUPON_PCT / 100)),
     data.currency
   );
-  const year = new Date().getFullYear();
 
   const couponBanner = isFinal
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
@@ -981,12 +1103,13 @@ export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): st
           <p style="font-size:12px;color:${FAINT};margin:12px 0 0;">Secure checkout via Stripe · One-time payment</p>
         </td></tr>
 
-        <tr><td style="padding:26px 28px 28px;">
-          <p style="font-size:11px;line-height:1.6;color:${FAINT};margin:0;border-top:1px solid ${BORDER};padding-top:14px;">
-            © ${year} Noosho. ${AFFILIATE_DISCLOSURE}<br />
-            You're receiving this because you started unlocking a design on Noosho.
-          </p>
-        </td></tr>
+${footerBlock({
+          reason:
+            "You're receiving this because you started unlocking a design on Noosho.",
+          unsubUrl: unsubscribeUrl(data.to),
+          disclosure: true,
+          padding: "26px 28px 28px",
+        })}
 
       </table>
     </td></tr>
@@ -997,37 +1120,21 @@ export function buildAbandonedCheckoutHtml(data: AbandonedCheckoutEmailData): st
 
 export async function sendAbandonedCheckoutEmail(
   data: AbandonedCheckoutEmailData
-): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN || !data.to) return { ok: false };
-  const subject = ABANDON_COPY[data.stage].subject;
-  try {
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [{ email_address: { address: data.to, name: data.name || data.to } }],
-        subject,
-        htmlbody: buildAbandonedCheckoutHtml(data),
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(`[email] Abandoned send failed: ${res.status} ${body.slice(0, 200)}`);
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (err) {
-    console.error("[email] Abandoned send threw:", err);
-    return { ok: false };
+): Promise<{ ok: boolean; suppressed?: boolean }> {
+  if (!data.to) return { ok: false };
+  // Belt-and-braces: getDueCheckoutReminders already excludes opted-out
+  // addresses. `suppressed` is reported separately from `ok` so the cron
+  // retires the stage instead of retrying it every night forever.
+  if (await suppressed(data.to, "abandoned-checkout")) {
+    return { ok: false, suppressed: true };
   }
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject: abandonCopy(data.stage, data.mode === "event").subject,
+    html: buildAbandonedCheckoutHtml(data),
+    unsubscribeUrl: unsubscribeUrl(data.to),
+    label: "abandoned-checkout",
+  });
 }
 
 /**
@@ -1038,56 +1145,17 @@ export async function sendAbandonedCheckoutEmail(
 export async function sendDesignReadyEmail(
   data: DesignReadyEmailData
 ): Promise<{ ok: boolean }> {
-  if (!ZEPTOMAIL_TOKEN) {
-    console.error("[email] ZEPTOMAIL_TOKEN not set — skipping design-ready email");
-    return { ok: false };
-  }
   if (!data.to) return { ok: false };
 
   const isEvent = data.mode === "event";
-  const subject = isEvent
-    ? `Your ${data.eventConfig?.eventLabel || "event"} design is ready 🎉`
-    : "Your room redesign is ready ✨";
-
-  try {
-    // Accept the token with or without the "Zoho-enczapikey " prefix —
-    // ZeptoMail's copy button is inconsistent about including it.
-    const authHeader = ZEPTOMAIL_TOKEN.startsWith("Zoho-enczapikey")
-      ? ZEPTOMAIL_TOKEN
-      : `Zoho-enczapikey ${ZEPTOMAIL_TOKEN}`;
-
-    const res = await fetch(ZEPTOMAIL_API_URL, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        from: { address: FROM_ADDRESS, name: FROM_NAME },
-        to: [
-          {
-            email_address: {
-              address: data.to,
-              name: data.name || data.to,
-            },
-          },
-        ],
-        subject,
-        htmlbody: buildDesignReadyHtml(data),
-      }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      console.error(
-        `[email] ZeptoMail send failed: ${res.status} ${body.slice(0, 300)}`
-      );
-      return { ok: false };
-    }
-    return { ok: true };
-  } catch (err) {
-    console.error("[email] ZeptoMail send threw:", err);
-    return { ok: false };
-  }
+  // Transactional: this is the thing the user paid for, so it is deliberately
+  // not gated on the marketing opt-out.
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject: isEvent
+      ? `Your ${data.eventConfig?.eventLabel || "event"} design is ready 🎉`
+      : "Your room redesign is ready ✨",
+    html: buildDesignReadyHtml(data),
+    label: "design-ready",
+  });
 }

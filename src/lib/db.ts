@@ -619,12 +619,30 @@ function nextEventOccurrence(eventType: string, eventDate: string): string | nul
 /** Returns upcoming events (within daysAhead days) with the user's email/name for reminder emails.
  *  Recurring events use their next annual occurrence; one-time events only fire once. */
 export async function getUpcomingEventReminders(daysAhead: number) {
+  await ensureEmailPrefsSchema();
+  // This used to select the entire event_dates table and filter in JS. The
+  // exact next-occurrence logic still has to run in JS (one-time vs recurring
+  // comes from events.ts), but the rows that could not possibly match are now
+  // excluded in SQL: either the stored date is still ahead of us, or the
+  // month/day is within the window ignoring the year. The day-of-year
+  // comparison wraps at the new year, and the extra 2 days of slack absorb
+  // leap-year drift, so a real match is never filtered out here.
   const { rows } = await sql`
     SELECT
       ed.id, ed.event_type, ed.event_label, ed.event_date, ed.honoree,
       u.email, u.name
     FROM event_dates ed
     JOIN users u ON u.id = ed.user_id
+    WHERE u.email <> ''
+      AND NOT EXISTS (
+        SELECT 1 FROM email_optouts eo WHERE eo.email = lower(u.email)
+      )
+      AND (
+        ed.event_date >= CURRENT_DATE
+        OR ((EXTRACT(DOY FROM ed.event_date)::int
+             - EXTRACT(DOY FROM CURRENT_DATE)::int + 366) % 366)
+            <= ${daysAhead + 2}
+      )
   `;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -904,6 +922,31 @@ export async function incrementCouponUse(code: string) {
 }
 
 // ─── Abandoned-checkout funnel ───
+
+// checkout_intents was only ever created by scripts/migrate.mjs, which has
+// never been run against production — so the abandoned-checkout cron was the
+// one code path that could fail outright with "relation does not exist".
+// Self-init it here alongside the other drifted schema.
+let checkoutIntentsReady = false;
+async function ensureCheckoutIntentsSchema() {
+  if (checkoutIntentsReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS checkout_intents (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID,
+      design_id UUID,
+      email TEXT NOT NULL,
+      name TEXT,
+      amount INTEGER,
+      currency TEXT,
+      last_reminder_stage INTEGER DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(user_id, design_id)
+    )
+  `;
+  checkoutIntentsReady = true;
+}
+
 export async function recordCheckoutIntent(p: {
   userId: string;
   designId: string;
@@ -912,6 +955,11 @@ export async function recordCheckoutIntent(p: {
   amount: number;
   currency: string;
 }) {
+  await ensureCheckoutIntentsSchema();
+  // Deliberately does NOT reset last_reminder_stage or created_at. Re-opening
+  // checkout on the same design used to restart the whole 3-email series from
+  // day 1, so a user who kept revisiting could be sent the day-4 "20% off"
+  // mail over and over. The funnel now runs at most once per (user, design).
   await sql`
     INSERT INTO checkout_intents (user_id, design_id, email, name, amount, currency)
     VALUES (${p.userId}, ${p.designId}, ${p.email}, ${p.name || null}, ${p.amount}, ${p.currency})
@@ -919,14 +967,15 @@ export async function recordCheckoutIntent(p: {
       email = EXCLUDED.email,
       name = EXCLUDED.name,
       amount = EXCLUDED.amount,
-      currency = EXCLUDED.currency,
-      last_reminder_stage = 0,
-      created_at = now()
+      currency = EXCLUDED.currency
   `;
 }
 
 // Intents that are still unpaid and haven't finished the 3-stage funnel.
+// Bounded to the last 30 days so an ancient intent isn't "due" forever.
 export async function getDueCheckoutReminders() {
+  await ensureCheckoutIntentsSchema();
+  await ensureEmailPrefsSchema();
   const { rows } = await sql`
     SELECT
       ci.id, ci.design_id, ci.email, ci.name, ci.amount, ci.currency,
@@ -937,6 +986,10 @@ export async function getDueCheckoutReminders() {
     JOIN designs d ON d.id = ci.design_id
     WHERE ci.last_reminder_stage < 3
       AND d.is_unlocked = false
+      AND ci.created_at > now() - INTERVAL '30 days'
+      AND NOT EXISTS (
+        SELECT 1 FROM email_optouts eo WHERE lower(eo.email) = lower(ci.email)
+      )
   `;
   return rows as {
     id: string;
@@ -954,7 +1007,190 @@ export async function getDueCheckoutReminders() {
 }
 
 export async function markCheckoutReminderSent(id: string, stage: number) {
+  await ensureCheckoutIntentsSchema();
   await sql`UPDATE checkout_intents SET last_reminder_stage = ${stage} WHERE id = ${id}`;
+}
+
+// ─── Email opt-out (marketing suppression) ───
+// One global opt-out list keyed by lowercased email. It suppresses MARKETING
+// mail only — the abandoned-checkout series, event reminders and the activation
+// funnel. Transactional mail (design-ready, magic-link sign-in, share invites)
+// always sends: a user who opted out of marketing still needs the thing they
+// paid for and the link they asked for.
+let emailPrefsReady = false;
+export async function ensureEmailPrefsSchema() {
+  if (emailPrefsReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS email_optouts (
+      email TEXT PRIMARY KEY,
+      reason TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  emailPrefsReady = true;
+}
+
+export async function optOutEmail(email: string, reason?: string) {
+  await ensureEmailPrefsSchema();
+  await sql`
+    INSERT INTO email_optouts (email, reason)
+    VALUES (${email.trim().toLowerCase()}, ${reason || null})
+    ON CONFLICT (email) DO NOTHING
+  `;
+}
+
+export async function resubscribeEmail(email: string) {
+  await ensureEmailPrefsSchema();
+  await sql`DELETE FROM email_optouts WHERE email = ${email.trim().toLowerCase()}`;
+}
+
+export async function isEmailOptedOut(email: string): Promise<boolean> {
+  if (!email) return false;
+  await ensureEmailPrefsSchema();
+  const { rows } = await sql`
+    SELECT 1 FROM email_optouts WHERE email = ${email.trim().toLowerCase()} LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
+// ─── Event-reminder idempotency ───
+// event-reminders had no sent-log at all, so any manual re-run, Vercel retry or
+// duplicate invocation re-sent every reminder. One row is claimed per
+// (event row, occurrence date, threshold) BEFORE the send, so a concurrent run
+// loses the race rather than double-mailing.
+let reminderLogReady = false;
+async function ensureReminderLogSchema() {
+  if (reminderLogReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS event_reminder_log (
+      event_date_id UUID NOT NULL,
+      occurrence DATE NOT NULL,
+      days_until INTEGER NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (event_date_id, occurrence, days_until)
+    )
+  `;
+  reminderLogReady = true;
+}
+
+/** Claim the right to send one reminder. Returns false if already claimed. */
+export async function claimEventReminder(
+  eventDateId: string,
+  occurrence: string,
+  daysUntil: number
+): Promise<boolean> {
+  await ensureReminderLogSchema();
+  const { rows } = await sql`
+    INSERT INTO event_reminder_log (event_date_id, occurrence, days_until)
+    VALUES (${eventDateId}, ${occurrence}, ${daysUntil})
+    ON CONFLICT DO NOTHING
+    RETURNING event_date_id
+  `;
+  return rows.length > 0;
+}
+
+/** Release a claim when the send failed, so the next run can retry it. */
+export async function releaseEventReminder(
+  eventDateId: string,
+  occurrence: string,
+  daysUntil: number
+) {
+  await ensureReminderLogSchema();
+  await sql`
+    DELETE FROM event_reminder_log
+     WHERE event_date_id = ${eventDateId}
+       AND occurrence = ${occurrence}
+       AND days_until = ${daysUntil}
+  `;
+}
+
+// ─── Activation funnel (signed up, never designed) ───
+
+let activationReady = false;
+async function ensureActivationSchema() {
+  if (activationReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS activation_emails (
+      user_id UUID NOT NULL,
+      stage INTEGER NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, stage)
+    )
+  `;
+  // The activation query and getUserReport both probe designs by user_id, which
+  // schema.sql never indexed (only idx_designs_gallery exists).
+  await sql`CREATE INDEX IF NOT EXISTS idx_designs_user ON designs (user_id)`;
+  activationReady = true;
+}
+
+export interface ActivationCandidate {
+  id: string;
+  email: string;
+  name: string | null;
+  days_since: number;
+  last_stage: number;
+}
+
+/**
+ * Users who signed up but have never created a design.
+ *
+ * The `NOT EXISTS` on designs is what stops the funnel: the moment a user
+ * creates their first design they stop matching, so no further stage is ever
+ * sent — no separate cancellation step is needed.
+ *
+ * Deduped by lowercased email because createUser conflicts on google_id rather
+ * than email, so a magic-link user who later signs in with Google has two rows
+ * and would otherwise be mailed twice.
+ *
+ * Bounded to `windowDays` so the first run after deploy doesn't blast the
+ * entire back catalogue of users who signed up long ago.
+ */
+export async function getActivationCandidates(
+  windowDays: number
+): Promise<ActivationCandidate[]> {
+  await ensureActivationSchema();
+  await ensureEmailPrefsSchema();
+  const { rows } = await sql`
+    SELECT DISTINCT ON (lower(u.email))
+      u.id, u.email, u.name,
+      EXTRACT(EPOCH FROM (now() - u.created_at)) / 86400 AS days_since,
+      COALESCE((SELECT MAX(stage) FROM activation_emails a WHERE a.user_id = u.id), 0) AS last_stage
+    FROM users u
+    WHERE u.email <> ''
+      AND u.created_at > now() - (${windowDays} * INTERVAL '1 day')
+      AND NOT EXISTS (SELECT 1 FROM designs d WHERE d.user_id = u.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM email_optouts eo WHERE eo.email = lower(u.email)
+      )
+    ORDER BY lower(u.email), u.created_at ASC
+  `;
+  return (rows as ActivationCandidate[]).map((r) => ({
+    ...r,
+    days_since: Number(r.days_since),
+    last_stage: Number(r.last_stage),
+  }));
+}
+
+/** Claim one activation stage for a user. Returns false if already sent. */
+export async function claimActivationEmail(
+  userId: string,
+  stage: number
+): Promise<boolean> {
+  await ensureActivationSchema();
+  const { rows } = await sql`
+    INSERT INTO activation_emails (user_id, stage)
+    VALUES (${userId}, ${stage})
+    ON CONFLICT DO NOTHING
+    RETURNING user_id
+  `;
+  return rows.length > 0;
+}
+
+export async function releaseActivationEmail(userId: string, stage: number) {
+  await ensureActivationSchema();
+  await sql`
+    DELETE FROM activation_emails WHERE user_id = ${userId} AND stage = ${stage}
+  `;
 }
 
 // ─── Feature flags ───

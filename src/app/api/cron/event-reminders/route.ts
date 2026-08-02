@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
-import { getUpcomingEventReminders } from "@/lib/db";
+import {
+  getUpcomingEventReminders,
+  claimEventReminder,
+  releaseEventReminder,
+} from "@/lib/db";
 import { sendEventReminderEmail } from "@/lib/email";
+import { assertCron } from "@/lib/cron";
 
 // Called daily by Vercel Cron — protected by CRON_SECRET.
 export const runtime = "nodejs";
@@ -8,16 +13,12 @@ export const runtime = "nodejs";
 const REMINDER_DAYS = [7, 3, 1, 0]; // send reminders at these thresholds
 
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (
-    process.env.CRON_SECRET &&
-    authHeader !== `Bearer ${process.env.CRON_SECRET}`
-  ) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = assertCron(request);
+  if (denied) return denied;
 
-  const sent: string[] = [];
-  const failed: string[] = [];
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
 
   try {
     // Fetch all upcoming events within 7 days
@@ -33,6 +34,13 @@ export async function GET(request: Request) {
 
       if (!REMINDER_DAYS.includes(daysUntil)) continue;
 
+      // Claim before sending. This funnel previously had no sent-log at all, so
+      // any manual re-run or Vercel retry re-sent every reminder.
+      if (!(await claimEventReminder(event.id, event.event_date, daysUntil))) {
+        skipped++;
+        continue;
+      }
+
       const result = await sendEventReminderEmail({
         to: event.email,
         name: event.name ?? undefined,
@@ -43,14 +51,20 @@ export async function GET(request: Request) {
       });
 
       if (result.ok) {
-        sent.push(`${event.email}:${event.event_label}:${daysUntil}d`);
+        sent++;
+      } else if (result.suppressed) {
+        // Opted out — keep the claim so this occurrence is never retried.
+        skipped++;
       } else {
-        failed.push(`${event.email}:${event.event_label}`);
+        await releaseEventReminder(event.id, event.event_date, daysUntil);
+        failed++;
       }
     }
 
-    console.log(`[cron/event-reminders] sent=${sent.length} failed=${failed.length}`);
-    return NextResponse.json({ sent: sent.length, failed: failed.length });
+    console.log(
+      `[cron/event-reminders] sent=${sent} failed=${failed} skipped=${skipped}`
+    );
+    return NextResponse.json({ sent, failed, skipped });
   } catch (err) {
     console.error("[cron/event-reminders] error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
