@@ -22,7 +22,11 @@ export interface RoomAnalysis {
   suggestedProducts: SuggestedProduct[];
   clutterLevel: ClutterLevel;
   removableObjects: RemovableObject[];
-  /** Optional: absent on designs analyzed before staging existed. */
+  /** Events only. Decides whether focal staging applies at all — see
+   *  {@link StagingPlan}. Absent on space designs and on anything analyzed
+   *  before the indoor/outdoor split. */
+  venueKind?: VenueKind;
+  /** Indoor events only. Absent for outdoor venues by design. */
   stagingPlan?: StagingPlan;
   questions: Question[]; // kept for backwards compatibility
 }
@@ -61,6 +65,18 @@ export function recommendedClears(
 }
 
 export type ClutterLevel = "clean" | "moderate" | "cluttered";
+
+/**
+ * Indoor room/hall vs open-air ground, for events.
+ *
+ * Focal staging is an INDOOR idea. A room has one wall a guest naturally faces,
+ * so concentrating the decoration there reads as designed. An open ground —
+ * a school campus, a lawn, a terrace — has no such wall, and forcing everything
+ * into one "focal zone" looked wrong in testing. Outdoor venues keep the
+ * pre-staging behaviour: several separate decorated moments spread across the
+ * space.
+ */
+export type VenueKind = "indoor" | "outdoor";
 
 export interface RemovableObject {
   id: string;

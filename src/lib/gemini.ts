@@ -127,6 +127,7 @@ const roomAnalysisSchema = {
     suggestedProducts: { type: Type.ARRAY, items: suggestedProductSchema },
     clutterLevel: { type: Type.STRING },
     removableObjects: { type: Type.ARRAY, items: removableObjectSchema },
+    venueKind: { type: Type.STRING },
     stagingPlan: stagingPlanSchema,
   },
   required: [
@@ -192,6 +193,12 @@ Fill in:
 - existingFurniture: key furniture/surfaces you see (sofa, table, wall, etc.)
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
+- venueKind: "indoor" or "outdoor". Decide this FIRST, because it changes the rest of your answer.
+  - "indoor": an enclosed room or hall — walls you can decorate, a ceiling, ordinary domestic or hall scale.
+  - "outdoor": open-air or open ground — school ground or campus, garden, lawn, park, terrace, rooftop, courtyard, poolside, farmhouse, driveway, street. ALSO use "outdoor" for any space so large and open that it reads as a ground or arena rather than a room, even if technically covered (e.g. a pandal, a shamiana, an open pavilion, a large covered stage area).
+  - When genuinely torn, choose "outdoor". Concentrating everything in one spot looks worse in a big open space than spreading out does in a small one.
+
+════ IF venueKind is "indoor", follow THESE rules ════
 - stagingPlan: FIRST decide where the decoration goes, before choosing any item.
   - focalZone: the ONE area this design is built around, described so it can be found in the photo (e.g. "the wall behind the television console"). Pick the largest, most visible, least obstructed surface that a guest looking into the room would face. A decoration concentrated in one place reads as designed; the same items spread around a room read as mess.
   - focalReason: one sentence on why that area won.
@@ -201,6 +208,13 @@ Fill in:
   - 5-6 items if dimensions is "medium" and clutterLevel is "moderate"
   - 6-8 items ONLY if the space is large and clutterLevel is "clean"
   A small or busy room needs fewer, bigger gestures — never more items to compete with what is already there.
+
+════ IF venueKind is "outdoor", follow THESE rules INSTEAD ════
+- stagingPlan: OMIT this field entirely. An open ground has no single wall a guest faces, so there is no focal zone to build on and forcing one looks wrong.
+- suggestedProducts: 6-8 items. An open venue has room for several separate decorated moments — an entrance or gateway, a stage or backdrop area, seating, pathways, perimeter — so items SHOULD be distributed across the space rather than concentrated in one spot.
+- Anchor décor to real structures you can see: existing poles, trees, walls, railings, gates, stage, canopy frame, tables. Never float anything in open ground with nothing supporting it.
+- Do not set "effort", "blocksFocal" or "clearReason" on removableObjects — there is no focal zone for them to relate to.
+════ END of the venueKind branch ════
 - clutterLevel: "clean" if the space is empty or nearly so, "moderate" if it has some furniture/objects, "cluttered" if it is full of items that would crowd the decorations
 - removableObjects: everything the occupant could physically shift out of the way before the event — substantial furniture and large décor (sofa, table, chairs, shelving unit, rug, large lamp, large plant, cabinet/console), AND lighter movable things that crowd the space or sit on a wall (bean bag, floor cushions, ride-on toy, laundry basket, drying rack, framed picture, wall hanging, hanging plant, clock, mirror). EXCLUDE only permanent architecture (walls, floor, ceiling, windows, doors, built-ins) and loose tabletop clutter (remotes, bottles, cups, food, papers, chargers), which is tidied away automatically. Each entry has:
   - "id": short snake_case identifier
@@ -220,9 +234,10 @@ CRITICAL RULES for suggestedProducts:
   - Do NOT suggest a table centerpiece, dessert-table or cake-table decor unless a table is clearly visible. Never invent a table, dessert stand or cake table that is not already in the photo.
   - Do NOT suggest a full-wall backdrop unless a clear, largely unobstructed wall is visible — otherwise suggest a smaller banner sized to the wall space that actually exists
   - Do NOT suggest anything requiring structural changes, new fixtures, or rearranging the room
-- BUILD ONE COMPOSITION, do not sprinkle. At least HALF the items must belong to the stagingPlan focalZone and work together there as a single arrangement (e.g. backdrop + balloons + a sign on the same wall). The remainder go to the supportingZones. Never place items in an area that is neither the focal zone nor a supporting zone.
-- Do NOT stack more than 2 items on any single surface. Three things on one console is clutter, not styling.
-- You MAY assume the objects worth clearing (see removableObjects) are gone — design for the room once the focal zone is clear, not around the mess.
+- INDOOR ONLY — BUILD ONE COMPOSITION, do not sprinkle. At least HALF the items must belong to the stagingPlan focalZone and work together there as a single arrangement (e.g. backdrop + balloons + a sign on the same wall). The remainder go to the supportingZones. Never place items in an area that is neither the focal zone nor a supporting zone.
+- INDOOR ONLY — Do NOT stack more than 2 items on any single surface. Three things on one console is clutter, not styling.
+- INDOOR ONLY — You MAY assume the objects worth clearing (see removableObjects) are gone; design for the room once the focal zone is clear, not around the mess.
+- OUTDOOR ONLY — spread the items across the venue's natural areas (entrance, stage/backdrop, seating, perimeter, pathways). Do NOT concentrate them in one spot, and do NOT reference a focal zone; there isn't one.
 - Examples, but only where the matching surface is visible: balloon sets/arches, themed backdrop or banner, fairy/string lights, table centerpiece, garlands, themed props, cake-table decor, welcome sign
 - Match the theme and colors specified above
 - Each "description" must name which zone the item belongs to (e.g. "balloon arch for the focal wall behind the TV console")
@@ -246,7 +261,40 @@ CRITICAL RULES for suggestedProducts:
     },
   });
 
-  return response.text ?? "";
+  return enforceVenueBranch(response.text ?? "");
+}
+
+/**
+ * Make the indoor/outdoor split a guarantee rather than a request.
+ *
+ * The prompt tells the model to omit `stagingPlan` for outdoor venues, but a
+ * field that exists in the schema tends to get filled in regardless — that is
+ * exactly how `blocksFocal` leaked into space analyses and pre-ticked two beds.
+ * Stripping it here means every downstream consumer reverts to pre-staging
+ * behaviour on its own, because they all key off `stagingPlan` being present:
+ * `recommendedClears` returns [], tidy-up pre-ticks nothing, and
+ * `recommendProducts` omits the focal-zone block.
+ *
+ * Parse failures pass through untouched — the caller already handles bad JSON.
+ */
+function enforceVenueBranch(json: string): string {
+  if (!json) return json;
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed?.venueKind !== "outdoor") return json;
+
+    delete parsed.stagingPlan;
+    if (Array.isArray(parsed.removableObjects)) {
+      for (const o of parsed.removableObjects) {
+        delete o.effort;
+        delete o.blocksFocal;
+        delete o.clearReason;
+      }
+    }
+    return JSON.stringify(parsed);
+  } catch {
+    return json;
+  }
 }
 
 /**
@@ -1247,7 +1295,28 @@ export async function recommendProducts(
   // Event-only. `analysisBlock` is shared with spacePrompt, which has no
   // instructions for honouring a focal zone — injecting one there would just be
   // noise in the prompt.
+  // Indoor events only. `analyzeRoom` strips the staging plan for outdoor
+  // venues, so its absence is the signal to fall back to the pre-staging
+  // stylist rules — concentrating everything in one spot looked wrong on open
+  // grounds like a school campus.
   const plan = eventContext ? roomAnalysis.stagingPlan : undefined;
+
+  const stylistRules = plan?.focalZone
+    ? `Think like a professional party stylist:
+1. Define a clear decoration direction matching the occasion, theme, and colors
+2. Build ONE arrangement in the FOCAL ZONE named above — the biggest, most photographed moment of the party lives there. At least HALF the items must be placed in that zone and must read as a single composition, not as separate objects that happen to share a wall.
+3. Anything left over goes to a SUPPORTING ZONE. If none are listed, keep everything in the focal zone.
+4. Never place an item in an area that is neither the focal zone nor a supporting zone, however tempting the empty surface looks. Scattering one item per wall is what makes a room look messy rather than decorated.
+5. Never assign more than 2 items to the same surface or piece of furniture.`
+    : `Think like a professional party stylist:
+1. Define a clear decoration direction matching the occasion, theme, and colors
+2. Pick decorations that work TOGETHER as a cohesive festive set
+3. Tie each item to a zone in the space. This is an open or outdoor venue, so spread the items across its natural areas — entrance or gateway, stage or backdrop, seating, perimeter, pathways — rather than concentrating them in one spot.
+4. Anchor every item to a real structure visible in the photo (pole, tree, wall, railing, gate, stage, canopy frame, table). Nothing should stand in open ground with no support.`;
+
+  const placementRule = plan?.focalZone
+    ? "MUST start by naming the zone this belongs to, then the precise spot within it, e.g. 'focal zone — centred on the wall behind the TV console, at eye level'"
+    : "which zone in the space, e.g. 'on the wall behind the main table'";
   const stagingBlock = plan?.focalZone
     ? `\n- FOCAL ZONE (the design is built here): ${plan.focalZone}${
         plan.focalReason ? ` — ${plan.focalReason}` : ""
@@ -1291,17 +1360,12 @@ Based on the space analysis and the requested items below, create a decoration v
 
 ${analysisBlock}
 
-Think like a professional party stylist:
-1. Define a clear decoration direction matching the occasion, theme, and colors
-2. Build ONE arrangement in the FOCAL ZONE named above — the biggest, most photographed moment of the party lives there. At least HALF the items must be placed in that zone and must read as a single composition, not as separate objects that happen to share a wall.
-3. Anything left over goes to a SUPPORTING ZONE. If none are listed, keep everything in the focal zone.
-4. Never place an item in an area that is neither the focal zone nor a supporting zone, however tempting the empty surface looks. Scattering one item per wall is what makes a room look messy rather than decorated.
-5. Never assign more than 2 items to the same surface or piece of furniture.
+${stylistRules}
 
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
 - searchQuery: SHORT ${marketplace} search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
-- placement: MUST start by naming the zone this belongs to, then the precise spot within it, e.g. 'focal zone — centred on the wall behind the TV console, at eye level'
+- placement: ${placementRule}
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
