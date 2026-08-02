@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "db:migrate": "node scripts/migrate.mjs",
-    "docs:events": "tsx scripts/gen-event-prompts.ts"
+    "docs:events": "npx --yes tsx scripts/gen-event-prompts.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
