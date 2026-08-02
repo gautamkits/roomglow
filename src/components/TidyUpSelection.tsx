@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ArrowRight, Trash2 } from "lucide-react";
-import type { RemovableObject } from "@/lib/types";
+import { Check, ArrowRight, Trash2, Sparkles } from "lucide-react";
+import { recommendedClears, type RemovableObject } from "@/lib/types";
 
 interface TidyUpSelectionProps {
   /** The uploaded room/venue photo (data URL) — shown so the user can see the
    *  actual room while choosing what to keep. */
   photoUrl: string;
   items: RemovableObject[];
+  /** The area the design will be built around, so the clear-list reads as
+   *  purposeful rather than as a demand to tidy the house. */
+  focalZone?: string;
   /** Called with the labels the user wants removed (empty = keep everything). */
   onComplete: (removeLabels: string[]) => void;
 }
@@ -16,13 +19,22 @@ interface TidyUpSelectionProps {
 export default function TidyUpSelection({
   photoUrl,
   items,
+  focalZone,
   onComplete,
 }: TidyUpSelectionProps) {
-  // Keep-based selection: everything is kept by default (checked). The user
-  // UNCHECKS anything they'd like cleared out. Default keep-all means no
-  // empty-room render (no cost) unless they actually remove something.
+  const suggested = new Set(recommendedClears(items));
+
+  // Pre-cleared by default, and this is the whole point of the screen.
+  //
+  // It used to default to keep-everything, which sounds safe and produced the
+  // worst outcome: a room the analysis had already flagged as "cluttered", with
+  // eight removable objects listed, went through with nothing ticked — so the
+  // empty-room pre-pass never ran and we rendered a birthday on top of a
+  // ride-on toy, a bean bag and a pile of laundry. Suggesting the clear is the
+  // difference between a design and a decorated mess. The user can still keep
+  // anything with one tap.
   const [keep, setKeep] = useState<Set<string>>(
-    () => new Set(items.map((i) => i.id))
+    () => new Set(items.filter((i) => !suggested.has(i.label)).map((i) => i.id))
   );
 
   const toggle = (id: string) => {
@@ -51,11 +63,22 @@ export default function TidyUpSelection({
     <div className="w-full">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          What would you like to keep?
+          Clear the way for the decorations
         </h2>
         <p className="text-sm text-zinc-500 mt-1">
-          Everything is kept by default. Uncheck anything you&apos;d like cleared
-          out — we&apos;ll design a cleaner space around what you keep.
+          {focalZone ? (
+            <>
+              We&apos;ll build the design on{" "}
+              <span className="text-zinc-700 dark:text-zinc-300">{focalZone}</span>.
+              We&apos;ve pre-selected what&apos;s worth moving out of the way — check
+              anything you&apos;d rather keep.
+            </>
+          ) : (
+            <>
+              We&apos;ve pre-selected what&apos;s worth moving out of the way before
+              the event. Check anything you&apos;d rather keep exactly where it is.
+            </>
+          )}
         </p>
       </div>
 
@@ -74,7 +97,7 @@ export default function TidyUpSelection({
         <div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] uppercase tracking-wide text-zinc-400">
-              Detected in your room — checked items stay
+              Checked items stay in the room
             </span>
             <div className="flex gap-1.5">
               <button
@@ -121,15 +144,33 @@ export default function TidyUpSelection({
                     <Check size={12} strokeWidth={3} />
                   </span>
                   <span className="min-w-0">
-                    <span
-                      className={`block text-sm ${
-                        isKeeping
-                          ? "text-zinc-800 dark:text-zinc-200"
-                          : "line-through text-red-700 dark:text-red-400"
-                      }`}
-                    >
-                      {item.label}
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className={`block text-sm ${
+                          isKeeping
+                            ? "text-zinc-800 dark:text-zinc-200"
+                            : "line-through text-red-700 dark:text-red-400"
+                        }`}
+                      >
+                        {item.label}
+                      </span>
+                      {item.blocksFocal && (
+                        <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/30 text-orange-800 dark:text-orange-300">
+                          <Sparkles size={9} />
+                          in the way
+                        </span>
+                      )}
+                      {item.effort === "heavy" && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                          heavy
+                        </span>
+                      )}
                     </span>
+                    {item.clearReason && !isKeeping && (
+                      <span className="block text-[11px] text-zinc-500 mt-0.5">
+                        {item.clearReason}
+                      </span>
+                    )}
                     {restsOnLabel && (
                       <span className="block text-[11px] text-zinc-400">
                         on the {restsOnLabel.toLowerCase()}

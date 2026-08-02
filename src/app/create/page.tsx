@@ -411,6 +411,7 @@ function HomeContent() {
             <TidyUpSelection
               photoUrl={image}
               items={roomAnalysis.removableObjects || []}
+              focalZone={roomAnalysis.stagingPlan?.focalZone}
               onComplete={handleTidyUp}
             />
           </div>

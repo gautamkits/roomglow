@@ -82,8 +82,21 @@ const removableObjectSchema = {
     id: { type: Type.STRING },
     label: { type: Type.STRING },
     restsOn: { type: Type.STRING },
+    effort: { type: Type.STRING },
+    blocksFocal: { type: Type.BOOLEAN },
+    clearReason: { type: Type.STRING },
   },
-  required: ["id", "label"],
+  required: ["id", "label", "effort", "blocksFocal"],
+};
+
+const stagingPlanSchema = {
+  type: Type.OBJECT,
+  properties: {
+    focalZone: { type: Type.STRING },
+    focalReason: { type: Type.STRING },
+    supportingZones: { type: Type.ARRAY, items: { type: Type.STRING } },
+  },
+  required: ["focalZone", "focalReason", "supportingZones"],
 };
 
 const roomGeometrySchema = {
@@ -110,6 +123,7 @@ const roomAnalysisSchema = {
     suggestedProducts: { type: Type.ARRAY, items: suggestedProductSchema },
     clutterLevel: { type: Type.STRING },
     removableObjects: { type: Type.ARRAY, items: removableObjectSchema },
+    stagingPlan: stagingPlanSchema,
   },
   required: [
     "roomType",
@@ -174,9 +188,26 @@ Fill in:
 - existingFurniture: key furniture/surfaces you see (sofa, table, wall, etc.)
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the space
-- suggestedProducts: 6-8 EVENT DECORATION items
+- stagingPlan: FIRST decide where the decoration goes, before choosing any item.
+  - focalZone: the ONE area this design is built around, described so it can be found in the photo (e.g. "the wall behind the television console"). Pick the largest, most visible, least obstructed surface that a guest looking into the room would face. A decoration concentrated in one place reads as designed; the same items spread around a room read as mess.
+  - focalReason: one sentence on why that area won.
+  - supportingZones: AT MOST 2 further areas that get a light accent. May be empty. Never more than 2.
+- suggestedProducts: EVENT DECORATION items, count scaled to the space:
+  - 3-4 items if dimensions is "small" OR clutterLevel is "cluttered"
+  - 5-6 items if dimensions is "medium" and clutterLevel is "moderate"
+  - 6-8 items ONLY if the space is large and clutterLevel is "clean"
+  A small or busy room needs fewer, bigger gestures — never more items to compete with what is already there.
 - clutterLevel: "clean" if the space is empty or nearly so, "moderate" if it has some furniture/objects, "cluttered" if it is full of items that would crowd the decorations
-- removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, table, chairs, shelving unit, rug, large lamp, large plant, cabinet/console). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a centerpiece on a table, a lamp on a stand). Return an empty array only if there are no large movable pieces.
+- removableObjects: everything the occupant could physically shift out of the way before the event — substantial furniture and large décor (sofa, table, chairs, shelving unit, rug, large lamp, large plant, cabinet/console), AND lighter movable things that crowd the space or sit on a wall (bean bag, floor cushions, ride-on toy, laundry basket, drying rack, framed picture, wall hanging, hanging plant, clock, mirror). EXCLUDE only permanent architecture (walls, floor, ceiling, windows, doors, built-ins) and loose tabletop clutter (remotes, bottles, cups, food, papers, chargers), which is tidied away automatically. Each entry has:
+  - "id": short snake_case identifier
+  - "label": human name
+  - "restsOn": the "id" of the object it sits on, if any (e.g. a centerpiece on a table), so clearing never leaves it floating
+  - "effort": how hard it is for ONE person to move it before a party —
+    - "trivial": lift or unhook in seconds (bean bag, cushions, toys, baskets, framed picture, wall hanging, small plant, clock)
+    - "moderate": one person can slide or carry it (armchair, side table, floor lamp, small rug, drying rack)
+    - "heavy": needs two people or real effort (sofa, large TV unit, bed, wardrobe, dining table, large rug)
+  - "blocksFocal": true if this object sits in, covers, or visually competes with the stagingPlan focalZone. A picture frame or wall hanging in the middle of the chosen backdrop wall is the clearest case — mark it true. Be honest here even for "heavy" objects: if a sofa or TV unit genuinely occupies the focal zone, say so.
+  - "clearReason": one short sentence, addressed to the occupant, on what clearing it buys — e.g. "Frees the backdrop wall for the balloon arch." Only needed when effort is "trivial" or blocksFocal is true.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest ONLY event DECORATIONS appropriate to the occasion and theme — NOT permanent furniture
@@ -185,10 +216,12 @@ CRITICAL RULES for suggestedProducts:
   - Do NOT suggest a table centerpiece, dessert-table or cake-table decor unless a table is clearly visible. Never invent a table, dessert stand or cake table that is not already in the photo.
   - Do NOT suggest a full-wall backdrop unless a clear, largely unobstructed wall is visible — otherwise suggest a smaller banner sized to the wall space that actually exists
   - Do NOT suggest anything requiring structural changes, new fixtures, or rearranging the room
-- Think in decoratable ZONES you can actually see: focal/backdrop wall, table surfaces, entryway
+- BUILD ONE COMPOSITION, do not sprinkle. At least HALF the items must belong to the stagingPlan focalZone and work together there as a single arrangement (e.g. backdrop + balloons + a sign on the same wall). The remainder go to the supportingZones. Never place items in an area that is neither the focal zone nor a supporting zone.
+- Do NOT stack more than 2 items on any single surface. Three things on one console is clutter, not styling.
+- You MAY assume the objects worth clearing (see removableObjects) are gone — design for the room once the focal zone is clear, not around the mess.
 - Examples, but only where the matching surface is visible: balloon sets/arches, themed backdrop or banner, fairy/string lights, table centerpiece, garlands, themed props, cake-table decor, welcome sign
 - Match the theme and colors specified above
-- Each "description" must reference a zone you ACTUALLY see in the photo (e.g. "balloon arch for the bare wall behind the sofa")
+- Each "description" must name which zone the item belongs to (e.g. "balloon arch for the focal wall behind the TV console")
 - "icon" is a single relevant emoji character
 - "id" is a short snake_case identifier`;
 
@@ -1204,13 +1237,27 @@ export async function recommendProducts(
     ? `\n- REMOVED by the user (no longer in the room — do not design around these; suggest replacements/fillers for the freed space where it makes sense): ${removeLabels.join(", ")}`
     : "";
 
+  // The staging plan is decided once, in analyzeRoom, from the photo. Echoing
+  // it here is what stops each product getting a placement in isolation — the
+  // failure mode that scattered one birthday across four walls and a console.
+  const plan = roomAnalysis.stagingPlan;
+  const stagingBlock = plan?.focalZone
+    ? `\n- FOCAL ZONE (the design is built here): ${plan.focalZone}${
+        plan.focalReason ? ` — ${plan.focalReason}` : ""
+      }${
+        plan.supportingZones?.length
+          ? `\n- SUPPORTING ZONES (light accents only): ${plan.supportingZones.join("; ")}`
+          : "\n- SUPPORTING ZONES: none — keep everything in the focal zone."
+      }`
+    : "";
+
   const analysisBlock = `Space Analysis:
 - Type: ${roomAnalysis.roomType}
 - Current Style: ${roomAnalysis.currentStyle}
 - Size: ${roomAnalysis.dimensions}
 - Existing Furniture/Surfaces: ${remaining.join(", ") || "cleared / mostly empty"}
 - Lighting: ${roomAnalysis.lightingCondition}
-- Current Colors: ${roomAnalysis.colorPalette.join(", ")}${removedBlock}
+- Current Colors: ${roomAnalysis.colorPalette.join(", ")}${stagingBlock}${removedBlock}
 ${productTypesList}`;
 
   const spacePrompt = `You are an expert interior designer. Based on the space analysis and user preferences below, create a design vision and recommend specific products that would transform this space.
@@ -1239,13 +1286,15 @@ ${analysisBlock}
 
 Think like a professional party stylist:
 1. Define a clear decoration direction matching the occasion, theme, and colors
-2. Pick decorations that work TOGETHER as a cohesive festive set
-3. Tie each item to a zone in the space
+2. Build ONE arrangement in the FOCAL ZONE named above — the biggest, most photographed moment of the party lives there. At least HALF the items must be placed in that zone and must read as a single composition, not as separate objects that happen to share a wall.
+3. Anything left over goes to a SUPPORTING ZONE. If none are listed, keep everything in the focal zone.
+4. Never place an item in an area that is neither the focal zone nor a supporting zone, however tempting the empty surface looks. Scattering one item per wall is what makes a room look messy rather than decorated.
+5. Never assign more than 2 items to the same surface or piece of furniture.
 
 For each product provide:
 - category: specific decoration type for THIS occasion (e.g. for an Annaprasan: 'annaprasan traditional backdrop')
 - searchQuery: SHORT ${marketplace} search query (3-5 words max) that MUST include the occasion named above. For example, an Annaprasan query should read like 'annaprasan decoration backdrop' or 'annaprasan balloon kit' — NOT 'birthday' anything. CRITICAL: never put a DIFFERENT occasion's name in the query (do not write "birthday" unless the event itself is a birthday). Include the theme/colors where helpful, but keep it generic enough to return results.
-- placement: which zone in the space, e.g. 'on the wall behind the main table'
+- placement: MUST start by naming the zone this belongs to, then the precise spot within it, e.g. 'focal zone — centred on the wall behind the TV console, at eye level'
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
 
