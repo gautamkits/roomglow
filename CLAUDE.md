@@ -26,6 +26,19 @@ data (price/links), the paywall, locale-aware commerce, accountability, gallery/
   Verify with `npx vercel ls`. No CI; run `npx tsc --noEmit` before pushing. (Local prod build
   needs a dummy `STRIPE_SECRET_KEY` — Stripe client is lazy but build collects page data.)
 
+## ⚠️ Space mode is hands-off
+**Do not change `space` (room redesign) behaviour unless the user explicitly asks.** Event
+work must be verified not to leak into it. The leak paths are real, not theoretical:
+`analyzeRoom` has two prompt branches but **one shared `roomAnalysisSchema`**, and
+`recommendProducts` builds **one shared `analysisBlock`** used by both `spacePrompt` and
+`eventPrompt`. A field added to the schema for events gets invented by the model in space
+too — that is how `blocksFocal` once pre-ticked two *beds* for removal in a flow that
+defaults to keep-everything. So: new event fields go in **optional, never `required`**;
+event-only prompt blocks are gated on `eventContext`; event-only behaviour is gated on the
+event data existing (e.g. `recommendedClears` returns `[]` with no `stagingPlan`), not on
+"are any fields populated". Before claiming space is unaffected, **run** `analyzeRoom(photo)`
+with no `eventContext` and check — reasoning about it is how the bug shipped.
+
 ## Core design flow
 1. **Mode:** `space` (room) or `event`. `SetupPanel` collects event details (type, theme,
    colors, honoree, date, gender) — events are **locale-aware** via `getEvents(locale)`
