@@ -36,61 +36,63 @@ interface ProcessingViewProps {
   isEvent: boolean;
   mode?: "space" | "event" | "makeover";
   statusMessage?: string;
-  /** Auto-selected items to ticker through while the design is being built. */
+  /** Auto-selected items shown while the design is being built. */
   items?: { label: string; icon?: string }[];
+  /** Real observations from analyzeRoom — room type, palette, furniture seen. */
+  findings?: string[];
 }
 
-// Item-by-item "designing" ticker shown once we're past analysis. Purely
-// cosmetic anticipation UX (decoupled from real pipeline timing): it checks off
-// each auto-selected piece one by one, then holds on the last until the design
-// is ready and the parent flips `step` to "results".
-function ItemTicker({
+/**
+ * The item list, driven by the REAL pipeline phase.
+ *
+ * This used to advance on a 1700ms `setTimeout` regardless of what the pipeline
+ * was actually doing, so on a slow run every item read as "done" while the
+ * design was still being sourced, and on a fast run the list was still ticking
+ * after the design was finished. Now each item's state is derived from `phase`,
+ * which only moves when a pipeline step actually completes.
+ */
+function ItemList({
   items,
   mode,
+  phase,
 }: {
   items: { label: string; icon?: string }[];
   mode: "space" | "event" | "makeover";
+  /** 1 = planning, 2 = sourcing on Amazon, 3 = rendering. */
+  phase: number;
 }) {
-  const reduceMotion =
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // Sourcing is the phase where these are actually being found.
+  const sourcing = phase === 2;
+  const placed = phase >= 3;
 
-  // done = index the ticker has advanced PAST (those are checked off).
-  const [done, setDone] = useState(reduceMotion ? items.length : 0);
-
-  useEffect(() => {
-    if (reduceMotion) return;
-    if (done >= items.length) return;
-    const t = setTimeout(() => setDone((d) => d + 1), 1700);
-    return () => clearTimeout(t);
-  }, [done, items.length, reduceMotion]);
-
-  const verb =
-    mode === "event" ? "Sourcing" : mode === "makeover" ? "Styling" : "Adding";
-
-  const allDone = done >= items.length;
+  const caption = placed
+    ? mode === "event"
+      ? "Staging your venue…"
+      : mode === "makeover"
+        ? "Dressing you in the look…"
+        : "Placing them in your room…"
+    : sourcing
+      ? "Matching each piece to a real product…"
+      : "Planning the pieces…";
 
   return (
     <>
-    <ul className="mt-6 space-y-2" aria-live="polite">
-      {items.map((item, i) => {
-        const isDone = i < done;
-        const isActive = i === done;
-        return (
+      <ul className="mt-6 space-y-2" aria-live="polite">
+        {items.map((item, i) => (
           <li
             key={`${item.label}-${i}`}
             className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-colors ${
-              isActive
+              sourcing
                 ? "border-orange-200 dark:border-orange-900/50 bg-orange-50 dark:bg-orange-950/20"
                 : "border-transparent"
-            } ${isDone || isActive ? "opacity-100" : "opacity-40"}`}
+            } ${placed || sourcing ? "opacity-100" : "opacity-60"}`}
           >
             <span className="w-5 h-5 shrink-0 flex items-center justify-center">
-              {isDone ? (
+              {placed ? (
                 <span className="w-5 h-5 rounded-full bg-orange-700 text-white flex items-center justify-center">
                   <Check size={12} strokeWidth={3} />
                 </span>
-              ) : isActive && !reduceMotion ? (
+              ) : sourcing ? (
                 <Loader2 size={16} className="text-orange-700 animate-spin" />
               ) : (
                 <span className="text-base leading-none">{item.icon ?? "•"}</span>
@@ -100,21 +102,13 @@ function ItemTicker({
               <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {item.label}
               </span>
-              {isActive && (
-                <span className="block text-xs text-orange-700 dark:text-orange-400">
-                  {`${verb}…`}
-                </span>
-              )}
             </span>
           </li>
-        );
-      })}
-    </ul>
-    {allDone && (
+        ))}
+      </ul>
       <p className="mt-3 text-center text-sm text-orange-700 dark:text-orange-400">
-        Putting it all together…
+        {caption}
       </p>
-    )}
     </>
   );
 }
@@ -185,28 +179,57 @@ export default function ProcessingView({
   mode,
   statusMessage,
   items,
+  findings,
 }: ProcessingViewProps) {
   const activeMode: "space" | "event" | "makeover" =
     mode ?? (isEvent ? "event" : "space");
-  // Show the item ticker only once we're past analysis (we have the item list).
-  const showTicker = step !== "analyzing" && !!items && items.length > 0;
-  const loadingIndex =
-    step === "analyzing" ? 0 : step === "generating" ? 1 : 2;
+  // Show the item list only once we're past analysis (we have the item list).
+  const showItems = step !== "analyzing" && !!items && items.length > 0;
+
+  /**
+   * The pipeline reuses the "generating" step for two different phases — the
+   * planning pass *before* curation and the image render *after* it — so the
+   * old `analyzing→0, generating→1, curating→2` mapping made the stepper
+   * visibly walk backwards from "Sourcing" to "Designing" during the render,
+   * which is the longest phase. Tracking the high-water mark keeps it
+   * monotonic and lets the fourth stage finally light up.
+   */
+  const [phase, setPhase] = useState(0);
+  useEffect(() => {
+    setPhase((prev) => {
+      const next =
+        step === "analyzing"
+          ? 0
+          : step === "curating"
+            ? 2
+            : prev >= 2
+              ? 3 // "generating" again, after curation → the render
+              : 1;
+      return Math.max(prev, next);
+    });
+  }, [step]);
+  const loadingIndex = phase;
 
   const headline =
-    step === "analyzing"
+    phase === 0
       ? activeMode === "event"
         ? "Studying your venue"
         : activeMode === "makeover"
           ? "Studying your photo"
           : "Studying your space"
-      : step === "generating"
+      : phase === 1
         ? activeMode === "event"
           ? "Designing the decorations"
           : activeMode === "makeover"
             ? "Styling your new look"
             : "Designing your room"
-        : "Hand-picking the products";
+        : phase === 2
+          ? "Hand-picking the products"
+          : activeMode === "event"
+            ? "Staging your venue"
+            : activeMode === "makeover"
+              ? "Rendering your new look"
+              : "Rendering your room";
 
   const labels =
     activeMode === "event"
@@ -288,10 +311,30 @@ export default function ProcessingView({
           })}
         </div>
 
-        {/* item-by-item "designing" ticker (auto-selected pieces) */}
-        {showTicker && <ItemTicker items={items!} mode={activeMode} />}
+        {/* What the AI actually read off the photo. Free to show — the parent
+            already holds the analysis — and far more engaging than a spinner,
+            because it's about the user's own room. */}
+        {findings && findings.length > 0 && (
+          <div className="mt-5 flex flex-wrap justify-center gap-1.5 animate-fade-up">
+            {findings.slice(0, 5).map((f) => (
+              <span
+                key={f}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-800"
+              >
+                <Check size={10} className="text-orange-700" />
+                {f}
+              </span>
+            ))}
+          </div>
+        )}
 
-        {statusMessage && !showTicker && (
+        {showItems && (
+          <ItemList items={items!} mode={activeMode} phase={phase} />
+        )}
+
+        {/* Always shown now. It used to be suppressed whenever the ticker was
+            visible, which hid the only honest per-step copy we had. */}
+        {statusMessage && (
           <p className="text-sm text-zinc-500 text-center mt-6">
             {statusMessage}
           </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import {
@@ -17,7 +17,7 @@ import { useRoomFlow } from "@/hooks/useRoomFlow";
 import { clearFlowSnapshot } from "@/lib/flowPersistence";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
-import SetupPanel from "@/components/SetupPanel";
+import CreateSetup from "@/components/CreateSetup";
 import TidyUpSelection from "@/components/TidyUpSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
@@ -102,6 +102,19 @@ function HomeContent() {
 
   const isEvent = mode === "event";
 
+  // What the analysis actually saw, shown during the wait. All of this is
+  // already in memory once /api/analyze-room returns — it was just never
+  // surfaced, so the user stared at a decorative bar instead.
+  const findings = useMemo(() => {
+    if (!roomAnalysis) return [];
+    const out: string[] = [];
+    if (roomAnalysis.roomType) out.push(roomAnalysis.roomType);
+    if (roomAnalysis.lightingCondition)
+      out.push(`${roomAnalysis.lightingCondition} light`);
+    for (const f of roomAnalysis.existingFurniture?.slice(0, 3) ?? []) out.push(f);
+    return out;
+  }, [roomAnalysis]);
+
   // Once a design is saved, redirect to its permanent /design/[id] page so the
   // URL is shareable AND the content is the single canonical design page (no
   // more "same URL, different content" between the create-results view and the
@@ -164,20 +177,24 @@ function HomeContent() {
           !awaitingSignIn && (
             <div className="max-w-xl mx-auto py-8 animate-fade-up">
               <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
-                <div className="flex items-center gap-3 mb-5">
-                  <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
-                    <Wand2 size={18} className="text-white" />
-                  </span>
-                  <div className="min-w-0">
-                    <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                      Redesign your space
-                    </h2>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Upload a photo → see it transformed, free. No sign-in to start.
-                    </p>
-                  </div>
-                </div>
-                <SetupPanel onImageSelected={handleImageSelected} />
+                <CreateSetup
+                  onImageSelected={handleImageSelected}
+                  v1Header={
+                    <div className="flex items-center gap-3 mb-5">
+                      <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                        <Wand2 size={18} className="text-white" />
+                      </span>
+                      <div className="min-w-0">
+                        <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                          Redesign your space
+                        </h2>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                          Upload a photo → see it transformed, free. No sign-in to start.
+                        </p>
+                      </div>
+                    </div>
+                  }
+                />
               </div>
             </div>
           )}
@@ -268,20 +285,24 @@ function HomeContent() {
                     phones (side borders/corners/shadow dropped there); from sm up
                     it returns to a normal inset card. */}
                 <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-br from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
-                  <div className="flex items-start gap-3 mb-5">
-                    <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
-                      <Wand2 size={19} className="text-white" />
-                    </span>
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                        Start a new design
-                      </h2>
-                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                        Turn any photo into a shoppable AI design in seconds.
-                      </p>
-                    </div>
-                  </div>
-                  <SetupPanel onImageSelected={handleImageSelected} />
+                  <CreateSetup
+                    onImageSelected={handleImageSelected}
+                    v1Header={
+                      <div className="flex items-start gap-3 mb-5">
+                        <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                          <Wand2 size={19} className="text-white" />
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                            Start a new design
+                          </h2>
+                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                            Turn any photo into a shoppable AI design in seconds.
+                          </p>
+                        </div>
+                      </div>
+                    }
+                  />
                 </div>
 
                 {/* Right: live activity sidebar */}
@@ -336,20 +357,24 @@ function HomeContent() {
               <div className="max-w-xl mx-auto animate-fade-up-delay-1">
                 {/* Edge-to-edge on phones — see the create card above. */}
                 <div className="relative overflow-hidden -mx-5 sm:mx-0 rounded-none sm:rounded-2xl border border-orange-200/70 dark:border-orange-900/40 border-x-0 sm:border-x bg-gradient-to-b from-orange-50 to-white dark:from-orange-950/20 dark:to-zinc-900 p-4 sm:p-6 sm:shadow-lg sm:shadow-orange-900/5">
-                  <div className="flex items-center gap-3 mb-5">
-                    <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
-                      <Wand2 size={18} className="text-white" />
-                    </span>
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                        Create your first design
-                      </h2>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        Turn any photo into a shoppable AI design in seconds.
-                      </p>
-                    </div>
-                  </div>
-                  <SetupPanel onImageSelected={handleImageSelected} />
+                  <CreateSetup
+                    onImageSelected={handleImageSelected}
+                    v1Header={
+                      <div className="flex items-center gap-3 mb-5">
+                        <span className="w-10 h-10 rounded-xl bg-orange-700 flex items-center justify-center shadow-sm shadow-orange-900/30 shrink-0">
+                          <Wand2 size={18} className="text-white" />
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="text-lg font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+                            Create your first design
+                          </h2>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            Turn any photo into a shoppable AI design in seconds.
+                          </p>
+                        </div>
+                      </div>
+                    }
+                  />
                 </div>
                 <p className="text-center text-xs text-zinc-400 mt-4">
                   Powered by AI · Products from Amazon
@@ -372,6 +397,7 @@ function HomeContent() {
             mode={mode}
             statusMessage={statusMessage}
             items={tickerItems}
+            findings={findings}
           />
         )}
 

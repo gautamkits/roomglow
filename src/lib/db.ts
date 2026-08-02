@@ -1193,6 +1193,62 @@ export async function releaseActivationEmail(userId: string, stage: number) {
   `;
 }
 
+// ─── Funnel events ───
+// Client analytics (PostHog + Meta Pixel) are both blocked inside the Instagram
+// in-app browser, which is where most acquisition traffic lands — so the create
+// funnel was measurable everywhere except the place it mattered. These rows are
+// the ground truth; PostHog stays as the richer-but-lossy signal.
+
+let funnelSchemaReady = false;
+async function ensureFunnelSchema() {
+  if (funnelSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS funnel_events (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      user_id UUID,
+      locale TEXT,
+      props JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_funnel_name_time ON funnel_events (name, created_at DESC)`;
+  funnelSchemaReady = true;
+}
+
+export async function recordFunnelEvent(e: {
+  name: string;
+  userId?: string | null;
+  locale?: string | null;
+  props?: Record<string, unknown> | null;
+}) {
+  try {
+    await ensureFunnelSchema();
+    await sql`
+      INSERT INTO funnel_events (name, user_id, locale, props)
+      VALUES (${e.name}, ${e.userId || null}, ${e.locale || null}, ${
+        e.props ? JSON.stringify(e.props) : null
+      })
+    `;
+  } catch (err) {
+    console.error("[funnel] record failed:", err);
+  }
+}
+
+/** Counts per event name over the last N days, for the admin funnel panel. */
+export async function getFunnelCounts(days: number = 30) {
+  await ensureFunnelSchema();
+  const { rows } = await sql`
+    SELECT name, COUNT(*)::int AS count,
+           COUNT(DISTINCT user_id)::int AS users
+    FROM funnel_events
+    WHERE created_at > now() - (${days} * INTERVAL '1 day')
+    GROUP BY name
+    ORDER BY count DESC
+  `;
+  return rows as { name: string; count: number; users: number }[];
+}
+
 // ─── Feature flags ───
 
 let featuresSchemaReady = false;
@@ -1214,6 +1270,12 @@ async function ensureFeaturesSchema() {
     INSERT INTO site_features (key, enabled) VALUES ('first_design_free', true)
     ON CONFLICT (key) DO NOTHING
   `;
+  // Photo-first stepped intake. Defaults OFF so the new flow ships dark and is
+  // switched on from /admin without a deploy — and switched back the same way.
+  await sql`
+    INSERT INTO site_features (key, enabled) VALUES ('create_v2', false)
+    ON CONFLICT (key) DO NOTHING
+  `;
   featuresSchemaReady = true;
 }
 
@@ -1230,7 +1292,11 @@ export async function getFeatures(): Promise<Record<string, boolean>> {
   }
   await ensureFeaturesSchema();
   const { rows } = await sql`SELECT key, enabled FROM site_features`;
-  const result: Record<string, boolean> = { makeover: false, first_design_free: false };
+  const result: Record<string, boolean> = {
+    makeover: false,
+    first_design_free: false,
+    create_v2: false,
+  };
   for (const row of rows) result[row.key] = row.enabled;
   featuresCache = { at: Date.now(), value: result };
   return result;

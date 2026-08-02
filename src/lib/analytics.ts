@@ -25,7 +25,7 @@ function toMetaName(name: string): string {
 export function track(
   name: string,
   props?: Record<string, unknown>,
-  opts?: { meta?: boolean }
+  opts?: { meta?: boolean; server?: boolean }
 ): void {
   try {
     if ((posthog as unknown as { __loaded?: boolean }).__loaded) {
@@ -41,4 +41,59 @@ export function track(
       /* pixel not ready — ignore */
     }
   }
+  if (opts?.server) {
+    // PostHog and the Pixel are both blocked in the Instagram in-app browser —
+    // our main ad channel — so the load-bearing funnel events are additionally
+    // posted to our own endpoint, which is not blockable.
+    try {
+      const body = JSON.stringify({ name, props });
+      if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          "/api/funnel",
+          new Blob([body], { type: "application/json" })
+        );
+      } else {
+        void fetch("/api/funnel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch {
+      /* never let telemetry break the flow */
+    }
+  }
+}
+
+/**
+ * Funnel events for the create flow. Kept as a closed union so the step names
+ * can't drift — before this, `setStep` was called ~20 times and emitted
+ * nothing, so there was no way to tell whether users abandoned at the sign-in
+ * wall, during generation, or at the paywall.
+ */
+export type FunnelEvent =
+  | "setup_started"
+  | "occasion_selected"
+  | "photo_selected"
+  | "signin_gate_shown"
+  | "signin_gate_returned"
+  | "flow_step"
+  | "pipeline_failed"
+  | "design_completed";
+
+// Events worth paying a server round-trip for.
+const SERVER_EVENTS: ReadonlySet<FunnelEvent> = new Set([
+  "photo_selected",
+  "signin_gate_shown",
+  "signin_gate_returned",
+  "design_completed",
+  "pipeline_failed",
+]);
+
+export function trackFunnel(
+  name: FunnelEvent,
+  props?: Record<string, unknown>
+): void {
+  track(name, props, { server: SERVER_EVENTS.has(name) });
 }

@@ -31,6 +31,9 @@ export const viewport: Viewport = {
   themeColor: "#bd6a43",
   width: "device-width",
   initialScale: 1,
+  // Required for env(safe-area-inset-*) to resolve to anything but 0. Without
+  // it the sticky CTA sits under the Instagram in-app browser's bottom chrome.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

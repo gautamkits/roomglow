@@ -14,7 +14,7 @@ import type {
   Hotspot,
 } from "@/lib/types";
 import { useSession } from "next-auth/react";
-import { track } from "@/lib/analytics";
+import { track, trackFunnel } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 // Shared with the admin regenerate path so both build the same event brief.
 import { buildEventContext } from "@/lib/events";
@@ -258,6 +258,10 @@ export function useRoomFlow() {
           noBudget: !!selectedNoBudget,
         });
         setAwaitingSignIn(true);
+        // The single biggest drop-off point in the product, and until now it
+        // emitted nothing at all — so "abandoned at the sign-in wall" was
+        // indistinguishable from "abandoned during generation".
+        trackFunnel("signin_gate_shown", { mode: activeMode });
         return;
       }
 
@@ -368,6 +372,9 @@ export function useRoomFlow() {
       if (!p) return;
       clearPendingUpload();
       setAwaitingSignIn(false);
+      // Pairs with signin_gate_shown — the ratio between the two is the
+      // conversion rate of the wall, a number we have never had.
+      trackFunnel("signin_gate_returned", { mode: p.mode });
       handleImageSelected(
         p.base64,
         p.mode,
@@ -653,6 +660,7 @@ export function useRoomFlow() {
       }
 
       progressRef.current = {}; // success — clear the resume buffer
+      trackFunnel("design_completed", { mode, designId: p.designId ?? null });
       setStep("results");
     } catch (e) {
       const retriesLeft = retryCount < MAX_PIPELINE_RETRIES;
@@ -663,6 +671,13 @@ export function useRoomFlow() {
             : "Something went wrong. Please try again."
           : "We couldn't complete your design after several tries. Please start over with a new photo."
       );
+      // Record which step actually failed — the old logging couldn't tell a
+      // dead Amazon search from a failed render.
+      trackFunnel("pipeline_failed", {
+        mode,
+        attempt: retryCount + 1,
+        message: e instanceof Error ? e.message.slice(0, 120) : "unknown",
+      });
       // Keep progressRef so the next attempt resumes from the failed step — but
       // only offer a retry while attempts remain (each retry is a paid gen).
       setCanRetry(retriesLeft);

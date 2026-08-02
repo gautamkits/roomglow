@@ -17,6 +17,9 @@ interface SetupPanelProps {
     makeoverConfig?: MakeoverConfig | null,
     noBudget?: boolean
   ) => void;
+  /** Resolved once by CreateSetup; avoids this panel's own /api/features fetch
+   *  reflowing the mode grid from 2 to 3 columns after mount. */
+  makeoverEnabled?: boolean;
 }
 
 function Chip({
@@ -42,7 +45,10 @@ function Chip({
   );
 }
 
-export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
+export default function SetupPanel({
+  onImageSelected,
+  makeoverEnabled = false,
+}: SetupPanelProps) {
   const { locale, budgetMin, budgetMax, budgetStep, formatBudget } = useLocale();
   const events = getEvents(locale);
   const [mode, setMode] = useState<AppMode>("space");
@@ -62,14 +68,6 @@ export default function SetupPanel({ onImageSelected }: SetupPanelProps) {
   );
   const [makeoverStyleId, setMakeoverStyleId] = useState<string | null>(null);
   const [makeoverGender, setMakeoverGender] = useState<string | null>(null);
-  const [makeoverEnabled, setMakeoverEnabled] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/features")
-      .then((r) => r.json())
-      .then((d) => setMakeoverEnabled(!!d.makeover))
-      .catch(() => {});
-  }, []);
 
   // Honor a ?mode= deep-link from the homepage mode tiles (space/event/makeover).
   useEffect(() => {
