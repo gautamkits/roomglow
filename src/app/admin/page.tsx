@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2, Tag, Sparkles, Gift } from "lucide-react";
+import { Check, X, BarChart2, Tag, Sparkles, Gift, Wand2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -181,6 +181,7 @@ function AdminContent() {
   const [makeoverEnabled, setMakeoverEnabled] = useState(false);
   const [featureLoading, setFeatureLoading] = useState(false);
   const [firstFreeEnabled, setFirstFreeEnabled] = useState(false);
+  const [createV2Enabled, setCreateV2Enabled] = useState(false);
   const [promoSignups, setPromoSignups] = useState(0);
   const [promoCap, setPromoCap] = useState(500);
 
@@ -234,6 +235,7 @@ function AdminContent() {
       .then((d) => {
         setMakeoverEnabled(!!d.makeover);
         setFirstFreeEnabled(!!d.first_design_free);
+        setCreateV2Enabled(!!d.create_v2);
         setPromoSignups(d.promoSignups ?? 0);
         setPromoCap(d.promoCap ?? 500);
       })
@@ -259,6 +261,8 @@ function AdminContent() {
   const toggleMakeover = () => toggleFeature("makeover", makeoverEnabled, setMakeoverEnabled);
   const toggleFirstFree = () =>
     toggleFeature("first_design_free", firstFreeEnabled, setFirstFreeEnabled);
+  const toggleCreateV2 = () =>
+    toggleFeature("create_v2", createV2Enabled, setCreateV2Enabled);
 
   useEffect(() => {
     if (status === "unauthenticated") signIn("google");
@@ -409,6 +413,32 @@ function AdminContent() {
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
                   firstFreeEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Wand2 size={15} className="text-orange-700" />
+              <div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200">New create flow</p>
+                <p className="text-xs text-zinc-500">
+                  Photo-first stepped intake · preview without switching everyone at{" "}
+                  <span className="font-mono">/create?create_v2=1</span>
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleCreateV2}
+              disabled={featureLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                createV2Enabled ? "bg-orange-700" : "bg-zinc-300 dark:bg-zinc-700"
+              } ${featureLoading ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  createV2Enabled ? "translate-x-6" : "translate-x-1"
                 }`}
               />
             </button>
