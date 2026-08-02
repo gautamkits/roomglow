@@ -161,6 +161,12 @@ function RegenerateSend({ design }: { design: AllDesign }) {
   );
 }
 
+const ADMIN_TABS = [
+  { key: "pending", label: "Pending review" },
+  { key: "published", label: "Published" },
+  { key: "all", label: "All designs" },
+] as const;
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -301,6 +307,27 @@ function AdminContent() {
     );
   }
 
+  // Rendered twice — inside the header on >=sm, and in the mobile row below it.
+  const tabGroup = (className: string) => (
+    <div
+      className={`items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm ${className}`}
+    >
+      {ADMIN_TABS.map((t) => (
+        <button
+          key={t.key}
+          onClick={() => setTab(t.key)}
+          className={`shrink-0 whitespace-nowrap px-3 py-1 rounded-md transition-colors ${
+            tab === t.key
+              ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+              : "text-zinc-500"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-stone-50 dark:bg-zinc-950">
       <SiteHeader
@@ -325,41 +352,15 @@ function AdminContent() {
             </button>
           </div>
         }
-        center={
-          <div className="flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5 text-sm">
-            <button
-              onClick={() => setTab("pending")}
-              className={`px-3 py-1 rounded-md transition-colors ${
-                tab === "pending"
-                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                  : "text-zinc-500"
-              }`}
-            >
-              Pending review
-            </button>
-            <button
-              onClick={() => setTab("published")}
-              className={`px-3 py-1 rounded-md transition-colors ${
-                tab === "published"
-                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                  : "text-zinc-500"
-              }`}
-            >
-              Published
-            </button>
-            <button
-              onClick={() => setTab("all")}
-              className={`px-3 py-1 rounded-md transition-colors ${
-                tab === "all"
-                  ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
-                  : "text-zinc-500"
-              }`}
-            >
-              All designs
-            </button>
-          </div>
-        }
+        center={tabGroup("hidden sm:flex")}
       />
+
+      {/* Mobile tab row — the header can't fit these next to the logo, locale
+          switcher, Pricing/Analytics buttons and avatar, so they move below it
+          (same pattern as the gallery search on the home page). */}
+      <div className="sm:hidden border-b border-zinc-200 dark:border-zinc-800 bg-stone-50 dark:bg-zinc-950 px-5 py-2.5 overflow-x-auto">
+        {tabGroup("flex w-max")}
+      </div>
 
       <main className="max-w-5xl mx-auto px-5 py-8">
         {/* Features */}
