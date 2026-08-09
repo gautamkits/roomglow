@@ -1,9 +1,11 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
+import { loadOutroClip, appendOutro } from "./outroClip";
 
 // Reveal MP4 export — a faithful port of the "Noosho Commercial" concept into
 // Canvas2D + WebCodecs, per-design (its own before/after + products):
 //   logo intro → phone (upload → pick a style) → scan-line transform →
-//   shoppable pins + product cards → logo + noosho.com outro.
+//   shoppable pins + product cards → logo + noosho.com outro
+//   → the pre-rendered brand outro clip (see lib/outroClip.ts).
 // Locked to 1080×1920 so the commercial's exact composition/coordinates apply.
 // Photos are shown whole (contain) over a blurred backdrop so non-9:16 rooms
 // are never cropped. The rooms/parties montage is intentionally omitted.
@@ -664,18 +666,24 @@ export interface RevealVideoInput {
   afterUrl: string;
   aspect?: RevealAspect; // ignored — branded reveal is locked to 1080×1920
   products?: RevealProduct[];
+  /** Append the pre-rendered brand outro clip (with its CTA). Default true. */
+  outro?: boolean;
 }
 
 /** Render the branded reveal commercial (1080×1920 H.264 MP4), in-browser. */
 export async function generateRevealVideo(
-  { beforeUrl, afterUrl, products = [] }: RevealVideoInput,
+  { beforeUrl, afterUrl, products = [], outro = true }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
     throw new Error("Video export needs a Chromium browser (Chrome or Edge).");
   }
 
-  const [before, after] = await Promise.all([loadImage(beforeUrl), loadImage(afterUrl)]);
+  const [before, after, outroClip] = await Promise.all([
+    loadImage(beforeUrl),
+    loadImage(afterUrl),
+    outro ? loadOutroClip() : Promise.resolve(null),
+  ]);
 
   const cards = (
     await Promise.all(
@@ -693,6 +701,8 @@ export async function generateRevealVideo(
   try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* non-fatal */ }
 
   const TOTAL = Math.round(DURATION * FPS);
+  const OUTRO_FRAMES = outroClip?.frameCount ?? 0;
+  const ALL_FRAMES = TOTAL + OUTRO_FRAMES;
   const canvas = document.createElement("canvas");
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext("2d", { alpha: false });
@@ -717,8 +727,24 @@ export async function generateRevealVideo(
     const frame = new VideoFrame(canvas, { timestamp: Math.round(i * frameDur), duration: Math.round(frameDur) });
     encoder.encode(frame, { keyFrame: i % FPS === 0 });
     frame.close();
-    if (onProgress) onProgress((i + 1) / TOTAL);
+    if (onProgress) onProgress((i + 1) / ALL_FRAMES);
     if (encoder.encodeQueueSize > 8) await new Promise((r) => setTimeout(r, 0));
+  }
+
+  if (outroClip) {
+    try {
+      await appendOutro({
+        encoder,
+        ctx,
+        canvas,
+        clip: outroClip,
+        startIndex: TOTAL,
+        fps: FPS,
+        onFrame: (abs) => onProgress?.((abs + 1) / ALL_FRAMES),
+      });
+    } finally {
+      outroClip.dispose();
+    }
   }
 
   await encoder.flush();

@@ -130,6 +130,18 @@ after, cards)` is exported for frame-level verification. Cross-origin product im
 product's `hotspot` (`ensureHotspots` in `src/lib/hotspots.ts` fills them lazily at unlock).
 Chromium-only (WebCodecs).
 
+**Brand outro clip** (`src/lib/outroClip.ts`, `public/outro/noosho-outro.mp4`): a pre-rendered
+1080×1920 / 30fps H.264 tail (82 frames, ~2.7s, carries its own CTA) appended to **both** export
+variants, crossfaded in over 0.3s. Decoded with a plain `<video>` + per-frame **seek** (not
+WebCodecs + a demuxer): seeking is deterministic where playback drops frames under encoder
+backpressure, and frames are drawn one at a time because buffering all 82 as bitmaps would cost
+~700MB at this resolution. Toggleable per export (`outro` on `RevealVideoInput`, checkbox in
+`RevealExport`); `loadOutroClip()` returns `null` on any failure so the export still succeeds
+without the tail. ⚠️ The source `.mov` was QuickTime-branded (`ftyp qt  `), which Chrome refuses
+to decode — it is stored remuxed to `ftyp isom` **at the same box size** so every `stco` chunk
+offset stays valid. Re-do that if the clip is ever replaced. Note the clip's own CTA currently
+duplicates the built-in `sceneCTA` (24.0–26.9s) — trim `T_CTA` if that ever becomes a problem.
+
 ## Restyle & Clear-the-room (post-unlock)
 5 free restyles/design (`MAX_RESTYLES`). On create results (space, unlocked) it re-renders
 in-memory; on `/design/[id]` (`/api/restyle-design`) it **saves a new design** (lineage via

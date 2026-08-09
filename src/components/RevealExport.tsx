@@ -85,6 +85,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [variant, setVariant] = useState<RevealVariant>("full");
+  const [outro, setOutro] = useState(true);
   const allProducts = buyableProducts(design);
   // Default to 2 shop cards (clamped to what's available) for a fuller "shop" scene.
   const [cardCount, setCardCount] = useState(Math.min(2, allProducts.length));
@@ -116,7 +117,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       if (variant === "simple") {
         // Original before→after wipe — no products / hotspots needed.
         blob = await generateSimpleRevealVideo(
-          { beforeUrl, afterUrl },
+          { beforeUrl, afterUrl, outro },
           (f) => setPct(Math.round(f * 100))
         );
       } else {
@@ -144,7 +145,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
         }
 
         blob = await generateRevealVideo(
-          { beforeUrl, afterUrl, products },
+          { beforeUrl, afterUrl, products, outro },
           (f) => setPct(Math.round(f * 100))
         );
       }
@@ -227,6 +228,19 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               </div>
             </div>
           )}
+          {/* Pre-rendered brand outro clip (carries its own CTA), appended last. */}
+          <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={outro}
+              onChange={(e) => setOutro(e.target.checked)}
+              disabled={busy}
+              className="accent-orange-700"
+            />
+            <span className="text-[11px] text-zinc-500">
+              Append brand outro <span className="text-zinc-400">(+2.9s, with CTA)</span>
+            </span>
+          </label>
           <button
             onClick={exportVideo}
             disabled={busy}

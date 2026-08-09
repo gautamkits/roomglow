@@ -1,5 +1,6 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { isRevealVideoSupported, type RevealVideoInput } from "./revealVideo";
+import { loadOutroClip, appendOutro } from "./outroClip";
 
 // The original "before → after" reveal: a simple horizontal wipe with a drag
 // handle, Before/After pills, and a noosho watermark. No logo intro, phone
@@ -165,14 +166,19 @@ export function renderSimpleRevealFrame(
 
 /** Render the original before→after wipe as a 9:16 H.264 MP4, entirely in-browser. */
 export async function generateSimpleRevealVideo(
-  { beforeUrl, afterUrl }: RevealVideoInput,
+  { beforeUrl, afterUrl, outro = true }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
     throw new Error("Video export needs a Chromium browser (Chrome or Edge).");
   }
 
-  const [before, after] = await Promise.all([loadImage(beforeUrl), loadImage(afterUrl)]);
+  const [before, after, outroClip] = await Promise.all([
+    loadImage(beforeUrl),
+    loadImage(afterUrl),
+    outro ? loadOutroClip() : Promise.resolve(null),
+  ]);
+  const ALL_FRAMES = TOTAL + (outroClip?.frameCount ?? 0);
 
   // Ensure the Sora wordmark is available so the watermark renders in-brand.
   try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* non-fatal */ }
@@ -230,11 +236,27 @@ export async function generateSimpleRevealVideo(
     encoder.encode(frame, { keyFrame: i % FPS === 0 });
     frame.close();
 
-    if (onProgress) onProgress((i + 1) / TOTAL);
+    if (onProgress) onProgress((i + 1) / ALL_FRAMES);
 
     // Relieve backpressure so the UI stays responsive.
     if (encoder.encodeQueueSize > 8) {
       await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  if (outroClip) {
+    try {
+      await appendOutro({
+        encoder,
+        ctx,
+        canvas,
+        clip: outroClip,
+        startIndex: TOTAL,
+        fps: FPS,
+        onFrame: (abs) => onProgress?.((abs + 1) / ALL_FRAMES),
+      });
+    } finally {
+      outroClip.dispose();
     }
   }
 
