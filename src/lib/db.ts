@@ -1226,6 +1226,166 @@ export async function releaseActivationEmail(userId: string, stage: number) {
   `;
 }
 
+// ─── Festival campaign (shared calendar, broadcast per market) ───
+// Distinct from event_reminder_log, which tracks a user's OWN saved event (their
+// kid's birthday). This is the shared calendar: every Indian user hears about 15
+// August whether or not they saved it. Separate log table because the dedupe key
+// is different — (user, festival, year, threshold) rather than (saved event, …).
+
+let festivalReady = false;
+async function ensureFestivalSchema() {
+  if (festivalReady) return;
+  // `locale` did not exist on users: the market was only ever a cookie, so there
+  // was no way to avoid mailing US users about an Indian holiday.
+  await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS locale TEXT`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS festival_campaign_log (
+      user_id UUID NOT NULL,
+      event_id TEXT NOT NULL,
+      occurrence DATE NOT NULL,
+      days_before INTEGER NOT NULL,
+      sent_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (user_id, event_id, occurrence, days_before)
+    )
+  `;
+  festivalReady = true;
+}
+
+/** Remember which market a user actually browses from. Cheap, idempotent. */
+export async function setUserLocale(userId: string, locale: string) {
+  await ensureFestivalSchema();
+  await sql`
+    UPDATE users SET locale = ${locale}
+     WHERE id = ${userId} AND (locale IS DISTINCT FROM ${locale})
+  `;
+}
+
+/**
+ * Best-effort market for users who predate the column. Strongest signal first:
+ * a real payment's currency, then the market-exclusive events they designed for.
+ * Users with no signal are left NULL and are simply not mailed — guessing would
+ * send Diwali mail to Americans, which is worse than sending nothing.
+ */
+export async function backfillUserLocales(
+  inOnlyEventIds: string[],
+  usOnlyEventIds: string[]
+): Promise<{ byPayment: number; byDesign: number; byMarketplace: number; unknown: number }> {
+  await ensureFestivalSchema();
+  const pay = await sql`
+    UPDATE users u SET locale = t.loc FROM (
+      SELECT p.user_id, CASE WHEN lower(p.currency) = 'usd' THEN 'US' ELSE 'IN' END AS loc
+        FROM payments p WHERE p.status = 'completed'
+    ) t WHERE u.id = t.user_id AND u.locale IS NULL
+    RETURNING u.id`;
+
+  // Deliberately not SQL: matching a JS array against jsonb needs array-param
+  // casting that @vercel/postgres types poorly, and at this table size a loop
+  // is free and obviously correct.
+  const inSet = new Set(inOnlyEventIds);
+  const usSet = new Set(usOnlyEventIds);
+  const { rows: recent } = await sql`
+    SELECT DISTINCT ON (d.user_id) d.user_id, d.event_config->>'eventType' AS event_type
+      FROM designs d
+     WHERE d.user_id IS NOT NULL AND d.event_config->>'eventType' IS NOT NULL
+     ORDER BY d.user_id, d.created_at DESC`;
+  let byDesign = 0;
+  for (const r of recent as { user_id: string; event_type: string }[]) {
+    const loc = usSet.has(r.event_type)
+      ? "US"
+      : inSet.has(r.event_type)
+        ? "IN"
+        : null;
+    if (!loc) continue;
+    const { rows } = await sql`
+      UPDATE users SET locale = ${loc}
+       WHERE id = ${r.user_id} AND locale IS NULL RETURNING id`;
+    byDesign += rows.length;
+  }
+
+  // Third and widest signal: the Amazon marketplace their products came from.
+  // Every design carries affiliate URLs, and the domain is unambiguous where an
+  // event type (a birthday exists in both markets) is not. This is what actually
+  // resolves the bulk of the table.
+  const mkt = await sql`
+    UPDATE users u SET locale = t.loc FROM (
+      SELECT DISTINCT ON (d.user_id) d.user_id,
+             CASE WHEN d.products::text LIKE '%www.amazon.com/%' THEN 'US' ELSE 'IN' END AS loc
+        FROM designs d
+       WHERE d.user_id IS NOT NULL
+         -- Must be the AFFILIATE host, not any Amazon host: product image URLs
+         -- are on m.media-amazon.com, so a bare '%amazon.com%' matches every
+         -- design ever made and marks the whole table US.
+         AND (d.products::text LIKE '%www.amazon.in/%'
+           OR d.products::text LIKE '%www.amazon.com/%')
+       ORDER BY d.user_id, d.created_at DESC
+    ) t WHERE u.id = t.user_id AND u.locale IS NULL
+    RETURNING u.id`;
+
+  const un = await sql`SELECT count(*)::int n FROM users WHERE locale IS NULL AND email <> ''`;
+  return {
+    byPayment: pay.rows.length,
+    byDesign,
+    byMarketplace: mkt.rows.length,
+    unknown: Number(un.rows[0].n),
+  };
+}
+
+export interface FestivalRecipient {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+/** Opted-in users in one market, deduped by email (see getActivationCandidates). */
+export async function getFestivalRecipients(
+  locale: string
+): Promise<FestivalRecipient[]> {
+  await ensureFestivalSchema();
+  await ensureEmailPrefsSchema();
+  const { rows } = await sql`
+    SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.name
+      FROM users u
+     WHERE u.email <> ''
+       AND u.locale = ${locale}
+       AND NOT EXISTS (
+         SELECT 1 FROM email_optouts eo WHERE eo.email = lower(u.email)
+       )
+     ORDER BY lower(u.email), u.created_at ASC
+  `;
+  return rows as FestivalRecipient[];
+}
+
+/** Claim one (user, festival, year, threshold) send. False if already sent. */
+export async function claimFestivalSend(
+  userId: string,
+  eventId: string,
+  occurrence: string,
+  daysBefore: number
+): Promise<boolean> {
+  await ensureFestivalSchema();
+  const { rows } = await sql`
+    INSERT INTO festival_campaign_log (user_id, event_id, occurrence, days_before)
+    VALUES (${userId}, ${eventId}, ${occurrence}, ${daysBefore})
+    ON CONFLICT DO NOTHING
+    RETURNING user_id
+  `;
+  return rows.length > 0;
+}
+
+export async function releaseFestivalSend(
+  userId: string,
+  eventId: string,
+  occurrence: string,
+  daysBefore: number
+) {
+  await ensureFestivalSchema();
+  await sql`
+    DELETE FROM festival_campaign_log
+     WHERE user_id = ${userId} AND event_id = ${eventId}
+       AND occurrence = ${occurrence} AND days_before = ${daysBefore}
+  `;
+}
+
 // ─── Funnel events ───
 // Client analytics (PostHog + Meta Pixel) are both blocked inside the Instagram
 // in-app browser, which is where most acquisition traffic lands — so the create

@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/abandoned-checkout",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/activation",
-      "schedule": "0 8 * * *"
     }
   ]
 }

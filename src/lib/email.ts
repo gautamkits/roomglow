@@ -90,8 +90,12 @@ export async function sendMail(opts: {
     // RFC 8058 one-click unsubscribe. Gmail and Yahoo require this on bulk mail,
     // and it is what stops a "this is spam" click from poisoning the sending
     // domain that also carries our transactional mail.
+    // ZeptoMail's key is `mime_headers`, NOT `headers`. Sending `headers`
+    // returns 400 TM_3301 / GE_121 "An extra key found in the input value",
+    // which silently killed EVERY marketing send — transactional mail omits
+    // this block, so the failure only ever hit opt-out-able campaigns.
     if (opts.unsubscribeUrl) {
-      payload.headers = {
+      payload.mime_headers = {
         "List-Unsubscribe": `<${opts.unsubscribeUrl}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       };
@@ -826,6 +830,125 @@ export async function sendEventReminderEmail(
     html: buildEventReminderHtml(data),
     unsubscribeUrl: unsubscribeUrl(data.to),
     label: "event-reminder",
+  });
+}
+
+// ─── Festival campaign ───
+// The shared calendar, not a user's own saved event. Three sends per festival,
+// and the copy escalates on ONE axis: how much time is left to actually receive
+// the physical decorations. Nothing is sent inside 5 days — a "3 days to go"
+// email drives an order that cannot arrive, which is a refund and a bad review
+// rather than a sale.
+
+export interface FestivalCampaignEmailData {
+  to: string;
+  name?: string | null;
+  eventLabel: string;
+  eventDate: string;
+  daysBefore: number;
+  emoji: string;
+}
+
+const FESTIVAL_TIERS: Record<
+  number,
+  { kicker: string; subject: (l: string, d: number) => string; lead: string; nudge: string }
+> = {
+  20: {
+    kicker: "PLAN AHEAD",
+    subject: (l) => `${l} is 3 weeks away — plan the look now`,
+    lead: "You have plenty of time, which is exactly when the good decorations are still in stock and the cheapest delivery is still an option.",
+    nudge: "Design it now, order at your own pace.",
+  },
+  10: {
+    kicker: "TIME TO ORDER",
+    subject: (l, d) => `${d} days to ${l} — order now to be safe`,
+    lead: "This is the sweet spot. Design the space today and standard delivery still arrives comfortably before the day.",
+    nudge: "Lock in your look while delivery is still relaxed.",
+  },
+  5: {
+    kicker: "LAST ORDER WINDOW",
+    subject: (l, d) => `Final call: ${d} days to ${l} 🚚`,
+    lead: "This is the last realistic window for your decorations to actually arrive in time. Order after this and delivery becomes a gamble.",
+    nudge: "Design it today so your products land before the day.",
+  },
+};
+
+export function buildFestivalCampaignHtml(
+  data: FestivalCampaignEmailData
+): string {
+  const firstName = data.name ? esc(data.name.split(" ")[0]) : "there";
+  const tier = FESTIVAL_TIERS[data.daysBefore] ?? FESTIVAL_TIERS[10];
+  const dateFormatted = new Date(data.eventDate).toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Asia/Kolkata",
+  });
+  const createUrl = `${SITE_URL}/create`;
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="color-scheme" content="light" /></head>
+<body style="margin:0;padding:0;background:${LINEN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;height:0;width:0;">${esc(tier.lead)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid ${BORDER};">
+
+        <tr><td style="background:${INK};padding:18px 28px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td valign="middle"><img src="${esc(LOGO_URL)}" width="34" height="34" alt="Noosho" style="display:block;width:34px;height:34px;border-radius:9px;" /></td>
+            <td valign="middle" style="padding-left:10px;"><span style="font-size:21px;font-weight:700;letter-spacing:-0.02em;color:${LINEN};">noosho</span></td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td style="padding:28px 28px 0;">
+          <div style="font-size:12px;font-weight:700;letter-spacing:0.10em;color:${CLAY_CTA};margin:0 0 8px;">${tier.kicker}</div>
+          <h1 style="font-size:25px;font-weight:700;color:${TEXT};margin:0 0 8px;letter-spacing:-0.02em;line-height:1.25;">
+            ${data.emoji} ${esc(data.eventLabel)} is in ${data.daysBefore} days
+          </h1>
+          <p style="font-size:15px;color:${MUTED};margin:0 0 20px;line-height:1.6;">Hi ${firstName}, it falls on ${dateFormatted}. ${esc(tier.lead)}</p>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 24px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};border-radius:14px;border:1px solid ${BORDER};">
+            <tr><td style="padding:22px 24px;">
+              <div style="font-size:17px;font-weight:700;color:${TEXT};margin:0 0 6px;">${esc(tier.nudge)}</div>
+              <div style="font-size:14px;color:${MUTED};line-height:1.6;margin:0 0 18px;">
+                Upload one photo of your space. Noosho designs the ${esc(data.eventLabel)} decorations on it, then lines up the exact products so you can order them in a couple of taps.
+              </div>
+              <a href="${esc(createUrl)}" style="display:inline-block;background:${CLAY_CTA};color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 28px;border-radius:11px;">Design my ${esc(data.eventLabel)} →</a>
+            </td></tr>
+          </table>
+        </td></tr>
+
+${footerBlock({
+  reason: `You&rsquo;re receiving this because you have a Noosho account. We only send these for major festivals, and never in the last few days before one.`,
+  unsubUrl: unsubscribeUrl(data.to),
+  padding: "8px 28px 28px",
+})}
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+export async function sendFestivalCampaignEmail(
+  data: FestivalCampaignEmailData
+): Promise<{ ok: boolean; suppressed?: boolean }> {
+  if (!data.to) return { ok: false };
+  if (await suppressed(data.to, "festival-campaign")) {
+    return { ok: false, suppressed: true };
+  }
+  const tier = FESTIVAL_TIERS[data.daysBefore] ?? FESTIVAL_TIERS[10];
+  return sendMail({
+    to: { address: data.to, name: data.name ?? undefined },
+    subject: tier.subject(data.eventLabel, data.daysBefore),
+    html: buildFestivalCampaignHtml(data),
+    unsubscribeUrl: unsubscribeUrl(data.to),
+    label: "festival-campaign",
   });
 }
 

@@ -1,7 +1,7 @@
 import { NextResponse, after } from "next/server";
 import { put } from "@vercel/blob";
 import { auth } from "@/auth";
-import { saveDesign, saveEventDate } from "@/lib/db";
+import { saveDesign, saveEventDate, setUserLocale } from "@/lib/db";
 import { makeBlurDataUrl, makeWatermarkedPreview } from "@/lib/images";
 import { notifyAdminError } from "@/lib/email";
 import { sendDesignReadyEmail } from "@/lib/email";
@@ -38,6 +38,10 @@ export async function POST(request: Request) {
     // Unlock immediately when the market has no payment, or when the user is
     // in the launch promo (first 500 signups get their first design free).
     const locale = localeFromRequest(request);
+    // Remember the market on the user row. It was previously only ever a
+    // cookie, so campaigns had no way to avoid mailing US users about Indian
+    // festivals. Best-effort: a failure here must never block a save.
+    void setUserLocale(userId, locale).catch(() => {});
     const freeMarket = !PAYMENT_ENABLED[locale];
     const promoApplied =
       !!userId && !freeMarket && (await isFreeFirstDesignEligible(userId));

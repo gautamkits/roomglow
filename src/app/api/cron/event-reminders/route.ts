@@ -6,6 +6,9 @@ import {
 } from "@/lib/db";
 import { sendEventReminderEmail } from "@/lib/email";
 import { assertCron } from "@/lib/cron";
+import { runFestivalCampaign } from "@/lib/festivalCampaign";
+import { backfillUserLocales } from "@/lib/db";
+import { EVENTS } from "@/lib/events";
 
 // Called daily by Vercel Cron — protected by CRON_SECRET.
 export const runtime = "nodejs";
@@ -61,10 +64,27 @@ export async function GET(request: Request) {
       }
     }
 
+    // The broadcast festival campaign rides on this cron rather than getting
+    // its own vercel.json entry: the project is on the Hobby plan, which caps
+    // cron jobs at 2, and exceeding that is what stopped ALL of them running.
+    const inOnly = EVENTS.filter(
+      (e) => e.markets.length === 1 && e.markets[0] === "IN"
+    ).map((e) => e.id);
+    const usOnly = EVENTS.filter(
+      (e) => e.markets.length === 1 && e.markets[0] === "US"
+    ).map((e) => e.id);
+    // Idempotent: only ever fills a NULL locale, so it is safe to re-run daily
+    // and it picks up users who signed up since the last run.
+    const backfill = await backfillUserLocales(inOnly, usOnly);
+    const festival = await runFestivalCampaign();
+
     console.log(
-      `[cron/event-reminders] sent=${sent} failed=${failed} skipped=${skipped}`
+      `[cron/event-reminders] reminders sent=${sent} failed=${failed} skipped=${skipped} | ` +
+        `festival sent=${festival.sent} failed=${festival.failed} skipped=${festival.skipped} ` +
+        `festivals=[${festival.festivals.join(", ")}] | ` +
+        `locale backfill byPayment=${backfill.byPayment} byDesign=${backfill.byDesign} byMarketplace=${backfill.byMarketplace} unknown=${backfill.unknown}`
     );
-    return NextResponse.json({ sent, failed, skipped });
+    return NextResponse.json({ sent, failed, skipped, festival, backfill });
   } catch (err) {
     console.error("[cron/event-reminders] error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
