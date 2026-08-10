@@ -1355,6 +1355,38 @@ export async function getFestivalRecipients(
   return rows as FestivalRecipient[];
 }
 
+export interface FestivalInspiration {
+  id: string;
+  imageUrl: string;
+  subTheme: string | null;
+}
+
+/**
+ * Real designs to show inside the campaign email. Gallery-approved ONLY —
+ * these are the one class of design that is public to anonymous viewers
+ * (see designVisibility), and an email image is fetched by an inbox with no
+ * session, so anything else would leak a private design.
+ */
+export async function getFestivalInspiration(
+  eventId: string,
+  limit = 3
+): Promise<FestivalInspiration[]> {
+  const { rows } = await sql`
+    SELECT id, generated_image_url AS image_url, event_config->>'subTheme' AS sub_theme
+      FROM designs
+     WHERE gallery_status = 'approved'
+       AND generated_image_url IS NOT NULL
+       AND event_config->>'eventType' = ${eventId}
+     ORDER BY like_count DESC NULLS LAST, created_at DESC
+     LIMIT ${limit}
+  `;
+  return rows.map((r) => ({
+    id: r.id as string,
+    imageUrl: r.image_url as string,
+    subTheme: (r.sub_theme as string) ?? null,
+  }));
+}
+
 /** Claim one (user, festival, year, threshold) send. False if already sent. */
 export async function claimFestivalSend(
   userId: string,

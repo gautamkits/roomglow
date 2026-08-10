@@ -3,6 +3,7 @@ import {
   getFestivalRecipients,
   claimFestivalSend,
   releaseFestivalSend,
+  getFestivalInspiration,
 } from "@/lib/db";
 import { sendFestivalCampaignEmail } from "@/lib/email";
 
@@ -94,6 +95,10 @@ export async function runFestivalCampaign(
     const occurrence = isoDate(date);
     festivals.push(`${ev.id}@${occurrence}(T-${days})`);
 
+    // Fetched once per festival, not per recipient — same three shots for the
+    // whole market, and one query instead of N.
+    const inspiration = await getFestivalInspiration(ev.id, 3);
+
     for (const market of ev.markets) {
       const recipients = await getFestivalRecipients(market);
       for (const user of recipients) {
@@ -114,6 +119,7 @@ export async function runFestivalCampaign(
           eventDate: occurrence,
           daysBefore: days,
           emoji: ev.icon,
+          inspiration,
         });
         if (res.ok) {
           sent++;

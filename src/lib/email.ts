@@ -847,6 +847,8 @@ export interface FestivalCampaignEmailData {
   eventDate: string;
   daysBefore: number;
   emoji: string;
+  /** Gallery-approved designs only — see getFestivalInspiration. */
+  inspiration?: { id: string; imageUrl: string; subTheme: string | null }[];
 }
 
 const FESTIVAL_TIERS: Record<
@@ -886,6 +888,29 @@ export function buildFestivalCampaignHtml(
   });
   const createUrl = `${SITE_URL}/create`;
 
+  // Showing what the product actually produces beats describing it. Omitted
+  // entirely when there is nothing approved to show, rather than shipping an
+  // empty frame or a placeholder.
+  const shots = (data.inspiration ?? []).slice(0, 3);
+  const inspirationBlock = shots.length
+    ? `
+        <tr><td style="padding:0 28px 8px;">
+          <div style="font-size:13px;font-weight:700;color:${TEXT};margin:0 0 10px;">Made on Noosho for ${esc(data.eventLabel)}</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+${shots
+  .map(
+    (s) => `            <td width="33%" valign="top" style="padding:0 4px;">
+              <a href="${esc(`${SITE_URL}/design/${s.id}`)}" style="text-decoration:none;">
+                <img src="${esc(s.imageUrl)}" width="176" alt="${esc(data.eventLabel)} design${s.subTheme ? ` — ${esc(s.subTheme)}` : ""}" style="display:block;width:100%;max-width:176px;height:auto;border-radius:10px;border:1px solid ${BORDER};" />
+              </a>
+            </td>`
+  )
+  .join("\n")}
+          </tr></table>
+        </td></tr>
+`
+    : "";
+
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><meta name="color-scheme" content="light" /></head>
@@ -909,8 +934,8 @@ export function buildFestivalCampaignHtml(
           </h1>
           <p style="font-size:15px;color:${MUTED};margin:0 0 20px;line-height:1.6;">Hi ${firstName}, it falls on ${dateFormatted}. ${esc(tier.lead)}</p>
         </td></tr>
-
-        <tr><td style="padding:0 28px 24px;">
+${inspirationBlock}
+        <tr><td style="padding:16px 28px 24px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${LINEN};border-radius:14px;border:1px solid ${BORDER};">
             <tr><td style="padding:22px 24px;">
               <div style="font-size:17px;font-weight:700;color:${TEXT};margin:0 0 6px;">${esc(tier.nudge)}</div>
