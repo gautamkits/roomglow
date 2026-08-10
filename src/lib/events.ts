@@ -17,14 +17,22 @@ export function buildEventContext(cfg: EventConfig | null): string | undefined {
   // occasion verbatim into the Amazon search query — so an ambiguous label
   // returns the wrong country's merchandise (Indian Independence Day designs
   // were pulling "God Bless America" props). Prefer an unambiguous promptLabel.
-  const label =
-    EVENTS.find((e) => e.id === cfg.eventType)?.promptLabel || cfg.eventLabel;
+  const def = EVENTS.find((e) => e.id === cfg.eventType);
+  const label = def?.promptLabel || cfg.eventLabel;
+  // The render prompt's flag rules are all preservation ("reproduce what is
+  // already there unchanged"), so a bare pole renders bare — right for a
+  // birthday, wrong on the one day the pole is the point. Ask for it here, in
+  // the event brief, so it can only ever reach the event branch: space passes
+  // no cfg at all and returns above.
+  const flag = def?.nationalFlag
+    ? ` If a flagpole or flagstaff is already standing in the photo with nothing flying on it, hoist ${def.nationalFlag} at the top of it, unfurled and flying naturally. Render it correctly: saffron band at the top, 3:2 proportions, right way up. Never drape a national flag as bunting, tablecloth, backdrop or wrapping, and never let added décor cover it. Do NOT invent a flagpole that is not already in the photo, and do not move or restyle the one that is.`
+    : "";
   const honoree = cfg.honoree ? ` It is for ${cfg.honoree}.` : "";
   const gender =
     cfg.gender && cfg.gender !== "Either / neutral"
       ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
       : "";
-  return `This space will host a ${label} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${label} — never a different occasion, and never another country's version of the same-named holiday.`;
+  return `This space will host a ${label} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${label} — never a different occasion, and never another country's version of the same-named holiday.${flag}`;
 }
 
 export interface EventDefinition {
@@ -55,6 +63,12 @@ export interface EventDefinition {
   // are centered on a person, so they still ask "who's it for?" — but not a date
   // (that's set by the calendar). Personal events imply this via `!season`.
   askHonoree?: boolean;
+  // National-day events where a bare flagpole in the photo should be flown, not
+  // just preserved. The generic décor rules only ever say "reproduce what is
+  // already there unchanged", so an empty pole stays empty — correct for every
+  // other occasion, wrong for a flag-hoisting holiday. Value is the flag's
+  // unambiguous name, since "the national flag" alone gets the wrong country's.
+  nationalFlag?: string;
   // Occasion-specific buyables (beyond décor) for the "Complete the occasion"
   // grid — gifts, treats, tableware, etc. Each is a plain Amazon search query.
   // `markets` narrows an individual item within an event that itself ships to
@@ -168,6 +182,7 @@ export const EVENTS: EventDefinition[] = [
   {
     id: "republic_day",
     label: "Republic Day",
+    nationalFlag: "the Indian national flag (Tiranga)",
     icon: "🇮🇳",
     subThemes: ["Tricolour", "Patriotic", "Modern minimal", "Floral"],
     colorSchemes: ["Saffron, white & green", "Tricolour & gold", "Navy & white"],
@@ -235,6 +250,7 @@ export const EVENTS: EventDefinition[] = [
     label: "Independence Day",
     // Bare "Independence Day" made the AI search Amazon for US July-4th goods.
     promptLabel: "Indian Independence Day (15 August, tricolour / desh bhakti)",
+    nationalFlag: "the Indian national flag (Tiranga)",
     icon: "🇮🇳",
     subThemes: ["Tricolour", "Patriotic", "Modern minimal", "Floral"],
     colorSchemes: ["Saffron, white & green", "Tricolour & gold", "Navy & white"],
