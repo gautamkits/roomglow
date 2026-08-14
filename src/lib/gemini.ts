@@ -72,11 +72,6 @@ const suggestedProductSchema = {
     label: { type: Type.STRING },
     description: { type: Type.STRING },
     icon: { type: Type.STRING },
-    // What the item needs in order to exist in the room: "wall" (hung or
-    // mounted), "floor", "surface" (sits on other furniture), "ceiling".
-    // OPTIONAL — absent on every design analysed before this field existed,
-    // and enforceWallSpace treats absence as "don't know, leave it alone".
-    mount: { type: Type.STRING },
   },
   required: ["id", "label", "description", "icon"],
 };
@@ -132,11 +127,6 @@ const roomAnalysisSchema = {
     suggestedProducts: { type: Type.ARRAY, items: suggestedProductSchema },
     clutterLevel: { type: Type.STRING },
     removableObjects: { type: Type.ARRAY, items: removableObjectSchema },
-    // How much wall is actually available to hang something new on:
-    // "none" | "limited" | "ample". OPTIONAL and deliberately not in
-    // `required` — a room analysed before this existed simply has no opinion,
-    // and enforceWallSpace no-ops rather than guessing.
-    wallSpace: { type: Type.STRING },
     venueKind: { type: Type.STRING },
     stagingPlan: stagingPlanSchema,
   },
@@ -169,17 +159,10 @@ Fill in:
   - approxCeilingFt: floor-to-ceiling height in feet
   - scaleReferences: 1-3 visible objects you used as rulers, each with its assumed size (e.g. "door on left wall (~6.7 ft tall)", "3-seat sofa (~6 ft wide)")
   Be conservative: if unsure, estimate SMALLER rather than larger.
-  Never call a curtained or glazed area a "wall" — curtains and drapes almost always hang over a window or a sliding door, and describing that side as a wall makes the redesign brick up a real opening. Say "curtains over a sliding door" or "curtained window", not "curtains on the right wall".
-- wallSpace: how much EMPTY wall is genuinely available to hang something new on. Judge only what you can see, and be strict — this decides whether the redesign is allowed to suggest wall art at all.
-  - "none": every wall in view is already taken (the occupant's artwork, a TV, shelving), or is glazing/curtain/door, or is only a narrow return strip between a corner and an opening. A strip you would not hang a picture on in real life counts as none.
-  - "limited": one modest clear patch — room for a single small-to-medium piece, not a gallery set.
-  - "ample": a genuinely large empty wall.
-  A curtained or glazed side is NEVER free wall. Do not count wall hidden behind furniture, and do not count wall you cannot actually see in the photo. When torn between two levels, choose the smaller one — suggesting art for a room with nowhere to hang it forces the redesign to invent wall that does not exist.
 - existingFurniture: array of items you actually see
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the room
-- suggestedProducts: 6-8 products. Give every one a "mount": "wall" if it must be hung or mounted on a wall (wall art, framed prints, mirrors, wall shelves, sconces, wall clocks), "ceiling" if it hangs from the ceiling, "surface" if it sits on other furniture (table lamp, vase, tray), otherwise "floor".
-  Match this to wallSpace above: if wallSpace is "none", suggest NO "wall" items at all — pick floor and surface items instead. If "limited", at most one. There is no point offering the user something the room physically cannot hold; it forces the redesign to invent wall space, which ruins the image.
+- suggestedProducts: 6-8 products
 - clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
 - removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, bed, dining/coffee table, chairs, shelving unit, rug, large floor lamp, large potted plant, cabinet/console, TV). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, cushions, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a lamp on a side table, a TV on a console). Return an empty array only if there are no large movable pieces.
 
@@ -278,12 +261,7 @@ CRITICAL RULES for suggestedProducts:
     },
   });
 
-  const analysed = enforceVenueBranch(response.text ?? "");
-  // Space only: events hang backdrops and buntings on walls by design, so the
-  // free-wall budget must not apply to them.
-  return eventContext
-    ? analysed
-    : enforceWallSpace(enforceSpaceBranch(analysed));
+  return enforceVenueBranch(response.text ?? "");
 }
 
 /**
@@ -299,77 +277,6 @@ CRITICAL RULES for suggestedProducts:
  *
  * Parse failures pass through untouched — the caller already handles bad JSON.
  */
-/**
- * Strip event-only fields out of a SPACE analysis.
- *
- * `enforceVenueBranch` cleans these up for outdoor events but nothing cleaned
- * them up for space, and the shared `roomAnalysisSchema` means the model fills
- * them in regardless of which branch it was prompted with. Measured on a real
- * room photo: 1 space analysis in 6 came back with a populated `stagingPlan`,
- * one of them also claiming `venueKind: "residential"` — a value the enum does
- * not even have.
- *
- * That matters because every downstream space consumer keys off `stagingPlan`
- * being ABSENT to pick pre-staging behaviour — the same coupling that once let
- * `blocksFocal` pre-tick two beds for deletion in a keep-everything flow.
- */
-function enforceSpaceBranch(json: string): string {
-  if (!json) return json;
-  try {
-    const parsed = JSON.parse(json);
-    delete parsed.stagingPlan;
-    delete parsed.venueKind;
-    if (Array.isArray(parsed.removableObjects)) {
-      for (const o of parsed.removableObjects) {
-        delete o.effort;
-        delete o.blocksFocal;
-        delete o.clearReason;
-      }
-    }
-    return JSON.stringify(parsed);
-  } catch {
-    return json;
-  }
-}
-
-/**
- * Make "this room has nowhere to hang anything" a guarantee, not a request.
- *
- * A room whose walls are all occupied, glazed or curtained cannot take wall
- * art — but the renderer is told to add every product the user picked, so
- * offering one anyway hands it an impossible task. It resolves that by
- * inventing architecture: widening a narrow return strip, or turning a
- * curtained sliding door into solid wall. Both shipped.
- *
- * Dropping the option upstream is the only reliable fix, because the render
- * prompt already forbids both of those things and lost anyway.
- *
- * Space only — `wallSpace` is not consulted anywhere in the event path, and
- * events decorate walls by design (backdrops, buntings) rather than hanging
- * permanent pieces. No-ops when `wallSpace` is absent, so every analysis
- * stored before this field existed behaves exactly as it did before.
- */
-function enforceWallSpace(json: string): string {
-  if (!json) return json;
-  try {
-    const parsed = JSON.parse(json);
-    const space = parsed?.wallSpace;
-    if (space !== "none" && space !== "limited") return json;
-    if (!Array.isArray(parsed.suggestedProducts)) return json;
-
-    const isWall = (p: { mount?: string }) => p?.mount === "wall";
-    // "limited" keeps one piece; "none" keeps nothing.
-    const budget = space === "limited" ? 1 : 0;
-    let kept = 0;
-    parsed.suggestedProducts = parsed.suggestedProducts.filter(
-      (p: { mount?: string }) => !isWall(p) || kept++ < budget
-    );
-    return JSON.stringify(parsed);
-  } catch {
-    return json;
-  }
-}
-
 function enforceVenueBranch(json: string): string {
   if (!json) return json;
   try {
@@ -852,7 +759,6 @@ MUST PRESERVE EXACTLY (never change the architecture):
 - The exact same ceiling, ceiling fan, and light fixtures
 - The exact same room dimensions, boundaries, perspective, and camera angle — do NOT crop, zoom, or reframe
 - Whether windows and doors exist or not — do NOT add or remove them
-- CURTAINS, DRAPES OR BLINDS MEAN AN OPENING BEHIND THEM — a window or a sliding glass door — unless the photo clearly shows solid wall behind them. A curtained area is NOT free wall space: never turn it into solid wall, never mount or hang anything on it, and never stand a cabinet, console or shelf flat against it as though it were a wall. If your only reason to call something a wall is that a curtain covers it, it is an opening.
 - EXISTING DÉCOR ALREADY IN THE PHOTO — flags and flagpoles, religious or devotional items, artwork, framed photos, wall hangings, mirrors, trophies, plants, and any other ornament the occupant has put there. Reproduce each one in place, unchanged, including its exact markings and colours. These belong to the occupant: they are NOT clutter, they are NOT props to be relocated, and an added product must never replace or obscure one.
 
 ${furnitureBlock}
@@ -861,11 +767,6 @@ ${furnitureBlock}
 
 ${addLine}
 ${productList}${floorClearance}
-
-WHEN A PRODUCT DOES NOT FIT, THE ROOM WINS (this outranks adding the product):
-- If a wall-mounted item has no free wall — every wall is already occupied by the occupant's own artwork, or the only clear surface is a window, a glazed door, or a curtained opening — then lean it against a wall at floor level, stand it on a surface, or leave it out of the image entirely. Creating wall space is never an option: do not close off an opening, extend a wall, push a wall back, or widen the room to make something fit.
-- Never shrink, move, crop or restyle the occupant's existing artwork, photos or wall hangings to clear space for an added product. If both cannot fit, the occupant's own piece stays exactly as it is and the added product goes elsewhere or is omitted.
-- Leaving one product out of a room that genuinely cannot hold it is CORRECT. Silently redrawing the architecture to fit everything is a failure.
 
 Each item must look EXACTLY like its reference image — same color, shape, material, and design. Place them naturally with correct scale, perspective, lighting, and shadows.${
       styleHint
