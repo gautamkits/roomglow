@@ -13,6 +13,7 @@ import type {
   ProductResult,
   Hotspot,
 } from "@/lib/types";
+import { isProtectedLabel } from "@/lib/types";
 import { useSession } from "next-auth/react";
 import { track, trackFunnel } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
@@ -29,6 +30,20 @@ import {
 
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
+
+// Named as KEEPs on every empty-room call. `analyzeRoom` only lists LARGE
+// movable pieces, so a mandir shelf or a framed deity picture never appears in
+// removableObjects and would reach the empty pass unnamed. Clearing someone's
+// shrine to fit a balloon arch is not a recoverable mistake, so it is stated
+// rather than left to the prompt's judgement.
+const DEVOTIONAL_KEEPS = [
+  "temple / mandir / shrine",
+  "idol or deity statue",
+  "framed god picture or religious artwork",
+  "prayer or puja corner",
+  "national flag",
+  "framed family photographs",
+];
 
 // Each retry/clear below is a paid image generation, so cap them to stop a user
 // (or tester) from triggering unlimited generations. These are client-side
@@ -339,10 +354,37 @@ export function useRoomFlow() {
         const cluttered =
           analysis.clutterLevel !== "clean" &&
           (analysis.removableObjects?.length ?? 0) > 0;
-        // Non-cluttered → auto-skip selection now. Cluttered → the ref is set
-        // after the tidy-up step instead (handleTidyUp).
-        autoProceedRef.current = !cluttered;
-        setStep(cluttered ? "tidy-up" : "product-selection");
+
+        // Admin flag (server-decided, see /api/analyze-room): clear the room
+        // for the user instead of asking them what to move.
+        //
+        // Makeover cannot reach here — it branches to /api/analyze-person
+        // earlier in this function and jumps straight to product-selection —
+        // which is what keeps emptyRoom away from a photo of a person. The
+        // typechecker enforces that: `activeMode` is "space" | "event" here.
+        const autoClear = !!analysis.alwaysEmpty;
+        if (autoClear) {
+          // Populate removedLabels anyway, even though no screen was shown.
+          // Everything downstream keys off this list: `remaining` collapses to
+          // "cleared / mostly empty", removedBlock and clearedZoneNote fire,
+          // and `removedItems` persists real labels so the design page's
+          // "Kept from your room" chips don't list furniture we just deleted.
+          // Leaving it [] is what makes all of those silently wrong.
+          const labels = (analysis.removableObjects ?? [])
+            .map((o) => o.label)
+            .filter((l) => !isProtectedLabel(l));
+          setRemovedLabels(labels);
+          // MUST be true. Product selection renders no component of its own —
+          // this ref is the only thing that starts generation, so a cluttered
+          // room that skips tidy-up without it dead-ends on a blank screen.
+          autoProceedRef.current = true;
+          setStep("product-selection");
+        } else {
+          // Non-cluttered → auto-skip selection now. Cluttered → the ref is set
+          // after the tidy-up step instead (handleTidyUp).
+          autoProceedRef.current = !cluttered;
+          setStep(cluttered ? "tidy-up" : "product-selection");
+        }
       } catch (e) {
         setError(
           e instanceof Error
@@ -439,13 +481,27 @@ export function useRoomFlow() {
       // 0. Empty the items the user chose to remove in tidy-up, before designing.
       // Cached in p.canvas so a retry doesn't re-empty (and re-pay). Non-fatal:
       // on failure we design on the original photo.
-      if (removedLabels.length && image && !p.canvas) {
+      // Skip it entirely on a room the analysis already calls clean with nothing
+      // in the way — there is nothing to clear, and this is a billed image call
+      // on the pre-paywall path.
+      const worthClearing =
+        roomAnalysis?.clutterLevel !== "clean" ||
+        (roomAnalysis?.removableObjects ?? []).some((o) => o.blocksFocal);
+
+      if (removedLabels.length && image && !p.canvas && worthClearing) {
         setStatusMessage("Tidying up the room...");
         try {
           const objects = roomAnalysis?.removableObjects ?? [];
           const keepLabels = objects
             .map((o) => o.label)
             .filter((l) => !removedLabels.includes(l));
+          // A shrine is usually too small to be listed as a removable object at
+          // all (analyzeRoom excludes small items), so it would otherwise reach
+          // the empty prompt with nothing protecting it but the prompt's own
+          // wording. Name them explicitly as keeps.
+          const protectedKeeps = DEVOTIONAL_KEEPS.filter(
+            (l) => !keepLabels.includes(l)
+          );
           // Kept items whose supporting object is being removed → must be
           // re-placed so they don't float.
           const removedIds = new Set(
@@ -457,7 +513,12 @@ export function useRoomFlow() {
           const emptyRes = await fetch("/api/empty-room", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image, removeLabels: removedLabels, keepLabels, orphanedLabels }),
+            body: JSON.stringify({
+              image,
+              removeLabels: removedLabels,
+              keepLabels: [...keepLabels, ...protectedKeeps],
+              orphanedLabels,
+            }),
           });
           if (emptyRes.ok) {
             const { emptiedImage } = await emptyRes.json();
@@ -520,6 +581,9 @@ export function useRoomFlow() {
               selectedProductTypes: selected.map((s) => s.label),
               eventContext,
               removeLabels: removedLabels,
+              // The clear was ours, not the user's — keeps space additive
+              // instead of recommending replacement furniture.
+              autoCleared: !!roomAnalysis?.alwaysEmpty,
             },
             "We couldn't create a design plan. Please try again."
           );
@@ -611,6 +675,9 @@ export function useRoomFlow() {
                 geometry: roomAnalysis?.geometry,
                 // Space redesigns may rearrange kept furniture (default on).
                 optimizeLayout: mode === "space" ? optimizeLayout : false,
+                // Stops the prompt describing furniture as present when the
+                // empty pass has already removed it.
+                canvasCleared: !!p.canvas,
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -643,6 +710,9 @@ export function useRoomFlow() {
               generatedImage: genImg,
               selectedItems: selected.map((s) => s.label),
               removedItems: removedLabels,
+              // So a later restyle re-renders on the cleared room, not the
+              // furnished photo — otherwise the furniture silently returns.
+              clearedImage: p.canvas ?? null,
             },
             "Failed to save your design."
           );

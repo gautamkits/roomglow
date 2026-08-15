@@ -4,6 +4,7 @@ import { analyzeRoom } from "@/lib/gemini";
 import { uploadRateLimit, clientIp } from "@/lib/rateLimit";
 import { isAdminEmail } from "@/lib/admin";
 import { notifyAdminError } from "@/lib/email";
+import { getFeatures } from "@/lib/db";
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +41,23 @@ export async function POST(request: Request) {
     const analysisJson = await analyzeRoom(base64, eventContext);
     const analysis = JSON.parse(analysisJson);
 
-    return NextResponse.json(analysis);
+    // Whether to clear the room before designing, decided server-side so a
+    // client cannot force a billed extra image call (or suppress one).
+    //
+    // Merged onto the RESPONSE, deliberately not added to roomAnalysisSchema:
+    // a field in that schema is shared by both prompt branches and the model
+    // invents values for it in the branch that never mentioned it.
+    //
+    // Events are gated on `stagingPlan`, which analyzeRoom only produces for
+    // INDOOR venues (enforceVenueBranch strips it for outdoor). Emptying a
+    // school ground or a civic forecourt is meaningless, and it would erase the
+    // flagpole an Independence Day design is built around.
+    const features = await getFeatures().catch(() => ({}) as Record<string, boolean>);
+    const alwaysEmpty = eventContext
+      ? !!features.always_empty_event && !!analysis.stagingPlan
+      : !!features.always_empty_space;
+
+    return NextResponse.json({ ...analysis, alwaysEmpty });
   } catch (error) {
     console.error("Room analysis failed:", error);
     await notifyAdminError({ route: "analyze-room", error });

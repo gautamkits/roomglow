@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { Check, ArrowRight, Trash2, Sparkles } from "lucide-react";
-import { recommendedClears, type RemovableObject } from "@/lib/types";
+import {
+  recommendedClears,
+  isProtectedLabel,
+  type RemovableObject,
+} from "@/lib/types";
 
 interface TidyUpSelectionProps {
   /** The uploaded room/venue photo (data URL) — shown so the user can see the
@@ -12,6 +16,10 @@ interface TidyUpSelectionProps {
   /** The area the design will be built around, so the clear-list reads as
    *  purposeful rather than as a demand to tidy the house. */
   focalZone?: string;
+  /** True only for event designs. Clearing the room by default is an event
+   *  behaviour; space redesigns keep their keep-everything default. Comes from
+   *  the flow's mode, never from the analysis — see recommendedClears. */
+  isEvent?: boolean;
   /** Called with the labels the user wants removed (empty = keep everything). */
   onComplete: (removeLabels: string[]) => void;
 }
@@ -20,9 +28,10 @@ export default function TidyUpSelection({
   photoUrl,
   items,
   focalZone,
+  isEvent = false,
   onComplete,
 }: TidyUpSelectionProps) {
-  const suggested = new Set(recommendedClears(items, focalZone));
+  const suggested = new Set(recommendedClears(items, focalZone, isEvent));
 
   // Pre-cleared by default, and this is the whole point of the screen.
   //
@@ -66,12 +75,12 @@ export default function TidyUpSelection({
           Clear the way for the decorations
         </h2>
         <p className="text-sm text-zinc-500 mt-1">
-          {focalZone ? (
+          {focalZone && isEvent ? (
             <>
-              We&apos;ll build the design on{" "}
+              We&apos;ll clear the room and build the design on{" "}
               <span className="text-zinc-700 dark:text-zinc-300">{focalZone}</span>.
-              We&apos;ve pre-selected what&apos;s worth moving out of the way — check
-              anything you&apos;d rather keep.
+              An empty room gives the decorations room to breathe — nothing is
+              thrown away, so check anything you want left exactly where it is.
             </>
           ) : (
             <>
@@ -163,6 +172,11 @@ export default function TidyUpSelection({
                       {item.effort === "heavy" && (
                         <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
                           heavy
+                        </span>
+                      )}
+                      {isProtectedLabel(item.label) && (
+                        <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300">
+                          kept by default
                         </span>
                       )}
                     </span>

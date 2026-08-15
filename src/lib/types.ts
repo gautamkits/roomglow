@@ -28,12 +28,53 @@ export interface RoomAnalysis {
   venueKind?: VenueKind;
   /** Indoor events only. Absent for outdoor venues by design. */
   stagingPlan?: StagingPlan;
+  /**
+   * Set by /api/analyze-room from the `always_empty_space` / `always_empty_event`
+   * admin flags — NOT produced by the model, and deliberately not part of
+   * `roomAnalysisSchema`, which is shared across both prompt branches.
+   * Absent/false means the existing tidy-up flow, which is the shipped default.
+   */
+  alwaysEmpty?: boolean;
   questions: Question[]; // kept for backwards compatibility
 }
 
 /**
- * What we pre-tick in tidy-up: everything cheap to move, plus anything at all
- * that competes with the focal zone.
+ * Things we never propose clearing, however much easier an empty room would be
+ * to decorate.
+ *
+ * A household shrine is not clutter, and "we deleted your mandir to fit a
+ * balloon arch" is not a recoverable mistake. The same goes for a national
+ * flag, a portrait of a relative, or an appliance nobody is going to carry out
+ * of the room for one afternoon. These still appear in the tidy-up list — the
+ * occupant may genuinely want the fish tank out of shot — they are simply never
+ * ticked on their behalf.
+ */
+const PROTECTED_LABEL_TERMS = [
+  // Devotional — generic
+  "temple", "mandir", "shrine", "altar", "idol", "deity", "puja", "pooja",
+  "cross", "crucifix", "menorah", "prayer", "religious", "sacred", "holy",
+  "diya", "tulsi", "rosary", "icon",
+  // Devotional — named. A real analysis returned "Corner Plant and Buddha
+  // Statue" and the generic terms above did not catch it. Deities get named,
+  // not described, so the names have to be listed.
+  "buddha", "ganesh", "ganpati", "ganesha", "krishna", "shiva", "vishnu",
+  "lakshmi", "laxmi", "saraswati", "hanuman", "durga", "kali", "sai baba",
+  "guru nanak", "jesus", "christ", "virgin mary", "murti", "nataraj",
+  // Personal / irreplaceable
+  "flag", "framed photo", "family photo", "portrait",
+  // Living or genuinely immovable
+  "aquarium", "fish tank", "piano", "air conditioner", "refrigerator",
+  "fridge", "washing machine",
+];
+
+export function isProtectedLabel(label: string): boolean {
+  const l = label.toLowerCase();
+  return PROTECTED_LABEL_TERMS.some((t) => l.includes(t));
+}
+
+/**
+ * What we pre-tick in tidy-up: for an indoor event, everything movable except
+ * the protected items above.
  *
  * The failure this fixes is a real one — a "cluttered" living room where the
  * analysis correctly listed eight removable objects, the user ticked none, and
@@ -41,13 +82,25 @@ export interface RoomAnalysis {
  * bean bag. Leaving the whole decision to an unticked checkbox list meant the
  * default outcome was the worst one.
  *
- * Heavy items are only proposed when they actually block the focal zone —
- * asking someone to shift a sofa for a better backdrop is reasonable, asking
- * them to shift it for nothing is not.
+ * It used to propose only trivial-effort items plus anything blocking the focal
+ * zone, which left the room half-full: the decorator model got a sofa, a TV
+ * unit and a dining table to work around, and the designs came out cramped. An
+ * event is one afternoon in a room the occupant is willing to rearrange, so the
+ * honest default is a cleared room — presented as a checklist they can veto
+ * item by item, never as something done silently.
  */
 export function recommendedClears(
   objects: RemovableObject[],
-  focalZone?: string
+  focalZone?: string,
+  // Passed by the caller from the flow's own mode. NOT inferred from the
+  // analysis, because `stagingPlan` leaks: measured on a real space photo,
+  // 1 run in 8 came back with a focalZone despite no event context. Under the
+  // old trivial/blocksFocal filter that leak pre-ticked nothing here; under
+  // clear-all it would have pre-ticked the occupant's sectional sofa, coffee
+  // table and high chair for deletion in a flow that defaults to keeping
+  // everything. `isEvent` is the one signal that cannot be invented by the
+  // model, so clearing is gated on it and defaults to false.
+  isEvent = false
 ): string[] {
   // Gated on the staging plan, not on the fields being populated.
   //
@@ -57,10 +110,10 @@ export function recommendedClears(
   // which was enough to pre-tick two BEDS for removal. Without a focal zone the
   // flag has nothing to be relative to, so it means nothing and we recommend
   // nothing. Space keeps its long-standing keep-everything default.
-  if (!focalZone) return [];
+  if (!focalZone || !isEvent) return [];
 
   return objects
-    .filter((o) => o.effort === "trivial" || o.blocksFocal)
+    .filter((o) => !isProtectedLabel(o.label))
     .map((o) => o.label);
 }
 

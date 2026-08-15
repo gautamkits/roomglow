@@ -412,6 +412,7 @@ function HomeContent() {
               photoUrl={image}
               items={roomAnalysis.removableObjects || []}
               focalZone={roomAnalysis.stagingPlan?.focalZone}
+              isEvent={mode === "event"}
               onComplete={handleTidyUp}
             />
           </div>

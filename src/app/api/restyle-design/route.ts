@@ -69,7 +69,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const base64 = await imageToBase64(design.original_image_url);
+    // Re-render on the canvas this design was actually built on. Falling back
+    // to original_image_url would put back the furniture the design was made
+    // without, so the restyle would not match the design it came from.
+    const renderBase = design.cleared_image_url || design.original_image_url;
+    const base64 = await imageToBase64(renderBase);
     if (!base64) {
       return NextResponse.json({ error: "Could not load the room photo" }, { status: 502 });
     }
@@ -98,7 +102,11 @@ export async function POST(request: Request) {
       undefined,
       styleHint,
       true,
-      analysis?.geometry || undefined
+      analysis?.geometry || undefined,
+      false,
+      // Tells the prompt not to describe furniture as present when we are
+      // re-rendering on an already-emptied canvas.
+      !!design.cleared_image_url
     );
 
     // Track the billed image-gen call for cost analytics (same as generate-image).

@@ -314,7 +314,10 @@ export async function emptyRoom(
 ): Promise<string> {
   const removeLine = removeLabels.length
     ? `Remove these objects: ${removeLabels.join(", ")}.`
-    : `Remove ALL movable furniture and objects (sofas, tables, chairs, rugs, lamps, decor, clutter).`;
+      // "decor" used to be in this list, which is how a household shrine became
+      // fair game. Devotional items are carved out explicitly below; this line
+      // is reached by clearAndRedesign, which passes no keepLabels at all.
+    : `Remove ALL movable furniture and objects (sofas, tables, chairs, rugs, lamps, clutter).`;
   const keepLine = keepLabels.length
     ? `\nKEEP these items exactly as they are, do NOT remove them: ${keepLabels.join(", ")}.`
     : "";
@@ -322,23 +325,45 @@ export async function emptyRoom(
     ? `\nThese kept items were resting on something you're removing: ${orphanedLabels.join(", ")}. Re-place each of them naturally on the floor or the nearest suitable surface — never leave them floating.`
     : "";
 
-  const prompt = `This is a photo of a room. This is a STRICT photo editing task — produce a clean, EMPTY version of this exact room.
+  // The scope line is deliberately first and deliberately negative. An earlier
+  // version opened with "produce a clean, EMPTY version of this exact room",
+  // and that framing beat every carve-out below it: given an explicit KEEP for
+  // "Corner Plant and Buddha Statue", the model still deleted the statue and
+  // swapped a framed artwork for a different one. Naming the removal list as
+  // the entire scope — and saying plainly that everything else stays — is what
+  // stops "empty the room" being read as "delete whatever is left".
+  const scopeLine = removeLabels.length
+    ? `This is a STRICT photo editing task with a FIXED scope: remove ONLY the objects listed under REMOVE. Everything else in this photo stays exactly as it is — same position, same size, same colours, same markings. If an object is not named in the REMOVE list, you must reproduce it unchanged. Do not "finish the job" by clearing other things.`
+    : `This is a STRICT photo editing task — produce a clean, EMPTY version of this exact room.`;
+
+  const prompt = `This is a photo of a room. ${scopeLine}
 
 ${removeLine}${keepLine}${orphanLine}
 
 MUST DO:
 - Photo-realistically reconstruct the floor, walls, and any surfaces that were hidden behind the removed objects, matching the existing flooring material, wall color, and texture.
 - Keep the EXACT same walls, floor, ceiling, windows, doors, built-in fixtures, room layout, dimensions, perspective, camera angle, and lighting.
+- Keep every CEILING FAN, light fixture, chandelier, wall or ceiling lamp, switchboard, socket, AC unit and any other fixed or mounted fitting exactly where it is, unchanged. These are part of the room, not furniture — never remove them, and never remove the ceiling fan even when clearing everything else.
 - Also clear away ALL small clutter and loose tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, small stray objects) so every surface looks clean and tidy — regardless of the list above.
 - If any item you KEEP was resting on or supported by an item you remove, do NOT leave it floating — place it naturally on the floor or the nearest suitable surface. Nothing may hover in mid-air.
 
 MUST NOT:
+- NEVER remove, move, cover or alter religious or devotional items — a temple, mandir, shrine, altar, idol, deity image, framed god picture, prayer corner, cross, or anything used for worship. Leave them exactly as they are, in place, with their exact markings and colours. This holds EVEN when told to remove all objects, and even if they read as "decor" or "clutter". If you are unsure whether something is decoration or devotional, KEEP IT.
+- NEVER remove a national flag, a framed family photograph or portrait, or anything else that is plainly personal and irreplaceable. Same rule: when unsure, keep it.
 - Do NOT add any new furniture, decorations, or objects.
 - Do NOT add, extend, close off, or invent any walls — if a side of the room is open or has no visible wall, keep it exactly that open. Do NOT enclose or "complete" the room.
 - Do NOT add or remove windows, doors, or change the architecture.
 - Do NOT change the camera angle or crop.
 
 The result must look like a real photograph of the same empty room.`;
+
+  // Pin the output shape to the input, exactly as generateDesignImage and
+  // editDesignImage do. This was missing: the cleared canvas is what feeds
+  // generateDesignImage, which then pins to the DRIFTED shape, so an unpinned
+  // reframe here silently propagates into the final render and leaves it a
+  // different shape from original_image_url — which is what before/after and
+  // the reveal video compare against.
+  const aspectRatio = await aspectOf(imageBase64);
 
   const response = await ai.models.generateContent({
     model: "gemini-3.1-flash-image",
@@ -353,6 +378,7 @@ The result must look like a real photograph of the same empty room.`;
     ],
     config: {
       responseModalities: ["TEXT", "IMAGE"],
+      ...(aspectRatio ? { imageConfig: { aspectRatio } } : {}),
     },
   });
 
@@ -651,7 +677,11 @@ export async function generateDesignImage(
   // Space redesigns only: when true the AI may reposition existing/kept furniture
   // for the best layout (identity/appearance preserved). Off for events (decorate,
   // don't rearrange the venue) and for the "keep my layout" opt-out.
-  optimizeLayout: boolean = false
+  optimizeLayout: boolean = false,
+  // True when the room image passed in has already been through emptyRoom, so
+  // the prompt must stop describing furniture as present. See furnitureBlock
+  // and the scaleReferences note.
+  canvasCleared: boolean = false
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -730,7 +760,14 @@ FLOOR CLEARANCE & WALKWAY RULE (applies to the products you ADD, never to what i
 SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - This space is approximately ${Math.round(geometry.approxWidthFt)} ft wide × ${Math.round(geometry.approxDepthFt)} ft deep with a ~${Math.round(geometry.approxCeilingFt)} ft ceiling.${
         geometry.scaleReferences?.length
-          ? `\n- Use these visible objects as size rulers: ${geometry.scaleReferences.join("; ")}.`
+          ? canvasCleared
+            ? // Same trap as the focal zone: the rulers were picked from the
+              // FURNISHED photo ("3-seat sofa (~6 ft wide)") and the room has
+              // since been cleared, so they are not in the image being edited.
+              // Left unqualified, the model can paint the ruler back in to
+              // have something to measure against.
+              `\n- These objects were used to measure the room BEFORE it was cleared: ${geometry.scaleReferences.join("; ")}. They are no longer in the photo — do NOT expect to see them and do NOT add them back. Use the foot dimensions above as the real constraint.`
+            : `\n- Use these visible objects as size rulers: ${geometry.scaleReferences.join("; ")}.`
           : ""
       }
 - Render EVERY added product at its true real-world size relative to those references. If a product title states a size (e.g. "5x7 ft rug", "6x4 ft backdrop"), treat that size as a hard constraint.
@@ -741,7 +778,15 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
   // Space redesigns may rearrange kept furniture for a better layout; events keep
   // the venue as-is. Architecture is always fixed either way.
   const canRearrange = optimizeLayout && !eventContext;
-  const furnitureBlock = canRearrange
+  const furnitureBlock = canvasCleared
+    ? // The photo handed to us has already been emptied. Telling the model to
+      // "keep ALL existing furniture exactly where it is" would be an
+      // instruction to preserve objects that are not in the image, which
+      // invites it to paint them back in to comply.
+      `EXISTING FURNITURE:
+- This room has ALREADY been cleared. There is no existing furniture in the photo to keep, and you must NOT invent or add any back — no sofa, bed, table, cabinet or shelving unless it is one of the products listed below.
+- Everything still visible — architecture, ceiling fans, light fixtures, built-ins, and any remaining décor — stays exactly as it is.`
+    : canRearrange
     ? `EXISTING FURNITURE (you MAY rearrange for the best layout):
 - You may REPOSITION the existing furniture to create the best, most cohesive layout (e.g. move a lamp beside the sofa, angle a chair toward the focal point, pull the rug under the seating).
 - Keep each existing item's IDENTITY and APPEARANCE IDENTICAL — same sofa, same lamp, same colors and materials — only place it better. Do NOT invent, remove, or restyle existing furniture.
@@ -1272,7 +1317,11 @@ export async function recommendProducts(
   // Which Amazon marketplace the search queries are written for. Defaults to IN
   // to match `searchProducts`, but every caller should pass the real locale —
   // the query wording, not just the marketplace routing, has to match.
-  locale: Locale = "IN"
+  locale: Locale = "IN",
+  // True when `removeLabels` came from the always-empty flag rather than from
+  // the user picking items in tidy-up. Keeps space recommendations additive —
+  // see removedBlock.
+  autoCleared = false
 ): Promise<string> {
   const marketplace = marketplaceName(locale);
   const productTypesList =
@@ -1291,9 +1340,19 @@ export async function recommendProducts(
   // wall to make room for a Ganesh mandap was offered a Rs 37,999 television
   // and a new TV console to replace the ones they had just removed. In an
   // event the cleared space IS the point; it gets decorated, not refurnished.
+  //
+  // The space wording is also wrong when WE cleared the room rather than the
+  // user asking for it (the always_empty_space flag). "Suggest replacements
+  // for the freed space" is right after someone deliberately removes their
+  // sofa; applied to an automatic clear it turns every room redesign into a
+  // furniture shopping list — sofa, bed, dining table — which blows past the
+  // budget slider's ceiling and is the same path that produced the Rs 37,999
+  // television. `autoCleared` selects an additive third branch instead.
   const removedBlock = removeLabels.length
     ? eventContext
       ? `\n- REMOVED by the user for the event (already carried out of the room — do not design around these, and do NOT replace them): ${removeLabels.join(", ")}. The space they freed up is for DECORATIONS. Never suggest a replacement for a removed item, and never suggest furniture, electronics or appliances (TVs, consoles, cabinets, shelving, clocks) — the occupant is decorating for one day, not refurnishing.`
+      : autoCleared
+      ? `\n- CLEARED for rendering (these were taken out of the photo automatically so the design could be shown on a clean room — the occupant did NOT ask to get rid of them and still owns them): ${removeLabels.join(", ")}. Do NOT design around them, and do NOT suggest replacements for them. Recommend ADDITIVE pieces only — rugs, wall art, lamps, cushions, plants, shelves, side tables and similar. Never suggest large furniture the occupant already owns (sofa, bed, dining table, wardrobe, TV or media unit).`
       : `\n- REMOVED by the user (no longer in the room — do not design around these; suggest replacements/fillers for the freed space where it makes sense): ${removeLabels.join(", ")}`
     : "";
 
@@ -1325,6 +1384,18 @@ export async function recommendProducts(
   const placementRule = plan?.focalZone
     ? "MUST start by naming the zone this belongs to, then the precise spot within it, e.g. 'focal zone — centred on the wall behind the TV console, at eye level'"
     : "which zone in the space, e.g. 'on the wall behind the main table'";
+
+  // The focal zone is chosen by analyzeRoom from the FURNISHED photo and is
+  // described by pointing at furniture ("the wall behind the television
+  // console"). The room is then cleared before rendering, so that landmark is
+  // gone from the pixels the decorator model actually sees. Re-analysing the
+  // cleared canvas would produce a second focal zone that can contradict the
+  // one already shown on the tidy-up screen, so instead: tell it the name is a
+  // location, not an object.
+  const clearedZoneNote =
+    plan?.focalZone && removeLabels.length
+      ? `\n- NOTE: the focal zone is named after furniture that has since been carried out of the room (${removeLabels.join(", ")}). Read it as a LOCATION — that wall, that corner, that side of the room — not as the objects it mentions. Do not expect to see them, and never ask for an item to be placed on one.`
+      : "";
   const stagingBlock = plan?.focalZone
     ? `\n- FOCAL ZONE (the design is built here): ${plan.focalZone}${
         plan.focalReason ? ` — ${plan.focalReason}` : ""
@@ -1332,7 +1403,7 @@ export async function recommendProducts(
         plan.supportingZones?.length
           ? `\n- SUPPORTING ZONES (light accents only): ${plan.supportingZones.join("; ")}`
           : "\n- SUPPORTING ZONES: none — keep everything in the focal zone."
-      }`
+      }${clearedZoneNote}`
     : "";
 
   const analysisBlock = `Space Analysis:

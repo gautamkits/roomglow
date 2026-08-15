@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2, Tag, Sparkles, Gift, Wand2 } from "lucide-react";
+import { Check, X, BarChart2, Tag, Sparkles, Gift, Wand2, Trash2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -285,6 +285,8 @@ function AdminContent() {
   const [featureLoading, setFeatureLoading] = useState(false);
   const [firstFreeEnabled, setFirstFreeEnabled] = useState(false);
   const [createV2Enabled, setCreateV2Enabled] = useState(false);
+  const [emptySpaceEnabled, setEmptySpaceEnabled] = useState(false);
+  const [emptyEventEnabled, setEmptyEventEnabled] = useState(false);
   const [promoSignups, setPromoSignups] = useState(0);
   const [promoCap, setPromoCap] = useState(500);
 
@@ -339,6 +341,8 @@ function AdminContent() {
         setMakeoverEnabled(!!d.makeover);
         setFirstFreeEnabled(!!d.first_design_free);
         setCreateV2Enabled(!!d.create_v2);
+        setEmptySpaceEnabled(!!d.always_empty_space);
+        setEmptyEventEnabled(!!d.always_empty_event);
         setPromoSignups(d.promoSignups ?? 0);
         setPromoCap(d.promoCap ?? 500);
       })
@@ -366,6 +370,10 @@ function AdminContent() {
     toggleFeature("first_design_free", firstFreeEnabled, setFirstFreeEnabled);
   const toggleCreateV2 = () =>
     toggleFeature("create_v2", createV2Enabled, setCreateV2Enabled);
+  const toggleEmptySpace = () =>
+    toggleFeature("always_empty_space", emptySpaceEnabled, setEmptySpaceEnabled);
+  const toggleEmptyEvent = () =>
+    toggleFeature("always_empty_event", emptyEventEnabled, setEmptyEventEnabled);
 
   useEffect(() => {
     if (status === "unauthenticated") signIn("google");
@@ -542,6 +550,62 @@ function AdminContent() {
               <span
                 className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
                   createV2Enabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Trash2 size={15} className="text-orange-700" />
+              <div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200">
+                  Clear the room first · events
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Indoor events only · skips the tidy-up step and decorates a cleared
+                  room · adds ~₹13 per design
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleEmptyEvent}
+              disabled={featureLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                emptyEventEnabled ? "bg-orange-700" : "bg-zinc-300 dark:bg-zinc-700"
+              } ${featureLoading ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  emptyEventEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-100 dark:border-zinc-800">
+            <div className="flex items-center gap-2">
+              <Trash2 size={15} className="text-orange-700" />
+              <div>
+                <p className="text-sm text-zinc-800 dark:text-zinc-200">
+                  Clear the room first · room redesigns
+                </p>
+                <p className="text-xs text-zinc-500">
+                  Experimental — empties the user&apos;s furniture before redesigning ·
+                  doubles image cost · watch calls-per-design in Analytics
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleEmptySpace}
+              disabled={featureLoading}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                emptySpaceEnabled ? "bg-orange-700" : "bg-zinc-300 dark:bg-zinc-700"
+              } ${featureLoading ? "opacity-50" : ""}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  emptySpaceEnabled ? "translate-x-6" : "translate-x-1"
                 }`}
               />
             </button>

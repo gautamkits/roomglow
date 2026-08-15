@@ -147,6 +147,13 @@ async function ensureDesignColumns() {
   // exist" the first time anything actually called them. Self-init it here with
   // the other drifted columns.
   await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS restyled_from UUID`;
+  // The emptied canvas the design was actually rendered on, when it differs
+  // from the upload. `original_image_url` stays the true photo so before/after
+  // and the reveal video keep showing the room the user photographed — but
+  // restyle and admin regenerate re-render from scratch, and re-rendering from
+  // the furnished photo silently puts back the furniture the design was built
+  // without. Null on every design that was rendered on the original.
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS cleared_image_url TEXT`;
   designColumnsReady = true;
 }
 
@@ -200,10 +207,12 @@ export async function saveDesign(params: {
   generatedBlur?: string | null;
   // Watermarked, downscaled preview served to non-entitled viewers (paywall).
   previewImageUrl?: string | null;
+  /** The emptied canvas actually rendered on, when it differs from the upload. */
+  clearedImageUrl?: string | null;
 }) {
   await ensureDesignColumns();
   const { rows } = await sql`
-    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, removed_items, original_blur, generated_blur)
+    INSERT INTO designs (mode, event_config, room_analysis, products, hotspots, design_narrative, original_image_url, generated_image_url, preview_image_url, user_id, is_unlocked, selected_items, removed_items, original_blur, generated_blur, cleared_image_url)
     VALUES (
       ${params.mode},
       ${JSON.stringify(params.eventConfig)},
@@ -219,7 +228,8 @@ export async function saveDesign(params: {
       ${JSON.stringify(params.selectedItems ?? null)},
       ${JSON.stringify(params.removedItems ?? null)},
       ${params.originalBlur ?? null},
-      ${params.generatedBlur ?? null}
+      ${params.generatedBlur ?? null},
+      ${params.clearedImageUrl ?? null}
     )
     RETURNING id
   `;
@@ -1534,6 +1544,22 @@ async function ensureFeaturesSchema() {
     INSERT INTO site_features (key, enabled) VALUES ('create_v2', false)
     ON CONFLICT (key) DO NOTHING
   `;
+  // Clear the room before designing, instead of decorating around the
+  // occupant's furniture. Two keys, not one: for indoor EVENTS a cleared canvas
+  // is already the proven behaviour, while for SPACE the repo's own history
+  // argues the other way (84be61f measured that "a furnished room treated as
+  // bare gets rebuilt", and d5cf7a7 reverted that line after four consecutive
+  // fidelity failures). Separate flags mean the space experiment can be run and
+  // reversed from /admin without touching events. Both default OFF, so the
+  // existing tidy-up flow stays the shipped behaviour until switched on.
+  await sql`
+    INSERT INTO site_features (key, enabled) VALUES ('always_empty_space', false)
+    ON CONFLICT (key) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO site_features (key, enabled) VALUES ('always_empty_event', false)
+    ON CONFLICT (key) DO NOTHING
+  `;
   featuresSchemaReady = true;
 }
 
@@ -1550,10 +1576,14 @@ export async function getFeatures(): Promise<Record<string, boolean>> {
   }
   await ensureFeaturesSchema();
   const { rows } = await sql`SELECT key, enabled FROM site_features`;
+  // Fail-closed defaults. A key missing from this map reads `undefined`, not
+  // `false`, so every new flag must be listed here as well as seeded above.
   const result: Record<string, boolean> = {
     makeover: false,
     first_design_free: false,
     create_v2: false,
+    always_empty_space: false,
+    always_empty_event: false,
   };
   for (const row of rows) result[row.key] = row.enabled;
   featuresCache = { at: Date.now(), value: result };

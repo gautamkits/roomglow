@@ -23,7 +23,7 @@ function toBuffer(input: string): Buffer {
 
 export async function POST(request: Request) {
   try {
-    const { mode, eventConfig, makeoverConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems, removedItems } =
+    const { mode, eventConfig, makeoverConfig, roomAnalysis, products, hotspots, designNarrative, originalImage, generatedImage, selectedItems, removedItems, clearedImage } =
       await request.json();
 
     if (!products || !originalImage || !generatedImage) {
@@ -66,6 +66,21 @@ export async function POST(request: Request) {
         token: blobToken,
       }),
     ]);
+
+    // The emptied canvas, when the design was rendered on one. Non-fatal: a
+    // failed upload just means restyle falls back to the original photo, which
+    // is the pre-existing behaviour.
+    let clearedUrl: string | null = null;
+    if (clearedImage && clearedImage !== originalImage) {
+      clearedUrl = await put(`designs/${ts}-cleared.png`, toBuffer(clearedImage), {
+        access: "public",
+        contentType: "image/png",
+        addRandomSuffix: true,
+        token: blobToken,
+      })
+        .then((b) => b.url)
+        .catch(() => null);
+    }
 
     const [originalBlur, generatedBlur] = await Promise.all([
       makeBlurDataUrl(originalBuf).catch(() => null),
@@ -121,6 +136,7 @@ export async function POST(request: Request) {
       isUnlocked,
       selectedItems: selectedItems || null,
       removedItems: removedItems || null,
+      clearedImageUrl: clearedUrl,
     });
 
     // Designs unlocked at save time (free markets, or the free-first-design promo
