@@ -5,6 +5,46 @@ import type { Locale } from "./locale";
 import { timed } from "./timing";
 
 /**
+ * Per-step thinking budget for the `gemini-2.5-flash` calls.
+ *
+ * Measured 2026-08-15 on a real birthday design: curate 31.4s, analyze 19.7s,
+ * recommend 18.1s — 69s of an 84s wait, against 10.8s for the actual image
+ * generation. None of them set a budget, so all three ran dynamic thinking.
+ *
+ * Returns a spreadable config fragment. `undefined` for a step means "leave the
+ * model's default alone". Env vars (THINK_ANALYZE / THINK_RECOMMEND /
+ * THINK_CURATE) override, so the A/B can be run against these exact functions
+ * instead of a reimplementation of their prompts.
+ */
+type ThinkingStep = "ANALYZE" | "RECOMMEND" | "CURATE";
+
+// Measured against public/samples (birthday event + kitchen space), 3 runs:
+//
+//   ANALYZE=0 is NOT safe, twice over. It brought back the unterminated-JSON
+//   degeneration that analyzeRoomParsed retries around (two failed attempts,
+//   64s — slower than doing nothing), and it made the SPACE run emit
+//   `stagingPlan`, an event-only field. That is the shared-schema leak exactly
+//   as documented: with no thinking, the model fills in schema fields it was
+//   never instructed about. 1024 holds both lines and is still ~40% faster.
+//
+//   RECOMMEND/CURATE at 0 are clean — curate is index-picking from a supplied
+//   list, and recommend stayed on-theme with the same product count.
+const THINKING_DEFAULTS: Record<ThinkingStep, number | undefined> = {
+  ANALYZE: 1024,
+  RECOMMEND: 0,
+  CURATE: 0,
+};
+
+function thinking(step: ThinkingStep) {
+  const override = process.env[`THINK_${step}`];
+  const budget =
+    override !== undefined && override !== "" && Number.isFinite(Number(override))
+      ? Number(override)
+      : THINKING_DEFAULTS[step];
+  return budget === undefined ? {} : { thinkingConfig: { thinkingBudget: budget } };
+}
+
+/**
  * How to name the user's Amazon marketplace inside a prompt. Every prompt that
  * asks the model for a search query must go through this — hardcoding "Amazon
  * India" sent US shoppers India-flavoured queries.
@@ -262,6 +302,7 @@ CRITICAL RULES for suggestedProducts:
       // Bounds the degeneration below. A real analysis is 2-4 KB; the runaway
       // ones reach 150 KB, which is unparseable, slow, and billed.
       maxOutputTokens: 8192,
+      ...thinking("ANALYZE"),
     },
   });
 
@@ -651,6 +692,7 @@ For each category, return the chosen optionIndex and a short reason. Also write 
     config: {
       responseMimeType: "application/json",
       responseSchema: curationSchema,
+      ...thinking("CURATE"),
     },
   });
 
@@ -1578,6 +1620,7 @@ Also write a clear 2-3 sentence designVision describing the styling — color pa
     config: {
       responseMimeType: "application/json",
       responseSchema: recommendationSchema,
+      ...thinking("RECOMMEND"),
     },
   });
 
