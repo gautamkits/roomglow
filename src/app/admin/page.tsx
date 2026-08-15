@@ -564,7 +564,7 @@ function AdminContent() {
                 </p>
                 <p className="text-xs text-zinc-500">
                   Indoor events only · skips the tidy-up step and decorates a cleared
-                  room · adds ~₹13 per design
+                  room · no extra cost, events already clear the room
                 </p>
               </div>
             </div>
@@ -592,7 +592,8 @@ function AdminContent() {
                 </p>
                 <p className="text-xs text-zinc-500">
                   Experimental — empties the user&apos;s furniture before redesigning ·
-                  doubles image cost · watch calls-per-design in Analytics
+                  adds a 2nd image call, ~₹13 → ~₹26 per design · watch
+                  calls-per-design in Analytics
                 </p>
               </div>
             </div>
