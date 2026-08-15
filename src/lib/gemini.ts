@@ -1277,6 +1277,46 @@ STYLE DIRECTION: ${styleHint} aesthetic.`,
 // ─── Product recommendations (design vision + product list) ───
 // (Previously in lib/claude.ts — it never used Claude; it's Gemini like the
 // rest of this module, so it now lives here.)
+/**
+ * Enforce the fit scores the model gave its own recommendations.
+ *
+ * A decoration that cannot physically fit is worse than a missing one: the
+ * renderer is told to add every product it is handed, so an oversized backdrop
+ * in a narrow room gets rendered by widening the room — the same mechanism that
+ * bricked up a sliding door to gain wall.
+ *
+ * Deliberately conservative:
+ *  - Items with no score are KEPT (absent on anything recommended before this
+ *    field existed, and on a model that simply declined to answer).
+ *  - Never returns an empty set. If everything scores low the room is the
+ *    problem, not the list, so the best-scoring items survive and the design is
+ *    sparse rather than blank.
+ */
+function enforceFit(json: string, minScore = 3, floor = 3): string {
+  if (!json) return json;
+  try {
+    const parsed = JSON.parse(json);
+    const products = parsed?.products;
+    if (!Array.isArray(products) || !products.length) return json;
+
+    const scored = (p: { fitScore?: number }) =>
+      typeof p?.fitScore === "number" ? p.fitScore : null;
+    const kept = products.filter((p) => (scored(p) ?? minScore) >= minScore);
+
+    if (kept.length >= Math.min(floor, products.length)) {
+      parsed.products = kept;
+    } else {
+      // Everything (or nearly everything) failed — keep the least-bad few.
+      parsed.products = [...products]
+        .sort((a, b) => (scored(b) ?? 0) - (scored(a) ?? 0))
+        .slice(0, Math.min(floor, products.length));
+    }
+    return JSON.stringify(parsed);
+  } catch {
+    return json;
+  }
+}
+
 const recommendationSchema = {
   type: Type.OBJECT,
   properties: {
@@ -1291,6 +1331,12 @@ const recommendationSchema = {
           placement: { type: Type.STRING },
           reason: { type: Type.STRING },
           colorSuggestion: { type: Type.STRING },
+          // How well this item physically fits the room, 1-5. OPTIONAL, and
+          // absent on everything recommended before this existed — enforceFit
+          // treats a missing score as "no opinion" and keeps the item, so old
+          // behaviour is unchanged.
+          fitScore: { type: Type.NUMBER },
+          fitReason: { type: Type.STRING },
         },
         required: [
           "category",
@@ -1447,6 +1493,14 @@ For each product provide:
 - placement: ${placementRule}
 - reason: how this decoration supports the theme and connects to the others
 - colorSuggestion: specific colors/finish matching the theme
+- fitScore: 1-5, how well this physically fits THIS room. Be honest and use the real dimensions above, not the ideal version of this decoration:
+  - 5 = there is clearly room for it at full size
+  - 3 = it fits only in a reduced form (a 4 ft banner where a full backdrop was wanted, a half arch instead of a full one)
+  - 1 = it does not fit and would have to overlap a window, a door, a walkway or another item to exist
+  Rules of thumb: a full-wall backdrop needs a clear wall of roughly 6 ft or more and a ceiling near 8 ft; a balloon arch needs about 7 ft of height and 5 ft of width; a floor standee needs perimeter space that is not a walking path. If the focal wall is narrower than the item, that is a low score — say so rather than shrinking the room to fit.
+- fitReason: one short sentence justifying the score against the actual measurements
+
+START from the strongest anchor for this occasion — for almost every indoor event that is a backdrop or decorated focal wall, with everything else composed around it. Include it whenever it scores 3 or more. If it genuinely cannot fit, score it low, leave it out, and anchor the design on the best alternative (a decorated window, a table setup, a corner) instead. Never omit the anchor simply because the room looked busy — the movable items listed as removed are already gone.
 
 - FLOOR & PLACEMENT CONSTRAINT: Never place items in open floor spaces, center-room rugs, or walking paths where guests need to walk. All floor-level items (such as standees, floor balloon clusters, or ground props) must be explicitly assigned to room perimeters, corners, against the base of walls, or directly tucked against heavy furniture (e.g., "anchored tightly against the base of the TV console").
 
@@ -1466,7 +1520,12 @@ Also write a clear 2-3 sentence designVision describing the styling — color pa
     },
   });
 
-  return response.text ?? "";
+  // Events only: drop anything the model itself said will not fit. The prompt
+  // asks for an honest fitScore; this makes it binding, the same way
+  // enforceVenueBranch makes the indoor/outdoor split binding rather than
+  // requested. Without it a "1 — the wall is 3 ft, this backdrop is 8 ft"
+  // still gets searched on Amazon, curated, and rendered into the room.
+  return eventContext ? enforceFit(response.text ?? "") : (response.text ?? "");
 }
 
 const suggestionListSchema = {

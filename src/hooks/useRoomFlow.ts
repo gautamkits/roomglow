@@ -578,7 +578,23 @@ export function useRoomFlow() {
             {
               roomAnalysis,
               userAnswers: {},
-              selectedProductTypes: selected.map((s) => s.label),
+              // Events: let the decorator design from the analysis instead of
+              // being locked to this list.
+              //
+              // `selected` is every suggestedProducts entry, auto-selected —
+              // the "what to add" screen it came from was removed from the UI,
+              // so nobody ever picks these, yet recommendProducts is told "You
+              // MUST include one product for each of these types" and can add
+              // nothing else. A birthday came back with four items and no
+              // backdrop because analyzeRoom, looking at the still-furnished
+              // photo, saw no clear wall and offered a banner — a decision that
+              // survived the room being cleared moments later. Freed, the same
+              // room yields a backdrop-anchored set every time.
+              //
+              // Space keeps the list: its suggestion rules ("do NOT suggest a
+              // new sofa if one already exists") are what stop a room redesign
+              // recommending replacement furniture.
+              selectedProductTypes: eventContext ? [] : selected.map((s) => s.label),
               eventContext,
               removeLabels: removedLabels,
               // The clear was ours, not the user's — keeps space additive
@@ -708,7 +724,12 @@ export function useRoomFlow() {
               designNarrative: p.narrative || "",
               originalImage: image,
               generatedImage: genImg,
-              selectedItems: selected.map((s) => s.label),
+              // For events the design is whatever the decorator chose, not the
+              // phantom checklist — otherwise the "Added to your design" chips
+              // name items that are not in the picture.
+              selectedItems: eventContext
+                ? (p.recs ?? []).map((r) => r.category)
+                : selected.map((s) => s.label),
               removedItems: removedLabels,
               // So a later restyle re-renders on the cleared room, not the
               // furnished photo — otherwise the furniture silently returns.
