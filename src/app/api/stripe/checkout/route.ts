@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { stripe, STRIPE_PRICES } from "@/lib/stripe";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
-import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, getDesign, recordCheckoutIntent } from "@/lib/db";
+import { getPricing, getCouponByCode, incrementCouponUse, unlockDesign, unlockDesignAsAdmin, getDesign, recordCheckoutIntent } from "@/lib/db";
 import { notifyAdminError } from "@/lib/email";
 import { evaluateCoupon, type CouponRow } from "@/lib/coupons";
 import { sendDesignReadyEmail } from "@/lib/email";
@@ -25,8 +25,25 @@ export async function POST(request: Request) {
 
     const locale = localeFromRequest(request);
 
-    // Admin emails, or markets without payment enabled (India), unlock free.
+    // Admin emails, or markets without payment enabled, unlock free.
+    //
+    // This used to return { free: true } and write nothing. The client revealed
+    // the design and the row stayed is_unlocked = false, so the paywall came
+    // back on the next page load and "add to public" silently failed. Persist
+    // it, and report honestly if the write did not land.
     if (isAdminEmail(session.user.email) || !PAYMENT_ENABLED[locale]) {
+      const admin = isAdminEmail(session.user.email);
+      // Admins routinely unlock designs they do not own; unlockDesign's
+      // ownership predicate matches nothing there and would no-op.
+      const ok = admin
+        ? await unlockDesignAsAdmin(designId)
+        : await unlockDesign(designId, session.user.id);
+      if (!ok) {
+        return NextResponse.json(
+          { error: "Could not unlock this design" },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({ free: true });
     }
 

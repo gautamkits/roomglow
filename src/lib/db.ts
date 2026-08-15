@@ -415,12 +415,24 @@ export async function updateDesignImage(
 }
 
 // ─── Gallery ───
-export async function requestGalleryPublish(designId: string, userId: string) {
-  const { rowCount } = await sql`
-    UPDATE designs SET gallery_status = 'pending'
-    WHERE id = ${designId} AND user_id = ${userId}
-      AND gallery_status IN ('none', 'rejected')
-  `;
+export async function requestGalleryPublish(
+  designId: string,
+  userId: string,
+  // Admins submit designs they do not own (curating the gallery from /admin).
+  // Without this the ownership predicate matches nothing and the button looks
+  // dead — no row updated, no error, nothing in pending review.
+  asAdmin = false
+) {
+  const { rowCount } = asAdmin
+    ? await sql`
+        UPDATE designs SET gallery_status = 'pending'
+        WHERE id = ${designId} AND gallery_status IN ('none', 'rejected')
+      `
+    : await sql`
+        UPDATE designs SET gallery_status = 'pending'
+        WHERE id = ${designId} AND user_id = ${userId}
+          AND gallery_status IN ('none', 'rejected')
+      `;
   return (rowCount ?? 0) > 0;
 }
 
@@ -569,6 +581,27 @@ export async function unlockDesign(designId: string, userId: string): Promise<bo
   const { rowCount } = await sql`
     UPDATE designs SET is_unlocked = true, user_id = ${userId}
     WHERE id = ${designId} AND (user_id IS NULL OR user_id = ${userId})
+  `;
+  return (rowCount ?? 0) > 0;
+}
+
+/**
+ * Unlock a design an admin does NOT own — comping a user, or fixing a botched
+ * payment.
+ *
+ * Separate from unlockDesign because that one is an ownership *claim*: its
+ * WHERE clause only matches an unowned design or your own, and it reassigns
+ * user_id to the caller. Run as an admin against someone else's design it
+ * updates zero rows and returns false, silently — which is exactly how an
+ * admin coupon unlock looked like it worked and persisted nothing.
+ *
+ * user_id is deliberately left alone here. Unlocking someone's design must
+ * never transfer it to the admin: ownership drives designVisibility, the
+ * user's own gallery, and their design-ready email.
+ */
+export async function unlockDesignAsAdmin(designId: string): Promise<boolean> {
+  const { rowCount } = await sql`
+    UPDATE designs SET is_unlocked = true WHERE id = ${designId}
   `;
   return (rowCount ?? 0) > 0;
 }

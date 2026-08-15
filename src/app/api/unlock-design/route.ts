@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { unlockDesign, getDesign, saveEventDate } from "@/lib/db";
+import { unlockDesign, unlockDesignAsAdmin, getDesign, saveEventDate } from "@/lib/db";
 import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isAdminEmail } from "@/lib/admin";
 import { onDesignUnlocked } from "@/lib/unlock";
@@ -46,8 +46,12 @@ export async function POST(request: Request) {
     }
 
     // Claim the design for this user and unlock it. The DB guard rejects any
-    // attempt to claim a design already owned by a different account.
-    const claimed = await unlockDesign(designId, session.user.id);
+    // attempt to claim a design already owned by a different account — that
+    // guard is the point for ordinary users, so only admins step around it,
+    // and even then ownership stays with the original account.
+    const claimed = isAdminEmail(session.user.email)
+      ? await unlockDesignAsAdmin(designId)
+      : await unlockDesign(designId, session.user.id);
     if (!claimed) {
       return NextResponse.json(
         { error: "This design belongs to another account." },

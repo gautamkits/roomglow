@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { requestGalleryPublish } from "@/lib/db";
+import { isAdminEmail } from "@/lib/admin";
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,12 @@ export async function POST(request: Request) {
     if (!designId) {
       return NextResponse.json({ error: "Missing designId" }, { status: 400 });
     }
-    const ok = await requestGalleryPublish(designId, session.user.id);
+    // Admins curate the gallery from designs they do not own.
+    const ok = await requestGalleryPublish(
+      designId,
+      session.user.id,
+      isAdminEmail(session.user.email)
+    );
     if (!ok) {
       return NextResponse.json(
         { error: "Could not submit (not owner or already submitted)" },
