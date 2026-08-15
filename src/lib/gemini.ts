@@ -1285,8 +1285,16 @@ export async function recommendProducts(
   const remaining = roomAnalysis.existingFurniture.filter(
     (f) => !removeLabels.some((r) => f.toLowerCase().includes(r.toLowerCase()) || r.toLowerCase().includes(f.toLowerCase()))
   );
+  // `analysisBlock` is shared by spacePrompt and eventPrompt, so the space
+  // wording ("suggest replacements/fillers for the freed space") reached event
+  // designs too — and there it is exactly backwards. Someone clearing the TV
+  // wall to make room for a Ganesh mandap was offered a Rs 37,999 television
+  // and a new TV console to replace the ones they had just removed. In an
+  // event the cleared space IS the point; it gets decorated, not refurnished.
   const removedBlock = removeLabels.length
-    ? `\n- REMOVED by the user (no longer in the room — do not design around these; suggest replacements/fillers for the freed space where it makes sense): ${removeLabels.join(", ")}`
+    ? eventContext
+      ? `\n- REMOVED by the user for the event (already carried out of the room — do not design around these, and do NOT replace them): ${removeLabels.join(", ")}. The space they freed up is for DECORATIONS. Never suggest a replacement for a removed item, and never suggest furniture, electronics or appliances (TVs, consoles, cabinets, shelving, clocks) — the occupant is decorating for one day, not refurnishing.`
+      : `\n- REMOVED by the user (no longer in the room — do not design around these; suggest replacements/fillers for the freed space where it makes sense): ${removeLabels.join(", ")}`
     : "";
 
   // The staging plan is decided once, in analyzeRoom, from the photo. Echoing
@@ -1407,11 +1415,52 @@ const suggestionListSchema = {
 export async function refreshSuggestions(
   imageBase64: string,
   roomAnalysis: RoomAnalysis,
-  removeLabels: string[]
+  removeLabels: string[],
+  // Events clear furniture to make room for decorations, not to shop for new
+  // furniture. Without this the replace-what-you-removed rule below ran for
+  // events too: a user cleared the TV wall for a Ganesh mandap and the
+  // checklist came back offering a Smart TV, a TV console, a wall clock and
+  // floating shelves — which recommendProducts then treats as REQUESTED item
+  // types ("MUST include one product for each"), so a Rs 37,999 television
+  // ended up in a Ganesh Chaturthi design.
+  eventContext?: string
 ): Promise<string> {
   const remaining = roomAnalysis.existingFurniture.filter(
     (f) => !removeLabels.some((r) => f.toLowerCase().includes(r.toLowerCase()) || r.toLowerCase().includes(f.toLowerCase()))
   );
+
+  if (eventContext) {
+    const eventPrompt = `You are an event decoration planner. ${eventContext}
+
+The user has cleared these items out of the room to make space for the event: ${removeLabels.join(", ")}.
+What remains: ${remaining.join(", ") || "the room is mostly empty now"}.
+
+Suggest 6-8 DECORATION products they could add, as a fresh checklist. IMPORTANT:
+- NEVER suggest a replacement for anything they removed. They carried it out of the room for one day; they do not want to buy another one.
+- NEVER suggest furniture, electronics or appliances — no TVs, media consoles, cabinets, shelving, wall clocks, sofas, tables, beds, storage units. This is a one-day decoration, not a room makeover.
+- Suggest only occasion décor: backdrops, drapes, garlands, flowers, lights, rangoli, torans, idol stands and pedestals, lanterns, balloons, table styling and similar.
+- The space freed by the removals is where the decoration goes — use it, do not refill it with furniture.
+- Each has: "id" (short snake_case), "label" (human), "description" (referencing the occasion and the freed space), "icon" (single emoji), and "mount" ("wall", "ceiling", "surface" or "floor").`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { inlineData: { mimeType: "image/jpeg", data: imageBase64 } },
+            { text: eventPrompt },
+          ],
+        },
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: suggestionListSchema,
+      },
+    });
+
+    return response.text ?? "";
+  }
 
   const prompt = `You are an interior design analyst. The user is redesigning their ${roomAnalysis.dimensions} ${roomAnalysis.roomType} and has chosen to REMOVE these items from it: ${removeLabels.join(", ")}.
 

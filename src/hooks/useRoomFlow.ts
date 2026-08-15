@@ -786,7 +786,17 @@ export function useRoomFlow() {
           const res = await fetch("/api/refresh-suggestions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image, roomAnalysis, removeLabels }),
+            // Without this the refreshed checklist offers replacements for
+            // whatever was cleared — a new TV for the TV removed to free the
+            // wall for a mandap.
+            body: JSON.stringify({
+              image,
+              roomAnalysis,
+              removeLabels,
+              eventContext: buildEventContext(
+                mode === "event" ? eventConfig : null
+              ),
+            }),
           });
           if (res.ok) {
             const { suggestedProducts } = await res.json();
