@@ -88,6 +88,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     gendered: true,
     completionItems: [
+      { category: "Backdrop", query: "birthday decoration backdrop" },
       { category: "Gift", query: "birthday gift" },
       { category: "Party tableware", query: "birthday party tableware set" },
       { category: "Snacks", query: "party snacks pack" },
@@ -104,6 +105,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Red & gold", "Rose & white", "Burgundy", "Gold & white"],
     markets: ["IN", "US"],
     completionItems: [
+      { category: "Backdrop", query: "anniversary decoration backdrop" },
       { category: "Gift", query: "anniversary gift" },
       { category: "Flowers", query: "rose bouquet" },
       { category: "Chocolates", query: "chocolate gift box" },
@@ -121,6 +123,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     gendered: true,
     completionItems: [
+      { category: "Backdrop", query: "baby shower backdrop" },
       { category: "Baby gift", query: "baby gift set" },
       { category: "Shower games", query: "baby shower games" },
       { category: "Guest book", query: "baby shower guest book" },
@@ -139,6 +142,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     gendered: true,
     completionItems: [
+      { category: "Backdrop", query: "annaprasan backdrop decoration" },
       { category: "Silver gift", query: "silver gift for baby" },
       { category: "Keepsake", query: "baby footprint keepsake" },
       { category: "Sweets", query: "indian sweets gift box" },
@@ -155,6 +159,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 10, day: 31 }, // movable (Oct–Nov)
     completionItems: [
+      { category: "Backdrop", query: "diwali backdrop decoration" },
       { category: "Sweets", query: "diwali sweets box" },
       { category: "Diyas", query: "diya set decorative" },
       { category: "Dry fruits", query: "dry fruits gift pack" },
@@ -189,6 +194,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 1, day: 26 },
     completionItems: [
+      { category: "Backdrop", query: "tricolour backdrop decoration" },
       { category: "Flags", query: "indian flag tricolour" },
       { category: "Decorations", query: "tricolour party decorations" },
       { category: "Balloons", query: "tricolour balloons" },
@@ -221,6 +227,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 3, day: 20 }, // movable (shifts ~11 days earlier each year)
     completionItems: [
+      { category: "Backdrop", query: "eid decoration backdrop" },
       { category: "Gift", query: "eid gift set" },
       { category: "Sweets", query: "eid sweets gift box" },
       { category: "Dates", query: "premium dates gift pack" },
@@ -257,6 +264,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 8, day: 15 },
     completionItems: [
+      { category: "Backdrop", query: "tricolour backdrop decoration" },
       { category: "Flags", query: "indian flag tricolour" },
       { category: "Decorations", query: "tricolour party decorations" },
       { category: "Balloons", query: "tricolour balloons" },
@@ -273,6 +281,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 8, day: 26 }, // movable (Aug–Sep)
     completionItems: [
+      { category: "Backdrop", query: "janmashtami backdrop decoration" },
       { category: "Krishna idol", query: "laddu gopal idol" },
       { category: "Jhula", query: "krishna jhula cradle" },
       { category: "Flute", query: "decorative bansuri flute" },
@@ -289,6 +298,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 9, day: 5 }, // movable (Aug–Sep)
     completionItems: [
+      { category: "Backdrop", query: "ganpati mandap backdrop cloth" },
       { category: "Ganesh idol", query: "eco friendly ganesh idol" },
       { category: "Decorations", query: "ganpati decoration items" },
       { category: "Modak mould", query: "modak mould" },
@@ -305,6 +315,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 9, day: 29 }, // movable (Sep–Oct)
     completionItems: [
+      { category: "Backdrop", query: "navratri backdrop decoration" },
       { category: "Dandiya", query: "dandiya sticks decorated" },
       { category: "Decorations", query: "navratri decoration items" },
       { category: "Torans", query: "marigold toran door hanging" },
@@ -321,6 +332,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN"],
     season: { month: 10, day: 11 }, // movable (October)
     completionItems: [
+      { category: "Backdrop", query: "dussehra backdrop decoration" },
       { category: "Decorations", query: "dussehra decoration items" },
       { category: "Torans", query: "marigold toran door hanging" },
       { category: "Sweets", query: "indian sweets gift box" },
@@ -337,6 +349,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Marigold & red", "Pastel", "Gold & white", "Green & yellow"],
     markets: ["IN", "US"],
     completionItems: [
+      { category: "Backdrop", query: "housewarming backdrop decoration" },
       { category: "Gift", query: "housewarming gift" },
       { category: "Indoor plant", query: "indoor plant" },
       { category: "Pooja kit", query: "pooja samagri kit", markets: ["IN"] },
@@ -355,6 +368,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["US"],
     season: { month: 10, day: 31 },
     completionItems: [
+      { category: "Backdrop", query: "halloween party backdrop" },
       { category: "Candy", query: "halloween candy" },
       { category: "Costume", query: "halloween costume" },
       { category: "Treat bags", query: "trick or treat bags" },
@@ -371,6 +385,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["US"],
     season: { month: 11, day: 26 }, // 4th Thursday of November
     completionItems: [
+      { category: "Backdrop", query: "thanksgiving party backdrop" },
       { category: "Serveware", query: "thanksgiving serving platter" },
       { category: "Table linens", query: "fall table runner" },
       { category: "Hostess gift", query: "hostess gift" },
@@ -387,6 +402,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     season: { month: 12, day: 25 },
     completionItems: [
+      { category: "Backdrop", query: "christmas backdrop decoration" },
       { category: "Gifts", query: "christmas gift" },
       { category: "Ornaments", query: "christmas ornaments" },
       { category: "Stockings", query: "christmas stockings" },
@@ -404,6 +420,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["US"],
     season: { month: 4, day: 5 }, // movable (late Mar–Apr)
     completionItems: [
+      { category: "Backdrop", query: "easter party backdrop" },
       { category: "Easter basket", query: "easter basket" },
       { category: "Candy", query: "easter candy" },
       { category: "Egg decorating kit", query: "easter egg decorating kit" },
@@ -420,6 +437,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["US"],
     season: { month: 7, day: 4 },
     completionItems: [
+      { category: "Backdrop", query: "4th of july party backdrop" },
       { category: "Party tableware", query: "4th of july party tableware" },
       { category: "Flags", query: "american flags" },
       { category: "BBQ tools", query: "bbq grill tools" },
@@ -437,6 +455,7 @@ export const EVENTS: EventDefinition[] = [
     season: { month: 2, day: 14 },
     askHonoree: true, // Valentine's is for a partner
     completionItems: [
+      { category: "Backdrop", query: "valentine decoration backdrop" },
       { category: "Gift", query: "valentine gift" },
       { category: "Flowers", query: "red roses bouquet" },
       { category: "Chocolates", query: "chocolate gift box" },
@@ -456,6 +475,7 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     season: { month: 12, day: 31 },
     completionItems: [
+      { category: "Backdrop", query: "new year party backdrop" },
       { category: "Party supplies", query: "new years eve party supplies" },
       { category: "Champagne flutes", query: "champagne flutes set" },
       { category: "Party hats", query: "new year party hats" },
@@ -473,6 +493,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Black & gold", "School colors", "Navy & silver", "Pastel"],
     markets: ["IN", "US"],
     completionItems: [
+      { category: "Backdrop", query: "graduation party backdrop" },
       { category: "Gift", query: "graduation gift" },
       { category: "Party supplies", query: "graduation party supplies" },
       { category: "Photo props", query: "graduation photo props" },
