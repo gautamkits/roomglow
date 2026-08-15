@@ -9,6 +9,7 @@ import { localeFromRequest, PAYMENT_ENABLED } from "@/lib/locale";
 import { isFreeFirstDesignEligible } from "@/lib/promo";
 import { onDesignUnlocked } from "@/lib/unlock";
 import { sendMetaEvent, metaContextFromRequest } from "@/lib/meta";
+import { timed } from "@/lib/timing";
 
 export const runtime = "nodejs";
 
@@ -52,20 +53,25 @@ export async function POST(request: Request) {
     const generatedBuf = toBuffer(generatedImage);
 
     // Upload masters to public Blob; generate blur placeholders (non-fatal).
-    const [originalBlob, generatedBlob] = await Promise.all([
-      put(`designs/${ts}-original.jpg`, originalBuf, {
-        access: "public",
-        contentType: "image/jpeg",
-        addRandomSuffix: true,
-        token: blobToken,
-      }),
-      put(`designs/${ts}-generated.png`, generatedBuf, {
-        access: "public",
-        contentType: "image/png",
-        addRandomSuffix: true,
-        token: blobToken,
-      }),
-    ]);
+    const [originalBlob, generatedBlob] = await timed(
+      "save-design.blob_upload",
+      () =>
+        Promise.all([
+          put(`designs/${ts}-original.jpg`, originalBuf, {
+            access: "public",
+            contentType: "image/jpeg",
+            addRandomSuffix: true,
+            token: blobToken,
+          }),
+          put(`designs/${ts}-generated.png`, generatedBuf, {
+            access: "public",
+            contentType: "image/png",
+            addRandomSuffix: true,
+            token: blobToken,
+          }),
+        ]),
+      { bytes: originalBuf.length + generatedBuf.length }
+    );
 
     // The emptied canvas, when the design was rendered on one. Non-fatal: a
     // failed upload just means restyle falls back to the original photo, which
@@ -82,10 +88,12 @@ export async function POST(request: Request) {
         .catch(() => null);
     }
 
-    const [originalBlur, generatedBlur] = await Promise.all([
-      makeBlurDataUrl(originalBuf).catch(() => null),
-      makeBlurDataUrl(generatedBuf).catch(() => null),
-    ]);
+    const [originalBlur, generatedBlur] = await timed("save-design.blur", () =>
+      Promise.all([
+        makeBlurDataUrl(originalBuf).catch(() => null),
+        makeBlurDataUrl(generatedBuf).catch(() => null),
+      ])
+    );
 
     // For locked designs, build + store a watermarked, downscaled preview. The
     // gated image route serves this to non-entitled viewers so the full-res
@@ -93,7 +101,9 @@ export async function POST(request: Request) {
     let previewImageUrl: string | null = null;
     if (!isUnlocked) {
       try {
-        const previewBuf = await makeWatermarkedPreview(generatedBuf);
+        const previewBuf = await timed("save-design.preview", () =>
+          makeWatermarkedPreview(generatedBuf)
+        );
         const previewBlob = await put(
           `designs/${ts}-preview.jpg`,
           previewBuf,
@@ -120,24 +130,26 @@ export async function POST(request: Request) {
       }
     }
 
-    const designId = await saveDesign({
-      mode: mode || "space",
-      eventConfig: eventConfig || makeoverConfig || null,
-      roomAnalysis: roomAnalysis || null,
-      products,
-      hotspots,
-      designNarrative: designNarrative || "",
-      originalImageUrl: originalBlob.url,
-      generatedImageUrl: generatedBlob.url,
-      previewImageUrl,
-      originalBlur,
-      generatedBlur,
-      userId,
-      isUnlocked,
-      selectedItems: selectedItems || null,
-      removedItems: removedItems || null,
-      clearedImageUrl: clearedUrl,
-    });
+    const designId = await timed("save-design.db_write", () =>
+      saveDesign({
+        mode: mode || "space",
+        eventConfig: eventConfig || makeoverConfig || null,
+        roomAnalysis: roomAnalysis || null,
+        products,
+        hotspots,
+        designNarrative: designNarrative || "",
+        originalImageUrl: originalBlob.url,
+        generatedImageUrl: generatedBlob.url,
+        previewImageUrl,
+        originalBlur,
+        generatedBlur,
+        userId,
+        isUnlocked,
+        selectedItems: selectedItems || null,
+        removedItems: removedItems || null,
+        clearedImageUrl: clearedUrl,
+      })
+    );
 
     // Designs unlocked at save time (free markets, or the free-first-design promo
     // in a paid market) skip the payment unlock endpoints, so run the shared

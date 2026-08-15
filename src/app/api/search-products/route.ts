@@ -4,6 +4,7 @@ import { sourceCategoryCandidates } from "@/lib/amazon";
 import { localeFromRequest } from "@/lib/locale";
 import type { ProductRecommendation } from "@/lib/types";
 import { notifyAdminError } from "@/lib/email";
+import { timed } from "@/lib/timing";
 
 export async function POST(request: Request) {
   try {
@@ -23,8 +24,13 @@ export async function POST(request: Request) {
     // Get top 5 candidates per category for AI curation. Retry/backoff and the
     // bare-category fallback both live in sourceCategoryCandidates so this path
     // and the restyle path in lib/regenerate.ts cannot drift apart.
-    const categories = await Promise.all(
-      products.map((rec) => sourceCategoryCandidates(rec, locale, 5))
+    const categories = await timed(
+      "search-products",
+      () =>
+        Promise.all(products.map((rec) => sourceCategoryCandidates(rec, locale, 5))),
+      // These run in parallel, so total ms is the slowest category, not the sum
+      // — a single retrying category sets the wall-clock for the whole step.
+      { categories: products.length }
     );
 
     // A partial outage used to be completely silent: the request returned 200

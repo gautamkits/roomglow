@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
+import { timed } from "@/lib/timing";
 import type { ProductResult, ProductMatchStatus } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -24,11 +25,8 @@ export async function POST(request: Request) {
     }
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
-    const curationJson = await curateProducts(
-      base64,
-      designVision,
-      categories,
-      budgetInstruction
+    const curationJson = await timed("curate-products", () =>
+      curateProducts(base64, designVision, categories, budgetInstruction)
     );
     const curation = JSON.parse(curationJson);
 

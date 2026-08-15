@@ -2,6 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import sharp from "sharp";
 import type { RoomAnalysis, RoomGeometry } from "./types";
 import type { Locale } from "./locale";
+import { timed } from "./timing";
 
 /**
  * How to name the user's Amazon marketplace inside a prompt. Every prompt that
@@ -922,7 +923,7 @@ CRITICAL TEXT RULE (about the products you ADD — it never overrides MUST PRESE
     };
   }
 
-  let attempt = await renderOnce();
+  let attempt = await timed("generate-image.render", renderOnce);
   // One automatic retry. The failure is usually transient, and otherwise the
   // user has to notice the error and press "Try again" themselves — on a paid
   // step, after waiting through the whole pipeline.
@@ -930,7 +931,7 @@ CRITICAL TEXT RULE (about the products you ADD — it never overrides MUST PRESE
     console.warn(
       `[generateDesignImage] no image (finishReason=${attempt.finishReason}) — retrying once. Model said: ${attempt.text.slice(0, 300)}`
     );
-    attempt = await renderOnce();
+    attempt = await timed("generate-image.render_retry", renderOnce);
   }
 
   const generatedImageBase64 = attempt.image;
@@ -947,8 +948,12 @@ CRITICAL TEXT RULE (about the products you ADD — it never overrides MUST PRESE
   }
 
   // Step 2 (optional): locate each product. Deferred for locked designs.
+  // Serial with the render, inside the same request — the user is watching
+  // "Rendering your space..." for the whole of this too.
   const hotspots = detect
-    ? await detectHotspots(generatedImageBase64, selectedProducts)
+    ? await timed("generate-image.hotspots", () =>
+        detectHotspots(generatedImageBase64, selectedProducts)
+      )
     : [];
 
   return { generatedImage: generatedImageBase64, hotspots };

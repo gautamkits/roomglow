@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { recommendProducts } from "@/lib/gemini";
 import { localeFromRequest } from "@/lib/locale";
 import { notifyAdminError } from "@/lib/email";
+import { timed } from "@/lib/timing";
 
 export async function POST(request: Request) {
   try {
@@ -25,14 +26,16 @@ export async function POST(request: Request) {
 
     // Same locale the downstream /api/search-products call uses, so the query
     // wording matches the marketplace it will actually be searched against.
-    const recommendationsJson = await recommendProducts(
-      roomAnalysis,
-      userAnswers,
-      selectedProductTypes || [],
-      eventContext,
-      Array.isArray(removeLabels) ? removeLabels : [],
-      localeFromRequest(request),
-      !!autoCleared
+    const recommendationsJson = await timed("recommend-products", () =>
+      recommendProducts(
+        roomAnalysis,
+        userAnswers,
+        selectedProductTypes || [],
+        eventContext,
+        Array.isArray(removeLabels) ? removeLabels : [],
+        localeFromRequest(request),
+        !!autoCleared
+      )
     );
     const recommendations = JSON.parse(recommendationsJson);
 

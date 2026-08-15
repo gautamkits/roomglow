@@ -80,6 +80,7 @@ export type FunnelEvent =
   | "signin_gate_returned"
   | "flow_step"
   | "pipeline_failed"
+  | "pipeline_timing"
   | "design_completed";
 
 // Events worth paying a server round-trip for.
@@ -89,6 +90,9 @@ const SERVER_EVENTS: ReadonlySet<FunnelEvent> = new Set([
   "signin_gate_returned",
   "design_completed",
   "pipeline_failed",
+  // The whole point is to measure the Instagram in-app-browser users, where
+  // PostHog is blocked — so this one has to take the server round-trip.
+  "pipeline_timing",
 ]);
 
 export function trackFunnel(

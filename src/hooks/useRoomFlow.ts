@@ -105,6 +105,13 @@ export function useRoomFlow() {
   // generation on resume or loop on failure.
   const autoProceedRef = useRef(false);
 
+  // Per-step wall-clock, as the user actually experiences it (includes upload of
+  // the photo and download of the render, which the server-side `step_ms` logs
+  // cannot see). Emitted once as `pipeline_timing` when a design completes.
+  // A ref, not state: analyze runs in a different callback from the pipeline,
+  // and nothing here should trigger a re-render.
+  const stepMsRef = useRef<Record<string, number>>({});
+
   // ─── Level-1 resume: restore an in-progress flow on this device ───
   // Gate persistence until the one-time rehydrate has run, so we never clobber a
   // saved snapshot with the initial empty state on mount.
@@ -335,11 +342,16 @@ export function useRoomFlow() {
       );
 
       try {
+        stepMsRef.current = {};
+        const analyzeT0 = performance.now();
         const res = await fetch("/api/analyze-room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: base64, eventContext }),
         });
+        stepMsRef.current["analyze_room"] = Math.round(
+          performance.now() - analyzeT0
+        );
         if (!res.ok) {
           const { error: msg } = await res.json().catch(() => ({ error: "" }));
           throw new Error(
@@ -456,6 +468,7 @@ export function useRoomFlow() {
     setStep("generating");
     setError(null);
     setCanRetry(false);
+    const pipelineT0 = performance.now();
 
     const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
     const isEvent = mode === "event";
@@ -463,16 +476,25 @@ export function useRoomFlow() {
     const subTheme = eventConfig?.subTheme || "";
 
     const callStep = async (url: string, body: unknown, failMsg: string) => {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const { error: msg } = await res.json().catch(() => ({ error: "" }));
-        throw new Error(msg || failMsg);
+      // Timed even when the step throws — a slow failure is exactly the case
+      // worth seeing in the data.
+      const t0 = performance.now();
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const { error: msg } = await res.json().catch(() => ({ error: "" }));
+          throw new Error(msg || failMsg);
+        }
+        return await res.json();
+      } finally {
+        const key = url.replace("/api/", "").replace(/-/g, "_");
+        stepMsRef.current[key] =
+          (stepMsRef.current[key] ?? 0) + Math.round(performance.now() - t0);
       }
-      return res.json();
     };
 
     const isMakeover = mode === "makeover";
@@ -510,6 +532,7 @@ export function useRoomFlow() {
           const orphanedLabels = objects
             .filter((o) => !removedLabels.includes(o.label) && o.restsOn && removedIds.has(o.restsOn))
             .map((o) => o.label);
+          const emptyT0 = performance.now();
           const emptyRes = await fetch("/api/empty-room", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -520,6 +543,11 @@ export function useRoomFlow() {
               orphanedLabels,
             }),
           });
+          // A whole extra image generation — the single biggest swing between a
+          // fast design and a slow one.
+          stepMsRef.current["empty_room"] = Math.round(
+            performance.now() - emptyT0
+          );
           if (emptyRes.ok) {
             const { emptiedImage } = await emptyRes.json();
             const cleared = emptiedImage?.startsWith("data:")
@@ -751,6 +779,15 @@ export function useRoomFlow() {
       }
 
       progressRef.current = {}; // success — clear the resume buffer
+      // How long the user actually waited, and where it went. `pipeline_ms` is
+      // from "generate" to "results"; `analyze_room` happened earlier, at
+      // upload, so total perceived wait = analyze_room + pipeline_ms.
+      trackFunnel("pipeline_timing", {
+        mode,
+        pipeline_ms: Math.round(performance.now() - pipelineT0),
+        retried: retryCount > 0,
+        ...stepMsRef.current,
+      });
       trackFunnel("design_completed", { mode, designId: p.designId ?? null });
       setStep("results");
     } catch (e) {
