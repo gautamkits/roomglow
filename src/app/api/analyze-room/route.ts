@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { analyzeRoom } from "@/lib/gemini";
+import { analyzeRoomParsed } from "@/lib/gemini";
 import { uploadRateLimit, clientIp } from "@/lib/rateLimit";
 import { isAdminEmail } from "@/lib/admin";
 import { notifyAdminError } from "@/lib/email";
@@ -38,8 +38,10 @@ export async function POST(request: Request) {
     }
 
     const base64 = image.replace(/^data:image\/\w+;base64,/, "");
-    const analysisJson = await analyzeRoom(base64, eventContext);
-    const analysis = JSON.parse(analysisJson);
+    // Retries on unparseable JSON — the model occasionally degenerates into an
+    // unterminated repeating string, which used to 500 the first step of the
+    // funnel. See analyzeRoomParsed.
+    const analysis = await analyzeRoomParsed(base64, eventContext);
 
     // Whether to clear the room before designing, decided server-side so a
     // client cannot force a billed extra image call (or suppress one).

@@ -164,7 +164,7 @@ Fill in:
 - colorPalette: 3 hex colors representing the room
 - suggestedProducts: 6-8 products
 - clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
-- removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, bed, dining/coffee table, chairs, shelving unit, rug, large floor lamp, large potted plant, cabinet/console, TV). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, cushions, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a lamp on a side table, a TV on a console). Return an empty array only if there are no large movable pieces.
+- removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, bed, dining/coffee table, chairs, shelving unit, rug, large floor lamp, large potted plant, cabinet/console, TV). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, cushions, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a lamp on a side table, a TV on a console) — it must be EXACTLY one of the ids you listed above, copied verbatim, and nothing else; omit it entirely when the object stands on the floor. Return an empty array only if there are no large movable pieces.
 
 CRITICAL RULES for suggestedProducts:
 - Suggest products that can REALISTICALLY be added to THIS room
@@ -219,7 +219,7 @@ Fill in:
 - removableObjects: everything the occupant could physically shift out of the way before the event — substantial furniture and large décor (sofa, table, chairs, shelving unit, rug, large lamp, large plant, cabinet/console), AND lighter movable things that crowd the space or sit on a wall (bean bag, floor cushions, ride-on toy, laundry basket, drying rack, framed picture, wall hanging, hanging plant, clock, mirror). EXCLUDE only permanent architecture (walls, floor, ceiling, windows, doors, built-ins) and loose tabletop clutter (remotes, bottles, cups, food, papers, chargers), which is tidied away automatically. Each entry has:
   - "id": short snake_case identifier
   - "label": human name
-  - "restsOn": the "id" of the object it sits on, if any (e.g. a centerpiece on a table), so clearing never leaves it floating
+  - "restsOn": the "id" of the object it sits on, if any (e.g. a centerpiece on a table), so clearing never leaves it floating. Copy one of the ids above verbatim, or omit the field — never invent a value.
   - "effort": how hard it is for ONE person to move it before a party —
     - "trivial": lift or unhook in seconds (bean bag, cushions, toys, baskets, framed picture, wall hanging, small plant, clock)
     - "moderate": one person can slide or carry it (armchair, side table, floor lamp, small rug, drying rack)
@@ -258,10 +258,66 @@ CRITICAL RULES for suggestedProducts:
     config: {
       responseMimeType: "application/json",
       responseSchema: roomAnalysisSchema,
+      // Bounds the degeneration below. A real analysis is 2-4 KB; the runaway
+      // ones reach 150 KB, which is unparseable, slow, and billed.
+      maxOutputTokens: 8192,
     },
   });
 
   return enforceVenueBranch(response.text ?? "");
+}
+
+/**
+ * `analyzeRoom`, but guaranteed to return parseable JSON or throw.
+ *
+ * The model intermittently degenerates into a repeating string and never
+ * closes it — observed in production as
+ * "Unterminated string in JSON at position 154588", and reproduced locally as
+ * a `restsOn` value repeating the same id fragment for ~150 KB. Every caller
+ * does `JSON.parse` on the result, so a single bad roll became a 500 on the
+ * first step of the funnel.
+ *
+ * Retried rather than repaired: the response is a truncated 150 KB string with
+ * no recoverable tail, and the failure is a fresh dice roll each time — the
+ * same photo and prompt parse fine on the next attempt. This mirrors the
+ * existing retry in generateDesignImage for the model answering with text and
+ * no image. Cost is negligible: gemini-2.5-flash text, ~Rs 1-2 a call.
+ */
+export async function analyzeRoomParsed(
+  imageBase64: string,
+  eventContext?: string,
+  attempts = 3
+): Promise<Record<string, unknown>> {
+  return parseJsonWithRetry(
+    () => analyzeRoom(imageBase64, eventContext),
+    attempts,
+    "analyzeRoom"
+  );
+}
+
+/** Split out from analyzeRoomParsed so the retry itself can be tested without
+ *  spending a model call — ESM exports can't be stubbed. */
+export async function parseJsonWithRetry<T = Record<string, unknown>>(
+  produce: () => Promise<string>,
+  attempts = 3,
+  label = "model"
+): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 1; i <= attempts; i++) {
+    const raw = await produce();
+    try {
+      return JSON.parse(raw) as T;
+    } catch (err) {
+      lastErr = err;
+      console.error(
+        `[${label}] unparseable JSON on attempt ${i}/${attempts} (${raw.length} chars):`,
+        (err as Error).message
+      );
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`${label} returned unparseable JSON`);
 }
 
 /**
