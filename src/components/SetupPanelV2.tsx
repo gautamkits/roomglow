@@ -28,7 +28,13 @@ import {
   ChevronDown,
   Calendar,
 } from "lucide-react";
-import { getEvent, getEvents, getUpcomingSeasonalEvents } from "@/lib/events";
+import {
+  getEvent,
+  getEvents,
+  getUpcomingSeasonalEvents,
+  getCelebrationForOptions,
+  isChildCentricAudience,
+} from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
 import { useLocale } from "@/lib/useLocale";
@@ -110,6 +116,7 @@ export default function SetupPanelV2({
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
+  const [celebrationFor, setCelebrationFor] = useState<string | null>(null);
 
   const [makeoverStyleId, setMakeoverStyleId] = useState<string | null>(null);
   const [makeoverGender, setMakeoverGender] = useState<string | null>(null);
@@ -138,6 +145,13 @@ export default function SetupPanelV2({
   }, []);
 
   const event = eventId ? getEvent(eventId) : undefined;
+
+  const celebrationForOptions = getCelebrationForOptions(event?.id);
+  // Hide the boy/girl palette picker once an adult relationship is chosen —
+  // "the celebration is for a boy" beside "it is for a parent or elder" would
+  // be two contradictory sentences in one brief.
+  const showGender =
+    !!event?.gendered && isChildCentricAudience(celebrationFor ?? undefined);
 
   // The occasion list is ~13 chips in one wrapped block in v1. Lead with what's
   // seasonally imminent, then evergreen, and hide the tail behind an expander.
@@ -187,7 +201,14 @@ export default function SetupPanelV2({
           ? honoree.trim()
           : undefined,
       eventDate: !event.season && eventDate ? eventDate : undefined,
-      gender: event.gendered && gender ? gender : undefined,
+      gender: showGender && gender ? gender : undefined,
+      // Guard on the options list, not just the state: switching from birthday
+      // to Diwali must not carry "my_child" into an event that never asked.
+      celebrationFor:
+        celebrationFor &&
+        celebrationForOptions.some((o) => o.id === celebrationFor)
+          ? celebrationFor
+          : undefined,
     };
   }
 
@@ -410,7 +431,28 @@ export default function SetupPanelV2({
                 </button>
                 {showExtras && (
                   <div className="space-y-4 animate-fade-up">
-                    {event.gendered && (
+                    {celebrationForOptions.length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">
+                          Who are you celebrating?
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {celebrationForOptions.map((o) => (
+                            <Chip
+                              key={o.id}
+                              label={`${o.icon} ${o.label}`}
+                              selected={celebrationFor === o.id}
+                              onClick={() =>
+                                setCelebrationFor(
+                                  celebrationFor === o.id ? null : o.id
+                                )
+                              }
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {showGender && (
                       <div>
                         <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">For a</p>
                         <div className="flex flex-wrap gap-2">
@@ -427,7 +469,7 @@ export default function SetupPanelV2({
                     )}
                     {(!event.season || event.askHonoree) && (
                       <Field
-                        label="Who's it for?"
+                        label="Their name"
                         value={honoree}
                         onChange={(e) => setHonoree(e.target.value)}
                         placeholder="Name (optional)"
