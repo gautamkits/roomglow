@@ -157,6 +157,26 @@ export function isChildCentricAudience(celebrationFor?: string): boolean {
   return !!CELEBRATION_FOR[celebrationFor]?.childCentric;
 }
 
+/**
+ * Theme + colour options for an event, narrowed by who it's for.
+ *
+ * Unanswered falls back to the event's default lists, so every event without an
+ * adult set — and every user who never opens the picker — behaves exactly as
+ * before.
+ */
+export function getThemeOptions(
+  eventId: string | undefined,
+  celebrationFor?: string
+): { subThemes: string[]; colorSchemes: string[] } {
+  const def = eventId ? EVENTS.find((e) => e.id === eventId) : undefined;
+  if (!def) return { subThemes: [], colorSchemes: [] };
+  const adult = !!celebrationFor && !isChildCentricAudience(celebrationFor);
+  return {
+    subThemes: (adult && def.adultSubThemes) || def.subThemes,
+    colorSchemes: (adult && def.adultColorSchemes) || def.colorSchemes,
+  };
+}
+
 export interface EventDefinition {
   id: string;
   label: string;
@@ -189,6 +209,13 @@ export interface EventDefinition {
   // display order. Absent = don't ask. This is the answer that changes what the
   // décor looks like; `honoree` only supplies the name to print on it.
   celebrationFor?: string[];
+  // Theme/colour sets shown when the celebration is for an adult. Birthday's
+  // default list is four children's themes out of six, so a father's 60th was
+  // being offered Unicorn and Superhero and defaulted to Jungle — the UI was
+  // arguing with the "no cartoon characters" directive in the same brief.
+  // Absent = the one list serves every audience (anniversary, Valentine's).
+  adultSubThemes?: string[];
+  adultColorSchemes?: string[];
   // National-day events where a bare flagpole in the photo should be flown, not
   // just preserved. The generic décor rules only ever say "reproduce what is
   // already there unchanged", so an empty pole stays empty — correct for every
@@ -211,6 +238,8 @@ export const EVENTS: EventDefinition[] = [
     icon: "🎂",
     subThemes: ["Jungle", "Unicorn", "Superhero", "Cars", "Minimal", "Floral"],
     colorSchemes: ["Pastel", "Bright & bold", "Gold & white", "Rainbow"],
+    adultSubThemes: ["Elegant", "Milestone", "Garden", "Retro", "Minimal", "Floral"],
+    adultColorSchemes: ["Gold & white", "Black & gold", "Rose & white", "Blush"],
     markets: ["IN", "US"],
     gendered: true,
     celebrationFor: [

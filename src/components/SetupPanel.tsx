@@ -7,6 +7,7 @@ import {
   getEvents,
   getCelebrationForOptions,
   isChildCentricAudience,
+  getThemeOptions,
 } from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
@@ -87,6 +88,7 @@ export default function SetupPanel({
   const makeoverReady = mode !== "makeover" || !!makeoverStyleId;
   const eventReady = eventConfigReady && makeoverReady;
   const celebrationForOptions = getCelebrationForOptions(event?.id);
+  const themeOptions = getThemeOptions(event?.id, celebrationFor ?? undefined);
   // Gender picker only for child-centric events (birthday, baby shower, …) —
   // and only while the answer is still a child. "Celebrating for a boy" beside
   // "it is for a parent or elder" are two contradictory sentences in one brief.
@@ -98,6 +100,18 @@ export default function SetupPanel({
   // relationship festivals (Raksha Bandhan, Valentine's) via askHonoree.
   const showDate = !!event && !event.season;
   const showHonoree = !!event && (!event.season || !!event.askHonoree);
+
+  // Switching audience swaps the theme list, so drop a selection that is no
+  // longer on offer rather than silently sending "Jungle" to a parent's 60th.
+  const pickCelebrationFor = (id: string) => {
+    const next = celebrationFor === id ? null : id;
+    setCelebrationFor(next);
+    const opts = getThemeOptions(event?.id, next ?? undefined);
+    if (subTheme && !opts.subThemes.includes(subTheme)) setSubTheme(null);
+    if (colorScheme && !opts.colorSchemes.includes(colorScheme)) {
+      setColorScheme(null);
+    }
+  };
 
   const buildConfig = (): EventConfig | null => {
     if (mode !== "event" || !event || !subTheme || !colorScheme) return null;
@@ -205,7 +219,7 @@ export default function SetupPanel({
                   Theme
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {event.subThemes.map((t) => (
+                  {themeOptions.subThemes.map((t) => (
                     <Chip
                       key={t}
                       label={t}
@@ -220,7 +234,7 @@ export default function SetupPanel({
                   Colors
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {event.colorSchemes.map((c) => (
+                  {themeOptions.colorSchemes.map((c) => (
                     <Chip
                       key={c}
                       label={c}
@@ -241,11 +255,7 @@ export default function SetupPanel({
                         key={o.id}
                         label={`${o.icon} ${o.label}`}
                         selected={celebrationFor === o.id}
-                        onClick={() =>
-                          setCelebrationFor(
-                            celebrationFor === o.id ? null : o.id
-                          )
-                        }
+                        onClick={() => pickCelebrationFor(o.id)}
                       />
                     ))}
                   </div>

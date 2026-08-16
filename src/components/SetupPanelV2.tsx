@@ -34,6 +34,7 @@ import {
   getUpcomingSeasonalEvents,
   getCelebrationForOptions,
   isChildCentricAudience,
+  getThemeOptions,
 } from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
@@ -147,6 +148,7 @@ export default function SetupPanelV2({
   const event = eventId ? getEvent(eventId) : undefined;
 
   const celebrationForOptions = getCelebrationForOptions(event?.id);
+  const themeOptions = getThemeOptions(event?.id, celebrationFor ?? undefined);
   // Hide the boy/girl palette picker once an adult relationship is chosen —
   // "the celebration is for a boy" beside "it is for a parent or elder" would
   // be two contradictory sentences in one brief.
@@ -176,6 +178,7 @@ export default function SetupPanelV2({
     setSubTheme(def?.subThemes[0] ?? null);
     setColorScheme(def?.colorSchemes[0] ?? null);
     setGender(null);
+    setCelebrationFor(null);
     setHonoree("");
     setEventDate("");
     trackFunnel("occasion_selected", { event: id });
@@ -187,6 +190,24 @@ export default function SetupPanelV2({
     trackFunnel("photo_selected", { mode });
     if (mode === "event") setStep("occasion");
     else setStep("details");
+  }
+
+  /**
+   * Switching audience swaps the theme list, so a selection that no longer
+   * exists has to be repaired — otherwise picking "My parent" leaves you on
+   * "Jungle", which is absent from the adult chips and so looks like nothing is
+   * selected while still being what gets sent to the AI.
+   */
+  function pickCelebrationFor(id: string) {
+    const next = celebrationFor === id ? null : id;
+    setCelebrationFor(next);
+    const opts = getThemeOptions(event?.id, next ?? undefined);
+    if (!subTheme || !opts.subThemes.includes(subTheme)) {
+      setSubTheme(opts.subThemes[0] ?? null);
+    }
+    if (!colorScheme || !opts.colorSchemes.includes(colorScheme)) {
+      setColorScheme(opts.colorSchemes[0] ?? null);
+    }
   }
 
   function buildEventConfig(): EventConfig | null {
@@ -400,10 +421,29 @@ export default function SetupPanelV2({
                     We&apos;ve picked a popular combination. Change anything you like.
                   </p>
                 </div>
+                {/* Above Theme, because it decides WHICH themes are on offer —
+                    a father's 60th must not be shown Unicorn and Superhero. */}
+                {celebrationForOptions.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">
+                      Who are you celebrating?
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {celebrationForOptions.map((o) => (
+                        <Chip
+                          key={o.id}
+                          label={`${o.icon} ${o.label}`}
+                          selected={celebrationFor === o.id}
+                          onClick={() => pickCelebrationFor(o.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Theme</p>
                   <div className="flex flex-wrap gap-2">
-                    {event.subThemes.map((t) => (
+                    {themeOptions.subThemes.map((t) => (
                       <Chip key={t} label={t} selected={subTheme === t} onClick={() => setSubTheme(t)} />
                     ))}
                   </div>
@@ -411,7 +451,7 @@ export default function SetupPanelV2({
                 <div>
                   <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Colours</p>
                   <div className="flex flex-wrap gap-2">
-                    {event.colorSchemes.map((c) => (
+                    {themeOptions.colorSchemes.map((c) => (
                       <Chip key={c} label={c} selected={colorScheme === c} onClick={() => setColorScheme(c)} />
                     ))}
                   </div>
@@ -431,27 +471,6 @@ export default function SetupPanelV2({
                 </button>
                 {showExtras && (
                   <div className="space-y-4 animate-fade-up">
-                    {celebrationForOptions.length > 0 && (
-                      <div>
-                        <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">
-                          Who are you celebrating?
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {celebrationForOptions.map((o) => (
-                            <Chip
-                              key={o.id}
-                              label={`${o.icon} ${o.label}`}
-                              selected={celebrationFor === o.id}
-                              onClick={() =>
-                                setCelebrationFor(
-                                  celebrationFor === o.id ? null : o.id
-                                )
-                              }
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
                     {showGender && (
                       <div>
                         <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">For a</p>
