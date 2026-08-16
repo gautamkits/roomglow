@@ -6,6 +6,7 @@ import type { Hotspot, ProductResult } from "@/lib/types";
 import ProductCard from "./ProductCard";
 import NoMatchFallback, { matchStatusOf } from "./NoMatchFallback";
 import { outboundHref } from "@/lib/outbound";
+import { parsePrice, currencyOf, formatTotal } from "@/lib/price";
 
 interface ImageWithHotspotsProps {
   imageSrc: string;
@@ -13,27 +14,6 @@ interface ImageWithHotspotsProps {
   products: ProductResult[];
   hidePrices?: boolean;
 }
-
-function parsePrice(s?: string): number {
-  if (!s) return 0;
-  const v = parseFloat(s.replace(/[^0-9.]/g, ""));
-  return isNaN(v) ? 0 : v;
-}
-
-// Pull the currency symbol straight from an Amazon price string ("$329.99",
-// "₹2,999") so the total always matches the marketplace the products came from.
-function currencyOf(prices: (string | undefined)[]): string {
-  for (const p of prices) {
-    const m = p?.match(/[^\d.,\s]+/);
-    if (m) return m[0];
-  }
-  return "₹";
-}
-
-const formatTotal = (n: number, symbol: string) =>
-  symbol + n.toLocaleString(symbol === "$" ? "en-US" : "en-IN", {
-    maximumFractionDigits: symbol === "$" ? 2 : 0,
-  });
 
 export default function ImageWithHotspots({
   imageSrc,

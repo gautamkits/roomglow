@@ -10,6 +10,8 @@ import {
   type RevealProduct,
 } from "@/lib/revealVideo";
 import { generateSimpleRevealVideo } from "@/lib/simpleRevealVideo";
+import { designTotal } from "@/lib/price";
+import type { ProductResult } from "@/lib/types";
 
 type RevealVariant = "full" | "simple";
 
@@ -87,6 +89,18 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [variant, setVariant] = useState<RevealVariant>("full");
   const [outro, setOutro] = useState(true);
   const allProducts = buyableProducts(design);
+  // Deliberately NOT from `allProducts` — that list is filtered to products with
+  // an image AND price and then sliced to 2 for the shop cards, so totalling it
+  // would quote roughly a third of a six-item design's real basket.
+  const basket = designTotal(
+    parseJsonish<ProductResult>(design.products)
+  );
+  const [priceLine, setPriceLine] = useState(
+    basket
+      ? `Buy everything ${basket.partial ? "from " : "for "}${basket.formatted}`
+      : ""
+  );
+  const [ctaLine, setCtaLine] = useState("Comment HI for the shopping list");
   // Default to 2 shop cards (clamped to what's available) for a fuller "shop" scene.
   const [cardCount, setCardCount] = useState(Math.min(2, allProducts.length));
 
@@ -98,7 +112,11 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     .slice(0, 4)
     .map((t) => "#" + t.toLowerCase().replace(/[^a-z0-9]+/g, ""))
     .filter((t) => t.length > 1);
-  const caption = `${title}\n\n${description}\n\n✨ See it & shop the look: ${link}\n\n${[
+  // The video says "comment HI"; Instagram DM automation fires on the comment,
+  // but the caption is where viewers are actually told to leave one — so both
+  // surfaces have to carry the same ask or the video's CTA goes unexplained.
+  const captionCta = ctaLine.trim() ? `\n\n${ctaLine.trim()}` : "";
+  const caption = `${title}\n\n${description}${captionCta}\n\n✨ See it & shop the look: ${link}\n\n${[
     "#noosho",
     "#interiordesign",
     "#homedecor",
@@ -117,7 +135,12 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       if (variant === "simple") {
         // Original before→after wipe — no products / hotspots needed.
         blob = await generateSimpleRevealVideo(
-          { beforeUrl, afterUrl, outro },
+          {
+            beforeUrl,
+            afterUrl,
+            outro,
+            offer: { priceLine, ctaLine },
+          },
           (f) => setPct(Math.round(f * 100))
         );
       } else {
@@ -226,6 +249,40 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+          {/* Engagement caption burned into the before/after export. Editable so
+              the offer wording can be tuned per post without a deploy. */}
+          {variant === "simple" && (
+            <div className="mb-2 space-y-1.5">
+              <span className="text-[11px] text-zinc-400">On-video caption</span>
+              <input
+                type="text"
+                value={priceLine}
+                onChange={(e) => setPriceLine(e.target.value)}
+                disabled={busy}
+                placeholder={
+                  basket ? "Price line" : "No product prices on this design"
+                }
+                className="w-full px-2.5 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors disabled:opacity-60"
+              />
+              <input
+                type="text"
+                value={ctaLine}
+                onChange={(e) => setCtaLine(e.target.value)}
+                disabled={busy}
+                placeholder="Comment prompt"
+                className="w-full px-2.5 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 outline-none focus:border-orange-700 transition-colors disabled:opacity-60"
+              />
+              {basket?.partial && (
+                <p className="text-[10px] text-amber-600 dark:text-amber-500">
+                  {basket.priced} of{" "}
+                  {parseJsonish<ProductResult>(design.products).filter(
+                    (p) => p.amazonProduct
+                  ).length}{" "}
+                  products have a price — total is a floor, hence &quot;from&quot;.
+                </p>
+              )}
             </div>
           )}
           {/* Pre-rendered brand outro clip (carries its own CTA), appended last. */}

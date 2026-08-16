@@ -13,8 +13,13 @@ const FPS = 30;
 
 const HOLD_BEFORE = 24; // ~0.8s
 const WIPE = 90; // ~3.0s
-const HOLD_AFTER = 42; // ~1.4s
+// Was 42 (~1.4s), which is long enough to admire the result but not to READ a
+// price and a call to action. The offer caption lands in this beat, so the hold
+// has to cover a fade-in plus dwell time on two lines.
+const HOLD_AFTER = 96; // ~3.2s
 const TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
+/** Fade the offer caption in over this many frames once the wipe finishes. */
+const OFFER_FADE = 12; // ~0.4s
 
 export const SIMPLE_REVEAL_DURATION = TOTAL / FPS;
 
@@ -103,6 +108,95 @@ function drawWatermark(ctx: CanvasRenderingContext2D) {
   ctx.restore();
 }
 
+export interface OfferCaption {
+  priceLine?: string;
+  ctaLine?: string;
+}
+
+/**
+ * Largest font size (down to `min`) at which `text` fits `maxW`.
+ *
+ * Canvas `fillText`'s own maxWidth argument condenses the glyphs instead of
+ * wrapping or shrinking, so an Indian lakh-scale total — "Buy everything from
+ * ₹1,24,999" measures 962px against a 960px limit at 62px — renders visibly
+ * squashed. Stepping the size down keeps the letterforms honest.
+ */
+function fitSize(
+  ctx: CanvasRenderingContext2D,
+  text: string | undefined,
+  weight: number,
+  start: number,
+  min: number,
+  maxW: number
+): number {
+  if (!text) return start;
+  let size = start;
+  while (size > min) {
+    ctx.font = `${weight} ${size}px Sora, system-ui, sans-serif`;
+    if (ctx.measureText(text).width <= maxW) break;
+    size -= 2;
+  }
+  return size;
+}
+
+/**
+ * The engagement caption: basket price above, comment prompt below, sitting
+ * just over the watermark.
+ *
+ * Drawn on its own scrim rather than straight onto the frame. A landscape photo
+ * leaves wide letterbox bands where bare text would read fine, but a portrait
+ * one fills almost the whole 9:16 frame and the text would land on the design
+ * itself — unreadable over a busy backdrop, and it would cover the very thing
+ * the video is selling.
+ */
+function drawOffer(
+  ctx: CanvasRenderingContext2D,
+  offer: OfferCaption,
+  alpha: number
+) {
+  const price = offer.priceLine?.trim();
+  const cta = offer.ctaLine?.trim();
+  if (alpha <= 0 || (!price && !cta)) return;
+
+  const MAX_W = W - 120;
+  const priceSize = fitSize(ctx, price, 700, 62, 40, MAX_W);
+  const ctaSize = fitSize(ctx, cta, 600, 38, 26, MAX_W);
+  const gap = price && cta ? 22 : 0;
+  const blockH = (price ? priceSize : 0) + gap + (cta ? ctaSize : 0);
+
+  // Sit above the watermark (centred on H-130, 94 tall) with breathing room.
+  const bottom = H - 130 - 47 - 34;
+  const top = bottom - blockH - 56;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Gradient scrim, transparent at the top so it never reads as a hard band.
+  const g = ctx.createLinearGradient(0, top - 90, 0, bottom + 56);
+  g.addColorStop(0, "rgba(23,19,16,0)");
+  g.addColorStop(0.45, "rgba(23,19,16,0.82)");
+  g.addColorStop(1, "rgba(23,19,16,0.92)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, top - 90, W, bottom + 56 - (top - 90));
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  let y = top + 28;
+
+  if (price) {
+    ctx.font = `700 ${priceSize}px Sora, system-ui, sans-serif`;
+    ctx.fillStyle = "#faf6f0";
+    ctx.fillText(price, W / 2, y, W - 120);
+    y += priceSize + gap;
+  }
+  if (cta) {
+    ctx.font = `600 ${ctaSize}px Sora, system-ui, sans-serif`;
+    ctx.fillStyle = "#e8b9a2"; // light clay — reads as the actionable line
+    ctx.fillText(cta, W / 2, y, W - 120);
+  }
+  ctx.restore();
+}
+
 /** Composite one before→after wipe frame. `revealX` = fraction [0..1] of the
  *  rect still showing "before" from the left. Exposed for visual verification. */
 export function renderSimpleRevealFrame(
@@ -110,7 +204,9 @@ export function renderSimpleRevealFrame(
   before: HTMLImageElement,
   after: HTMLImageElement,
   rect: Rect,
-  revealX: number
+  revealX: number,
+  offer?: OfferCaption,
+  offerAlpha = 0
 ) {
   // 1. Solid neutral backdrop — never the design, so the letterbox bands above
   //    and below the photo stay clean and never expose the final design.
@@ -160,13 +256,16 @@ export function renderSimpleRevealFrame(
   }
   drawPill(ctx, "After", rect.x + rect.w - 60, pillY, "#a04525", "#ffffff");
 
-  // 6. Brand watermark.
+  // 6. Offer caption — before the watermark so the scrim can't cover it.
+  if (offer) drawOffer(ctx, offer, offerAlpha);
+
+  // 7. Brand watermark.
   drawWatermark(ctx);
 }
 
 /** Render the original before→after wipe as a 9:16 H.264 MP4, entirely in-browser. */
 export async function generateSimpleRevealVideo(
-  { beforeUrl, afterUrl, outro = true }: RevealVideoInput,
+  { beforeUrl, afterUrl, outro = true, offer }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
@@ -227,7 +326,13 @@ export async function generateSimpleRevealVideo(
       revealX = 0;
     }
 
-    renderSimpleRevealFrame(ctx, before, after, rect, revealX);
+    // Fade the caption in only once the design is fully revealed, so it never
+    // sits over the "before" photo or competes with the wipe.
+    const wipeEnd = HOLD_BEFORE + WIPE;
+    const offerAlpha =
+      i < wipeEnd ? 0 : smoothstep((i - wipeEnd) / OFFER_FADE);
+
+    renderSimpleRevealFrame(ctx, before, after, rect, revealX, offer, offerAlpha);
 
     const frame = new VideoFrame(canvas, {
       timestamp: Math.round(i * frameDur),

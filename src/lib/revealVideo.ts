@@ -668,6 +668,14 @@ export interface RevealVideoInput {
   products?: RevealProduct[];
   /** Append the pre-rendered brand outro clip (with its CTA). Default true. */
   outro?: boolean;
+  /**
+   * Engagement caption burned into the last beat of the before/after export:
+   * the basket price and a "comment to get the list" prompt, which is what
+   * actually drives Reels comments. Consumed by simpleRevealVideo only — the
+   * branded reveal already ends on its own CTA scene. Either line may be
+   * omitted (a design with no priceable product has no price line).
+   */
+  offer?: { priceLine?: string; ctaLine?: string };
 }
 
 /** Render the branded reveal commercial (1080×1920 H.264 MP4), in-browser. */
