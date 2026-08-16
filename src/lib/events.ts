@@ -32,7 +32,129 @@ export function buildEventContext(cfg: EventConfig | null): string | undefined {
     cfg.gender && cfg.gender !== "Either / neutral"
       ? ` The celebration is for a ${cfg.gender.toLowerCase()}, so lean the palette and themed props accordingly (e.g. blue tones for a boy, pink tones for a girl) while still honoring the chosen "${cfg.colorScheme}" colors.`
       : "";
-  return `This space will host a ${label} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${honoree} All signage and décor must match a ${label} — never a different occasion, and never another country's version of the same-named holiday.${flag}`;
+  // Who it's for changes what the décor should LOOK like, not just who receives
+  // it — a parent's 60th and a child's 5th are the same event id but must not
+  // render the same props. Only reachable from the event branch (space returns
+  // above), so this cannot alter room redesigns.
+  const audience = cfg.celebrationFor
+    ? ` ${CELEBRATION_FOR[cfg.celebrationFor]?.directive ?? ""}`.trimEnd()
+    : "";
+  return `This space will host a ${label} with a "${cfg.subTheme}" theme using a ${cfg.colorScheme} color scheme.${gender}${audience}${honoree} All signage and décor must match a ${label} — never a different occasion, and never another country's version of the same-named holiday.${flag}`;
+}
+
+export interface CelebrationForOption {
+  id: string;
+  label: string;
+  icon: string;
+  /**
+   * Appended to the event brief, so it reaches analyze, recommend AND render.
+   * Written as décor direction rather than gift direction — noosho decorates a
+   * venue, it does not pick a present for the honoree.
+   */
+  directive: string;
+  /**
+   * Whether the boy/girl palette picker still makes sense. A father's birthday
+   * with "The celebration is for a boy" appended is nonsense, and worse, two
+   * contradictory sentences in one brief.
+   */
+  childCentric?: boolean;
+}
+
+/**
+ * Relationship options, shared across events so "My spouse" reads identically
+ * on a birthday and an anniversary. Events opt in via `celebrationFor` and pick
+ * their own subset + order.
+ */
+export const CELEBRATION_FOR: Record<string, CelebrationForOption> = {
+  myself: {
+    id: "myself",
+    label: "Myself",
+    icon: "🤗",
+    directive:
+      "The host is celebrating their own occasion, so the space should feel welcoming to guests rather than built around surprising one person.",
+  },
+  my_child: {
+    id: "my_child",
+    label: "My child",
+    icon: "🧒",
+    childCentric: true,
+    directive:
+      "It is a young child's celebration: playful and colourful, with décor placed low enough for a small child to stand among it — balloon arches, character cutouts, floor props and a photo spot at child height.",
+  },
+  my_parent: {
+    id: "my_parent",
+    label: "My parent",
+    icon: "👴",
+    directive:
+      "It is for a parent or elder, so keep the décor grown-up and dignified — fresh florals, fabric drapes, elegant lettering and warm lighting. No cartoon characters, no novelty kiddie props, no character cutouts.",
+  },
+  my_spouse: {
+    id: "my_spouse",
+    label: "My spouse",
+    icon: "💑",
+    directive:
+      "It is for the host's spouse or partner, so stage it as an intimate setting for two — candlelight, florals and a soft focal seating or dining spot — not a crowd-facing party set.",
+  },
+  a_friend: {
+    id: "a_friend",
+    label: "A friend",
+    icon: "🤝",
+    directive:
+      "It is for a friend, so keep the styling social and relaxed — a photo-worthy focal wall and comfortable standing room for a group.",
+  },
+  a_colleague: {
+    id: "a_colleague",
+    label: "A colleague",
+    icon: "👔",
+    directive:
+      "It is a workplace celebration, so keep the décor tasteful and office-appropriate — restrained colours, tidy lettering, nothing childish or overly personal.",
+  },
+  my_parents: {
+    id: "my_parents",
+    label: "My parents",
+    icon: "👵",
+    directive:
+      "It is for the host's parents as a couple, so lean classic and celebratory of a long marriage — florals, drapes, warm metallics and a milestone-number focal piece rather than youthful party props.",
+  },
+  the_couple: {
+    id: "the_couple",
+    label: "The couple",
+    icon: "💕",
+    directive:
+      "It is for a couple, so give the setting a shared focal point — a two-seat or centre-stage arrangement framed by the décor.",
+  },
+  the_baby: {
+    id: "the_baby",
+    label: "The baby",
+    icon: "👶",
+    childCentric: true,
+    directive:
+      "It centres on a new baby, so keep the palette soft and the props gentle — pastel balloons, cloud and star motifs, plush textures, nothing sharp or garish.",
+  },
+  family: {
+    id: "family",
+    label: "My family",
+    icon: "👨‍👩‍👧‍👦",
+    directive:
+      "It is a whole-family occasion, so the décor should suit mixed ages together — a generous shared focal area rather than styling aimed at any one person.",
+  },
+};
+
+/** Relationship options offered for an event, in display order. */
+export function getCelebrationForOptions(
+  eventId: string | undefined
+): CelebrationForOption[] {
+  if (!eventId) return [];
+  const def = EVENTS.find((e) => e.id === eventId);
+  return (def?.celebrationFor ?? [])
+    .map((id) => CELEBRATION_FOR[id])
+    .filter((o): o is CelebrationForOption => !!o);
+}
+
+/** Whether a chosen relationship still warrants the boy/girl palette picker. */
+export function isChildCentricAudience(celebrationFor?: string): boolean {
+  if (!celebrationFor) return true;
+  return !!CELEBRATION_FOR[celebrationFor]?.childCentric;
 }
 
 export interface EventDefinition {
@@ -63,6 +185,10 @@ export interface EventDefinition {
   // are centered on a person, so they still ask "who's it for?" — but not a date
   // (that's set by the calendar). Personal events imply this via `!season`.
   askHonoree?: boolean;
+  // Relationship options for "who's it for?" (ids into CELEBRATION_FOR), in
+  // display order. Absent = don't ask. This is the answer that changes what the
+  // décor looks like; `honoree` only supplies the name to print on it.
+  celebrationFor?: string[];
   // National-day events where a bare flagpole in the photo should be flown, not
   // just preserved. The generic décor rules only ever say "reproduce what is
   // already there unchanged", so an empty pole stays empty — correct for every
@@ -87,6 +213,14 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Pastel", "Bright & bold", "Gold & white", "Rainbow"],
     markets: ["IN", "US"],
     gendered: true,
+    celebrationFor: [
+      "my_child",
+      "myself",
+      "my_spouse",
+      "my_parent",
+      "a_friend",
+      "a_colleague",
+    ],
     completionItems: [
       { category: "Backdrop", query: "birthday decoration backdrop" },
       { category: "Gift", query: "birthday gift" },
@@ -104,6 +238,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Romantic red", "Golden 25th", "Garden", "Minimal"],
     colorSchemes: ["Red & gold", "Rose & white", "Burgundy", "Gold & white"],
     markets: ["IN", "US"],
+    celebrationFor: ["my_spouse", "my_parents", "the_couple", "a_friend"],
     completionItems: [
       { category: "Backdrop", query: "anniversary decoration backdrop" },
       { category: "Gift", query: "anniversary gift" },
@@ -122,6 +257,7 @@ export const EVENTS: EventDefinition[] = [
     colorSchemes: ["Blue & white", "Pink & white", "Sage & cream", "Pastel mix"],
     markets: ["IN", "US"],
     gendered: true,
+    celebrationFor: ["myself", "the_baby", "a_friend", "family"],
     completionItems: [
       { category: "Backdrop", query: "baby shower backdrop" },
       { category: "Baby gift", query: "baby gift set" },
@@ -348,6 +484,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Traditional", "Floral", "Modern minimal", "Festive"],
     colorSchemes: ["Marigold & red", "Pastel", "Gold & white", "Green & yellow"],
     markets: ["IN", "US"],
+    celebrationFor: ["myself", "family", "a_friend"],
     completionItems: [
       { category: "Backdrop", query: "housewarming backdrop decoration" },
       { category: "Gift", query: "housewarming gift" },
@@ -454,6 +591,8 @@ export const EVENTS: EventDefinition[] = [
     markets: ["IN", "US"],
     season: { month: 2, day: 14 },
     askHonoree: true, // Valentine's is for a partner
+    // "Galentine's" is one of the subThemes, so a friend is a real answer here.
+    celebrationFor: ["my_spouse", "the_couple", "a_friend"],
     completionItems: [
       { category: "Backdrop", query: "valentine decoration backdrop" },
       { category: "Gift", query: "valentine gift" },
@@ -492,6 +631,7 @@ export const EVENTS: EventDefinition[] = [
     // regalia, so keep both and let the user pick.
     colorSchemes: ["Black & gold", "School colors", "Navy & silver", "Pastel"],
     markets: ["IN", "US"],
+    celebrationFor: ["myself", "my_child", "a_friend", "family"],
     completionItems: [
       { category: "Backdrop", query: "graduation party backdrop" },
       { category: "Gift", query: "graduation gift" },

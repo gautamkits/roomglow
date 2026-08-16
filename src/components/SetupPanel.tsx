@@ -2,7 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Sofa, PartyPopper, Calendar, Sparkles, Camera, Check } from "lucide-react";
-import { getEvent, getEvents } from "@/lib/events";
+import {
+  getEvent,
+  getEvents,
+  getCelebrationForOptions,
+  isChildCentricAudience,
+} from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
 import { useLocale } from "@/lib/useLocale";
@@ -58,6 +63,7 @@ export default function SetupPanel({
   const [honoree, setHonoree] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [gender, setGender] = useState<string | null>(null);
+  const [celebrationFor, setCelebrationFor] = useState<string | null>(null);
   const [maxBudget, setMaxBudget] = useState(budgetMin * 5);
   // Budget defaults to "auto": the pipeline derives a sensible budget from the
   // real Amazon prices (see smartBudgetInstruction) so users never under-set it
@@ -80,8 +86,12 @@ export default function SetupPanel({
     mode !== "event" || (!!event && !!subTheme && !!colorScheme);
   const makeoverReady = mode !== "makeover" || !!makeoverStyleId;
   const eventReady = eventConfigReady && makeoverReady;
-  // Gender picker only for child-centric events (birthday, baby shower, …)
-  const showGender = !!event?.gendered;
+  const celebrationForOptions = getCelebrationForOptions(event?.id);
+  // Gender picker only for child-centric events (birthday, baby shower, …) —
+  // and only while the answer is still a child. "Celebrating for a boy" beside
+  // "it is for a parent or elder" are two contradictory sentences in one brief.
+  const showGender =
+    !!event?.gendered && isChildCentricAudience(celebrationFor ?? undefined);
   // Festivals (events with a fixed calendar season — Diwali, Independence Day,
   // Christmas…) don't have a user-chosen date, so only personal life events ask
   // for one. The honoree ("who's it for?") shows for personal events plus the
@@ -102,6 +112,13 @@ export default function SetupPanel({
           : undefined,
       eventDate: !event.season && eventDate ? eventDate : undefined,
       gender: showGender && gender ? gender : undefined,
+      // Guard on the options list, not just the state: switching from birthday
+      // to Diwali must not carry "my_child" over into an event that never asked.
+      celebrationFor:
+        celebrationFor &&
+        celebrationForOptions.some((o) => o.id === celebrationFor)
+          ? celebrationFor
+          : undefined,
     };
   };
 
@@ -213,6 +230,27 @@ export default function SetupPanel({
                   ))}
                 </div>
               </div>
+              {celebrationForOptions.length > 0 && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                    Who&apos;s it for (optional)
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {celebrationForOptions.map((o) => (
+                      <Chip
+                        key={o.id}
+                        label={`${o.icon} ${o.label}`}
+                        selected={celebrationFor === o.id}
+                        onClick={() =>
+                          setCelebrationFor(
+                            celebrationFor === o.id ? null : o.id
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               {showGender && (
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">

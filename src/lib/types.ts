@@ -268,6 +268,12 @@ export interface EventConfig {
   honoree?: string;
   eventDate?: string;
   gender?: string;
+  // WHO the celebration is for, as a relationship id (see CELEBRATION_FOR in
+  // lib/events.ts) — not the honoree's name. A 5-year-old's birthday and a
+  // father's 60th were rendering the same balloon-arch-and-cutouts set, because
+  // nothing in the brief distinguished them. Optional: events without a
+  // `celebrationFor` list never ask, and an unanswered picker changes nothing.
+  celebrationFor?: string;
 }
 
 export type FlowStep =
