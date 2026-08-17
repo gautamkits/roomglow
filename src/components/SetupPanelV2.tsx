@@ -35,6 +35,7 @@ import {
   getCelebrationForOptions,
   isChildCentricAudience,
   getThemeOptions,
+  getPresets,
 } from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
@@ -149,6 +150,7 @@ export default function SetupPanelV2({
 
   const celebrationForOptions = getCelebrationForOptions(event?.id);
   const themeOptions = getThemeOptions(event?.id, celebrationFor ?? undefined);
+  const presets = getPresets(event?.id);
   // Hide the boy/girl palette picker once an adult relationship is chosen —
   // "the celebration is for a boy" beside "it is for a parent or elder" would
   // be two contradictory sentences in one brief.
@@ -175,8 +177,12 @@ export default function SetupPanelV2({
     setEventId(id);
     // Pre-select the leading theme/colour rather than leaving them null, so the
     // next screen is a confirmation rather than two more mandatory decisions.
-    setSubTheme(def?.subThemes[0] ?? null);
-    setColorScheme(def?.colorSchemes[0] ?? null);
+    // With presets, seed from the FIRST PRESET — subThemes[0] is "Traditional"
+    // for Ganesh, which no preset uses, so the row would render with nothing
+    // selected while a hidden theme was what actually got sent.
+    const lead = def?.presets?.[0];
+    setSubTheme(lead?.subTheme ?? def?.subThemes[0] ?? null);
+    setColorScheme(lead?.colorScheme ?? def?.colorSchemes[0] ?? null);
     setGender(null);
     setCelebrationFor(null);
     setHonoree("");
@@ -440,22 +446,47 @@ export default function SetupPanelV2({
                     </div>
                   </div>
                 )}
-                <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Theme</p>
-                  <div className="flex flex-wrap gap-2">
-                    {themeOptions.subThemes.map((t) => (
-                      <Chip key={t} label={t} selected={subTheme === t} onClick={() => setSubTheme(t)} />
-                    ))}
+                {presets.length > 0 ? (
+                  <div>
+                    <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">
+                      Look
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {presets.map((p) => (
+                        <Chip
+                          key={p.label}
+                          label={p.label}
+                          selected={
+                            subTheme === p.subTheme && colorScheme === p.colorScheme
+                          }
+                          onClick={() => {
+                            setSubTheme(p.subTheme);
+                            setColorScheme(p.colorScheme);
+                          }}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Colours</p>
-                  <div className="flex flex-wrap gap-2">
-                    {themeOptions.colorSchemes.map((c) => (
-                      <Chip key={c} label={c} selected={colorScheme === c} onClick={() => setColorScheme(c)} />
-                    ))}
-                  </div>
-                </div>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Theme</p>
+                      <div className="flex flex-wrap gap-2">
+                        {themeOptions.subThemes.map((t) => (
+                          <Chip key={t} label={t} selected={subTheme === t} onClick={() => setSubTheme(t)} />
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400 mb-2">Colours</p>
+                      <div className="flex flex-wrap gap-2">
+                        {themeOptions.colorSchemes.map((c) => (
+                          <Chip key={c} label={c} selected={colorScheme === c} onClick={() => setColorScheme(c)} />
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
 
                 {/* Genuinely optional — collapsed so it doesn't lengthen the
                     screen for the majority who skip it. */}

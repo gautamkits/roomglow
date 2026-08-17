@@ -140,6 +140,17 @@ export const CELEBRATION_FOR: Record<string, CelebrationForOption> = {
   },
 };
 
+/**
+ * Curated theme+colour pairs for an event, or [] when it uses the two
+ * independent pickers. A preset carries the same `subTheme`/`colorScheme`
+ * strings the pickers would have produced, so nothing downstream can tell the
+ * difference.
+ */
+export function getPresets(eventId: string | undefined) {
+  if (!eventId) return [];
+  return EVENTS.find((e) => e.id === eventId)?.presets ?? [];
+}
+
 /** Relationship options offered for an event, in display order. */
 export function getCelebrationForOptions(
   eventId: string | undefined
@@ -216,6 +227,14 @@ export interface EventDefinition {
   // Absent = the one list serves every audience (anniversary, Valentine's).
   adultSubThemes?: string[];
   adultColorSchemes?: string[];
+  // Curated theme+colour pairs, offered INSTEAD of the two independent pickers.
+  // Theme × colours is a 20-way grid for Ganesh, and most of those cells are
+  // combinations nobody actually decorates with — a "Modern minimal" Ganpati in
+  // "Red & yellow" is a worse design than any of the three below and the user
+  // has no way to know that before generating. Values must come from the event's
+  // own subThemes/colorSchemes so the prompt and Amazon-query wording stay
+  // exactly the ones already in use.
+  presets?: { label: string; subTheme: string; colorScheme: string }[];
   // National-day events where a bare flagpole in the photo should be flown, not
   // just preserved. The generic décor rules only ever say "reproduce what is
   // already there unchanged", so an empty pole stays empty — correct for every
@@ -460,6 +479,15 @@ export const EVENTS: EventDefinition[] = [
     icon: "🐘",
     subThemes: ["Traditional", "Floral marigold", "Royal", "Modern minimal", "Eco-friendly"],
     colorSchemes: ["Marigold & red", "Gold & maroon", "Red & yellow", "Green & gold"],
+    // The three looks people actually set up: the everyday home Ganpati, the
+    // ornate pandal, and the shadu-mati eco trend. "Floral marigold" leads
+    // because a concrete noun becomes a concrete Amazon query (genda phool
+    // toran, marigold garland) where "Traditional" leaves the model guessing.
+    presets: [
+      { label: "Marigold garlands", subTheme: "Floral marigold", colorScheme: "Marigold & red" },
+      { label: "Royal gold", subTheme: "Royal", colorScheme: "Gold & maroon" },
+      { label: "Eco-friendly", subTheme: "Eco-friendly", colorScheme: "Green & gold" },
+    ],
     markets: ["IN"],
     season: { month: 9, day: 5 }, // movable (Aug–Sep)
     completionItems: [

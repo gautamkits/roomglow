@@ -8,6 +8,7 @@ import {
   getCelebrationForOptions,
   isChildCentricAudience,
   getThemeOptions,
+  getPresets,
 } from "@/lib/events";
 import type { AppMode, EventConfig, MakeoverConfig } from "@/lib/types";
 import { MAKEOVER_STYLES } from "@/lib/makeover";
@@ -89,6 +90,7 @@ export default function SetupPanel({
   const eventReady = eventConfigReady && makeoverReady;
   const celebrationForOptions = getCelebrationForOptions(event?.id);
   const themeOptions = getThemeOptions(event?.id, celebrationFor ?? undefined);
+  const presets = getPresets(event?.id);
   // Gender picker only for child-centric events (birthday, baby shower, …) —
   // and only while the answer is still a child. "Celebrating for a boy" beside
   // "it is for a parent or elder" are two contradictory sentences in one brief.
@@ -214,36 +216,62 @@ export default function SetupPanel({
 
           {event && (
             <div className="space-y-2.5 animate-fade-up">
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
-                  Theme
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {themeOptions.subThemes.map((t) => (
-                    <Chip
-                      key={t}
-                      label={t}
-                      selected={subTheme === t}
-                      onClick={() => setSubTheme(t)}
-                    />
-                  ))}
+              {presets.length > 0 && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                    Look
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {presets.map((p) => (
+                      <Chip
+                        key={p.label}
+                        label={p.label}
+                        selected={
+                          subTheme === p.subTheme && colorScheme === p.colorScheme
+                        }
+                        onClick={() => {
+                          setSubTheme(p.subTheme);
+                          setColorScheme(p.colorScheme);
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
-                  Colors
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {themeOptions.colorSchemes.map((c) => (
-                    <Chip
-                      key={c}
-                      label={c}
-                      selected={colorScheme === c}
-                      onClick={() => setColorScheme(c)}
-                    />
-                  ))}
+              )}
+              {presets.length === 0 && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                    Theme
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {themeOptions.subThemes.map((t) => (
+                      <Chip
+                        key={t}
+                        label={t}
+                        selected={subTheme === t}
+                        onClick={() => setSubTheme(t)}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+              {presets.length === 0 && (
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
+                    Colors
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {themeOptions.colorSchemes.map((c) => (
+                      <Chip
+                        key={c}
+                        label={c}
+                        selected={colorScheme === c}
+                        onClick={() => setColorScheme(c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               {celebrationForOptions.length > 0 && (
                 <div>
                   <p className="text-[11px] uppercase tracking-wide text-zinc-400 mb-1.5">
