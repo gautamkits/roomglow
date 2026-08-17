@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { recommendOutfit } from "@/lib/gemini";
+import { recommendOutfit, parseJsonWithRetry } from "@/lib/gemini";
 import { getFeatures } from "@/lib/db";
 import { notifyAdminError } from "@/lib/email";
 
@@ -21,14 +21,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    const resultJson = await recommendOutfit(
-      personAnalysis,
-      styleType,
-      styleContext || styleType,
-      selectedItems || [],
-      gender
+    const result = await parseJsonWithRetry(
+      () =>
+        recommendOutfit(
+          personAnalysis,
+          styleType,
+          styleContext || styleType,
+          selectedItems || [],
+          gender
+        ),
+      3,
+      "recommendOutfit"
     );
-    const result = JSON.parse(resultJson);
 
     return NextResponse.json(result);
   } catch (error) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { analyzePerson } from "@/lib/gemini";
+import { analyzePerson, parseJsonWithRetry } from "@/lib/gemini";
 import { getFeatures } from "@/lib/db";
 import { uploadRateLimit, clientIp } from "@/lib/rateLimit";
 import { isAdminEmail } from "@/lib/admin";
@@ -41,8 +41,11 @@ export async function POST(request: Request) {
     }
 
     const base64 = image.replace(/^data:image\/\w+;base64,/, "");
-    const analysisJson = await analyzePerson(base64, styleContext || "casual");
-    const analysis = JSON.parse(analysisJson);
+    const analysis = await parseJsonWithRetry(
+      () => analyzePerson(base64, styleContext || "casual"),
+      3,
+      "analyzePerson"
+    );
 
     return NextResponse.json(analysis);
   } catch (error) {

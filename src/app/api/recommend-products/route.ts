@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { recommendProducts } from "@/lib/gemini";
+import { recommendProducts, parseJsonWithRetry } from "@/lib/gemini";
 import { localeFromRequest } from "@/lib/locale";
 import { notifyAdminError } from "@/lib/email";
 import { timed } from "@/lib/timing";
@@ -26,18 +26,27 @@ export async function POST(request: Request) {
 
     // Same locale the downstream /api/search-products call uses, so the query
     // wording matches the marketplace it will actually be searched against.
-    const recommendationsJson = await timed("recommend-products", () =>
-      recommendProducts(
-        roomAnalysis,
-        userAnswers,
-        selectedProductTypes || [],
-        eventContext,
-        Array.isArray(removeLabels) ? removeLabels : [],
-        localeFromRequest(request),
-        !!autoCleared
+    // Retry unparseable output instead of 500ing on it. The model occasionally
+    // degenerates into a repeating run — one measured response was 66KB of
+    // digits inside `fitScore` — and a bare JSON.parse turned that into "We
+    // couldn't create a design plan" with no second chance. Same guard
+    // analyzeRoom has had since a081b74.
+    const recommendations = await timed("recommend-products", () =>
+      parseJsonWithRetry<{ products?: unknown; designVision?: string }>(
+        () =>
+          recommendProducts(
+            roomAnalysis,
+            userAnswers,
+            selectedProductTypes || [],
+            eventContext,
+            Array.isArray(removeLabels) ? removeLabels : [],
+            localeFromRequest(request),
+            !!autoCleared
+          ),
+        3,
+        "recommendProducts"
       )
     );
-    const recommendations = JSON.parse(recommendationsJson);
 
     return NextResponse.json({
       products: recommendations.products,

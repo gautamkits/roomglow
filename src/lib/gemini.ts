@@ -37,9 +37,14 @@ type ThinkingStep = "ANALYZE" | "RECOMMEND" | "CURATE";
 //   Production matched exactly (~7877 chars): one user burned 89.7s across all
 //   three retries and still got "failed to analyse room". The apparent speed win
 //   was an illusion — a quarter of calls took 4x longer and then retried.
+//   ⚠️ RECOMMEND MUST STAY DYNAMIC TOO, for the same reason and worse. At 0 the
+//   very first call produced 66,257 characters of a repeating digit run inside
+//   `fitScore`. Unlike analyze there is no maxOutputTokens here to stop it and
+//   no retry in the route, so it is an instant 500 — "We couldn't create a
+//   design plan" — after a long, billed wait.
 const THINKING_DEFAULTS: Record<ThinkingStep, number | undefined> = {
   ANALYZE: undefined,
-  RECOMMEND: 0,
+  RECOMMEND: undefined,
   CURATE: 0,
 };
 

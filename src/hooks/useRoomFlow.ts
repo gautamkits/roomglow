@@ -506,7 +506,17 @@ export function useRoomFlow() {
       // Skip it entirely on a room the analysis already calls clean with nothing
       // in the way — there is nothing to clear, and this is a billed image call
       // on the pre-paywall path.
+      //
+      // `alwaysEmpty` overrides it. That flag is the admin saying "indoor events
+      // always get a cleared room", and it is decided server-side; letting the
+      // model's own clutterLevel veto it made the toggle a coin flip. Measured
+      // on one furnished living room, three runs: the model called it "clean"
+      // every time and set blocksFocal in only two of three, so the third run
+      // skipped the clear entirely despite the flag being on and the sofa being
+      // queued for removal. The user sees a "cleared room" setting that
+      // intermittently does nothing.
       const worthClearing =
+        roomAnalysis?.alwaysEmpty ||
         roomAnalysis?.clutterLevel !== "clean" ||
         (roomAnalysis?.removableObjects ?? []).some((o) => o.blocksFocal);
 
@@ -558,10 +568,21 @@ export function useRoomFlow() {
             if (cleared) {
               setBaseImage(cleared);
               p.canvas = cleared;
+            } else {
+              track("empty_room_failed", { reason: "no_image" }, { server: true });
             }
+          } else {
+            // Falling back to the furnished photo is the right behaviour, but it
+            // used to be invisible: a rate-limited or erroring clear produced a
+            // design with the sofa still in it and no signal anywhere that the
+            // step had been attempted at all.
+            track("empty_room_failed", { reason: `http_${emptyRes.status}` }, { server: true });
           }
-        } catch {
-          /* non-fatal: design on the original photo */
+        } catch (e) {
+          /* non-fatal: design on the original photo — but say so. */
+          track("empty_room_failed", {
+            reason: e instanceof Error ? e.message.slice(0, 80) : "threw",
+          }, { server: true });
         }
       }
       // Generate on the clean canvas (emptied room when decluttered, else the

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { refreshSuggestions } from "@/lib/gemini";
+import { refreshSuggestions, parseJsonWithRetry } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
 
 export const runtime = "nodejs";
@@ -18,13 +18,17 @@ export async function POST(request: Request) {
     }
 
     const base64 = image.replace(/^data:image\/\w+;base64,/, "");
-    const json = await refreshSuggestions(
-      base64,
-      roomAnalysis,
-      removeLabels,
-      typeof eventContext === "string" ? eventContext : undefined
+    const parsed = await parseJsonWithRetry<{ suggestedProducts?: unknown[] }>(
+      () =>
+        refreshSuggestions(
+          base64,
+          roomAnalysis,
+          removeLabels,
+          typeof eventContext === "string" ? eventContext : undefined
+        ),
+      3,
+      "refreshSuggestions"
     );
-    const parsed = JSON.parse(json);
 
     return NextResponse.json({ suggestedProducts: parsed.suggestedProducts ?? [] });
   } catch (error) {

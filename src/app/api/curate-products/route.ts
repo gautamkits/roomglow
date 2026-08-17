@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { curateProducts, type CategoryCandidates } from "@/lib/gemini";
+import { curateProducts, parseJsonWithRetry, type CategoryCandidates } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
 import { timed } from "@/lib/timing";
 import type { ProductResult, ProductMatchStatus } from "@/lib/types";
@@ -25,10 +25,16 @@ export async function POST(request: Request) {
     }
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
-    const curationJson = await timed("curate-products", () =>
-      curateProducts(base64, designVision, categories, budgetInstruction)
+    const curation = await timed("curate-products", () =>
+      parseJsonWithRetry<{
+        selections?: { categoryIndex: number; optionIndex: number; reason: string }[];
+        designNarrative?: string;
+      }>(
+        () => curateProducts(base64, designVision, categories, budgetInstruction),
+        3,
+        "curateProducts"
+      )
     );
-    const curation = JSON.parse(curationJson);
 
     // Build the final list from the categories themselves, not from the model's
     // selections — a category the model forgot to return used to vanish silently,
