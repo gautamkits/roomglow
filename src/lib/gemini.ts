@@ -29,8 +29,16 @@ type ThinkingStep = "ANALYZE" | "RECOMMEND" | "CURATE";
 //
 //   RECOMMEND/CURATE at 0 are clean — curate is index-picking from a supplied
 //   list, and recommend stayed on-theme with the same product count.
+//   ⚠️ ANALYZE MUST STAY DYNAMIC. A 1024 budget shipped and caused real user
+//   failures: starved of reasoning, the model degenerates into a repeating
+//   string, hits maxOutputTokens (8192) mid-string, and returns unterminated
+//   JSON. Measured 8 runs per config on the same photo — 1024: 2/8 unparseable,
+//   the bad ones 7799/7896 chars and 32-35s; dynamic: 0/8, 1.9-3.7KB, 14-21s.
+//   Production matched exactly (~7877 chars): one user burned 89.7s across all
+//   three retries and still got "failed to analyse room". The apparent speed win
+//   was an illusion — a quarter of calls took 4x longer and then retried.
 const THINKING_DEFAULTS: Record<ThinkingStep, number | undefined> = {
-  ANALYZE: 1024,
+  ANALYZE: undefined,
   RECOMMEND: 0,
   CURATE: 0,
 };
