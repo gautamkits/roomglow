@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Calendar,
+  TrendingUp,
 } from "lucide-react";
 import {
   getEvent,
@@ -62,18 +63,22 @@ interface Props {
 
 type Step = "mode" | "photo" | "occasion" | "details";
 
+// Events lead: they are ~80% of designs created (37 of 46 over 7 days) and the
+// whole India ad spend points at occasions, so the room redesign was the first
+// thing most people saw and the second thing they wanted.
 const MODES = [
-  {
-    id: "space" as const,
-    Icon: Sofa,
-    label: "Redesign a room",
-    blurb: "Restyle any space and shop the look",
-  },
   {
     id: "event" as const,
     Icon: PartyPopper,
     label: "Plan an event",
     blurb: "Decorate a venue for the occasion",
+    badge: "Trending",
+  },
+  {
+    id: "space" as const,
+    Icon: Sofa,
+    label: "Redesign a room",
+    blurb: "Restyle any space and shop the look",
   },
   {
     id: "makeover" as const,
@@ -319,7 +324,7 @@ export default function SetupPanelV2({
             {/* Reserve all three rows so resolving /api/features doesn't reflow
                 the layout under the user's thumb. */}
             <div className="grid gap-2.5">
-              {MODES.map(({ id, Icon, label, blurb }) => {
+              {MODES.map(({ id, Icon, label, blurb, badge }) => {
                 if (id === "makeover" && !makeoverEnabled) return null;
                 return (
                   <button
@@ -334,8 +339,16 @@ export default function SetupPanelV2({
                       <Icon size={20} strokeWidth={1.75} className="text-orange-700 dark:text-orange-400" />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                        {label}
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                          {label}
+                        </span>
+                        {badge && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-400 text-[10px] font-medium leading-none">
+                            <TrendingUp size={9} strokeWidth={2.5} />
+                            {badge}
+                          </span>
+                        )}
                       </span>
                       <span className="block text-xs text-zinc-500">{blurb}</span>
                     </span>
