@@ -568,6 +568,11 @@ function HomeContent() {
               )}
             </div>
 
+            {/* Directly under the design, not after the product grids — asking
+                for a verdict only visible at the bottom of a long scroll meant
+                most people never saw the question at all. */}
+            {isUnlocked && designId && <DesignFeedback designId={designId} />}
+
             {RESTYLE_UI_ENABLED && isUnlocked && mode === "space" && (
               <div className="mt-8 animate-fade-up-delay-2">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-400 text-center mb-2">
@@ -636,7 +641,6 @@ function HomeContent() {
               <MakeoverProducts styleId={makeoverConfig.styleType} gender={makeoverConfig.gender} />
             )}
 
-            {isUnlocked && designId && <DesignFeedback designId={designId} />}
 
             <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">
               <button

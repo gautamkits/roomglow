@@ -313,6 +313,11 @@ function Viewer({
           </div>
         )}
 
+        {/* Directly under the design and its narrative, not after the product
+            grids — a verdict box only visible at the bottom of a long scroll is
+            one most people never reach. */}
+        {showProducts && <DesignFeedback designId={design.id} />}
+
         {showProducts &&
           (() => {
             const added = toLabels(design.selected_items);
@@ -440,7 +445,6 @@ function Viewer({
           />
         )}
 
-        {showProducts && <DesignFeedback designId={design.id} />}
 
         {showProducts && design.mode === "makeover" && design.event_config?.styleType && (
           <MakeoverProducts
