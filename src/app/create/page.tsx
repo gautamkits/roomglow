@@ -28,6 +28,7 @@ import Footer from "@/components/Footer";
 import ProcessingView from "@/components/ProcessingView";
 import EmailSignIn from "@/components/EmailSignIn";
 import OccasionProducts from "@/components/OccasionProducts";
+import DesignFeedback from "@/components/DesignFeedback";
 import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -634,6 +635,8 @@ function HomeContent() {
             {isUnlocked && mode === "makeover" && makeoverConfig && (
               <MakeoverProducts styleId={makeoverConfig.styleType} gender={makeoverConfig.gender} />
             )}
+
+            {isUnlocked && designId && <DesignFeedback designId={designId} />}
 
             <div className="flex items-center justify-center gap-3 mt-6 animate-fade-up-delay-2">
               <button

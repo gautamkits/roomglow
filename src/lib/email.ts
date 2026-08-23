@@ -500,6 +500,78 @@ function adminRecipients(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Alert admins when someone rates a design poorly.
+ *
+ * The point is to see WHAT they disliked, so the render is embedded and the
+ * design links straight through. Deliberately an admin alert rather than user
+ * mail: it never touches email_optouts, because it is not addressed to the
+ * person who complained.
+ *
+ * Best-effort and flood-limited, like notifyAdminError — a burst of bad ratings
+ * is exactly when you least want the mailer to become the bottleneck.
+ */
+export async function notifyAdminFeedback(data: {
+  designId: string;
+  rating: string;
+  reason?: string | null;
+  userEmail?: string | null;
+  mode?: string | null;
+  eventLabel?: string | null;
+  generatedImageUrl?: string | null;
+  locale?: string | null;
+}): Promise<{ ok: boolean }> {
+  const recipients = adminRecipients();
+  if (recipients.length === 0) return { ok: false };
+  // At most 5 per rating bucket per 15 min, so one upset session can't flood.
+  if (!rateLimit(`feedback:${data.rating}`, 5, 15 * 60 * 1000).ok) return { ok: false };
+
+  const link = `${SITE_URL}/design/${data.designId}`;
+  const face = data.rating === "sad" ? "😞" : data.rating === "ok" ? "😐" : "😍";
+  const rows: [string, string][] = [
+    ["Rating", `${face}  ${data.rating}`],
+    ["Why", data.reason?.trim() || "— (not given)"],
+    ["User", data.userEmail || "anonymous"],
+    ["Mode", data.mode || "—"],
+    ["Occasion", data.eventLabel || "—"],
+    ["Locale", data.locale || "—"],
+    ["Design", link],
+  ];
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 12px;font-weight:600;color:${TEXT};vertical-align:top;white-space:nowrap;">${esc(
+          k
+        )}</td><td style="padding:6px 12px;color:${MUTED};font-size:13px;word-break:break-word;">${esc(
+          v
+        )}</td></tr>`
+    )
+    .join("");
+  const shot = data.generatedImageUrl
+    ? `<img src="${esc(data.generatedImageUrl)}" alt="" style="width:100%;max-width:552px;border-radius:10px;border:1px solid ${BORDER};display:block;margin:16px 0 0;" />`
+    : "";
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;color:${LINEN};font-size:18px;font-weight:700;">${face} Noosho — design feedback</td></tr>
+    <tr><td style="padding:20px 24px;">
+      <p style="font-size:14px;color:${MUTED};margin:0 0 16px;">Someone rated a design. Here is what they saw:</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid ${BORDER};border-radius:10px;border-collapse:separate;">${rowsHtml}</table>
+      ${shot}
+      <p style="margin:18px 0 0;"><a href="${esc(link)}" style="display:inline-block;background:${CLAY_CTA};color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:600;">Open the design</a></p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  return sendMail({
+    to: recipients.map((address) => ({ address, name: "Admin" })),
+    subject: `${face} Noosho feedback — ${data.rating}${data.eventLabel ? ` · ${data.eventLabel}` : ""}`,
+    html,
+    label: "admin-feedback",
+  });
+}
+
 export async function notifyAdminError(ctx: AdminErrorContext): Promise<{ ok: boolean }> {
   const recipients = adminRecipients();
   if (recipients.length === 0) return { ok: false };

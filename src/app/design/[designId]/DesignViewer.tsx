@@ -10,6 +10,7 @@ import LikeButton from "@/components/LikeButton";
 import UserMenu from "@/components/UserMenu";
 import ShareButton from "@/components/ShareButton";
 import OccasionProducts from "@/components/OccasionProducts";
+import DesignFeedback from "@/components/DesignFeedback";
 import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -438,6 +439,8 @@ function Viewer({
             eventLabel={design.event_config.eventLabel || "event"}
           />
         )}
+
+        {showProducts && <DesignFeedback designId={design.id} />}
 
         {showProducts && design.mode === "makeover" && design.event_config?.styleType && (
           <MakeoverProducts

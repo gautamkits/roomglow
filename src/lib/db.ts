@@ -175,6 +175,97 @@ async function ensureImageGenSchema() {
   imageGenSchemaReady = true;
 }
 
+let feedbackSchemaReady = false;
+async function ensureFeedbackSchema() {
+  if (feedbackSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS design_feedback (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      design_id UUID NOT NULL,
+      user_id TEXT NOT NULL,
+      rating TEXT NOT NULL,
+      reason TEXT
+    )
+  `;
+  // One verdict per person per design — a second submission edits the first
+  // rather than stacking, which is what makes the upsert below work. user_id is
+  // NOT NULL precisely so this index can do its job; a NULL would slip past it.
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_design_feedback_one
+      ON design_feedback (design_id, user_id)
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_design_feedback_created ON design_feedback (created_at)`;
+  feedbackSchemaReady = true;
+}
+
+export type DesignRating = "happy" | "ok" | "sad";
+
+/**
+ * Save (or change) one person's verdict on a design.
+ *
+ * Returns whether this is the first time they rated it, so the caller only
+ * alerts an admin on a genuinely new complaint and not on every re-tap.
+ */
+export async function saveDesignFeedback(params: {
+  designId: string;
+  userId: string;
+  rating: DesignRating;
+  reason?: string | null;
+}): Promise<{ ok: boolean; isNew: boolean }> {
+  try {
+    await ensureFeedbackSchema();
+    const { rows } = await sql`
+      INSERT INTO design_feedback (design_id, user_id, rating, reason)
+      VALUES (${params.designId}::uuid, ${params.userId}, ${params.rating}, ${params.reason ?? null})
+      ON CONFLICT (design_id, user_id) DO UPDATE
+        SET rating = EXCLUDED.rating,
+            reason = COALESCE(EXCLUDED.reason, design_feedback.reason),
+            created_at = NOW()
+      RETURNING (xmax = 0) AS inserted
+    `;
+    return { ok: true, isNew: !!rows[0]?.inserted };
+  } catch (err) {
+    console.error("[saveDesignFeedback] failed:", err);
+    return { ok: false, isNew: false };
+  }
+}
+
+/** This user's existing rating for a design, so the UI can show it selected. */
+export async function getDesignFeedback(
+  designId: string,
+  userId: string
+): Promise<{ rating: DesignRating; reason: string | null } | null> {
+  try {
+    await ensureFeedbackSchema();
+    const { rows } = await sql`
+      SELECT rating, reason FROM design_feedback
+      WHERE design_id = ${designId}::uuid AND user_id = ${userId} LIMIT 1
+    `;
+    const r = rows[0];
+    return r ? { rating: r.rating as DesignRating, reason: r.reason ?? null } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Rating counts for the admin analytics panel. */
+export async function getFeedbackStats(days = 30): Promise<
+  { rating: string; n: number }[]
+> {
+  try {
+    await ensureFeedbackSchema();
+    const { rows } = await sql`
+      SELECT rating, COUNT(*)::int AS n FROM design_feedback
+      WHERE created_at >= NOW() - (${days} || ' days')::interval
+      GROUP BY rating
+    `;
+    return rows.map((r) => ({ rating: r.rating as string, n: r.n as number }));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Record one image-generation call. Best-effort: never throws into the caller,
  * so logging can't break (or delay-fail) the actual generation.
