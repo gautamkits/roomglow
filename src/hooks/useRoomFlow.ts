@@ -347,7 +347,12 @@ export function useRoomFlow() {
         const res = await fetch("/api/analyze-room", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64, eventContext }),
+          body: JSON.stringify({
+            image: base64,
+            eventContext,
+            // Lets the server attach rules learned for THIS occasion.
+            eventType: activeEventConfig?.eventType,
+          }),
         });
         stepMsRef.current["analyze_room"] = Math.round(
           performance.now() - analyzeT0
@@ -645,6 +650,7 @@ export function useRoomFlow() {
               // recommending replacement furniture.
               selectedProductTypes: eventContext ? [] : selected.map((s) => s.label),
               eventContext,
+              eventType: eventConfig?.eventType,
               removeLabels: removedLabels,
               // The clear was ours, not the user's — keeps space additive
               // instead of recommending replacement furniture.
@@ -735,6 +741,7 @@ export function useRoomFlow() {
             : {
                 originalImage: canvas,
                 eventContext,
+                eventType: eventConfig?.eventType,
                 products: productPayload,
                 // Estimated room geometry so generation respects real scale.
                 geometry: roomAnalysis?.geometry,

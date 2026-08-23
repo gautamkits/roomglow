@@ -6,10 +6,11 @@ import { isAdminEmail } from "@/lib/admin";
 import { notifyAdminError } from "@/lib/email";
 import { getFeatures } from "@/lib/db";
 import { timed } from "@/lib/timing";
+import { withLessons } from "@/lib/lessons";
 
 export async function POST(request: Request) {
   try {
-    const { image, eventContext } = await request.json();
+    const { image, eventContext, eventType } = await request.json();
     if (!image) {
       return NextResponse.json({ error: "No image provided" }, { status: 400 });
     }
@@ -42,8 +43,10 @@ export async function POST(request: Request) {
     // Retries on unparseable JSON — the model occasionally degenerates into an
     // unterminated repeating string, which used to 500 the first step of the
     // funnel. See analyzeRoomParsed.
+    // Learned corrections ride along with the event brief. No-op for space.
+    const brief = await withLessons(eventContext, eventType);
     const analysis = await timed("analyze-room", () =>
-      analyzeRoomParsed(base64, eventContext)
+      analyzeRoomParsed(base64, brief)
     );
 
     // Whether to clear the room before designing, decided server-side so a

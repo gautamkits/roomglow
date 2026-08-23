@@ -7,6 +7,7 @@ import { recordImageGen } from "@/lib/db";
 import { isAdminEmail } from "@/lib/admin";
 import { isFreeFirstDesignEligible } from "@/lib/promo";
 import { notifyAdminError } from "@/lib/email";
+import { withLessons } from "@/lib/lessons";
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +15,7 @@ export async function POST(request: Request) {
       originalImage,
       products,
       eventContext,
+      eventType,
       styleHint,
       geometry,
       optimizeLayout,
@@ -57,10 +59,12 @@ export async function POST(request: Request) {
     const detect = !!styleHint || willBeUnlocked;
 
     const base64 = originalImage.replace(/^data:image\/\w+;base64,/, "");
+    // Learned corrections ride along with the event brief. No-op for space.
+    const brief = await withLessons(eventContext, eventType);
     const { generatedImage, hotspots } = await generateDesignImage(
       base64,
       products,
-      eventContext,
+      brief,
       styleHint || undefined,
       detect,
       geometry || undefined,

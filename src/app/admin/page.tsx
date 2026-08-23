@@ -21,6 +21,8 @@ type ApprovedDesign = RevealDesign & {
 };
 
 interface StoredEventConfig {
+  /** The event id (e.g. "ganesh_chaturthi") — the scope a learned rule attaches to. */
+  eventType?: string;
   eventLabel?: string;
   subTheme?: string;
   colorScheme?: string;
@@ -41,6 +43,24 @@ interface AllDesign {
   event_config: StoredEventConfig | null;
 }
 
+interface FeedbackDesign extends AllDesign {
+  rating: "sad" | "ok" | "happy";
+  reason: string | null;
+  rated_at: string;
+  was_cleared: boolean;
+  selected_items: unknown;
+  removed_items: unknown;
+  diagnostics: {
+    roomType: string | null;
+    clutterLevel: string | null;
+    venueKind: string | null;
+    hadStagingPlan: boolean;
+    productCount: number;
+    matched: number;
+    noMatch: number;
+  };
+}
+
 const ALL_PAGE = 60;
 
 /**
@@ -49,14 +69,23 @@ const ALL_PAGE = 60;
  * theme/colour/name overrides — without them, re-rolling just repeats the same
  * brief and relies on luck.
  */
-function RegenerateSend({ design }: { design: AllDesign }) {
+function RegenerateSend({
+  design,
+  defaultNote = "",
+}: {
+  design: AllDesign;
+  /** Prefilled from the user's own complaint, so the reply answers what they said. */
+  defaultNote?: string;
+}) {
   const cfg = design.event_config || {};
   const isEvent = design.mode === "event";
   const [open, setOpen] = useState(false);
   const [subTheme, setSubTheme] = useState(cfg.subTheme || "");
   const [colorScheme, setColorScheme] = useState(cfg.colorScheme || "");
   const [honoree, setHonoree] = useState(cfg.honoree || "");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(
+    defaultNote ? `You told us: "${defaultNote}" — we've redone it.` : ""
+  );
   const [free, setFree] = useState(true);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -268,15 +297,143 @@ const ADMIN_TABS = [
   { key: "pending", label: "Pending review" },
   { key: "published", label: "Published" },
   { key: "all", label: "All designs" },
+  { key: "feedback", label: "Feedback" },
 ] as const;
+
+/**
+ * One complaint, with the evidence.
+ *
+ * The verdict alone is not actionable — "didn't like it" tells you nothing. The
+ * diagnostics row is the point: what the analysis saw, whether the room was
+ * actually cleared, and how many product slots came back empty. A design with
+ * 3 of 6 categories unmatched usually explains its own bad rating.
+ */
+function FeedbackCard({ d }: { d: FeedbackDesign }) {
+  const [rule, setRule] = useState("");
+  const [ruleState, setRuleState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [ruleMsg, setRuleMsg] = useState("");
+  const face = d.rating === "sad" ? "😞" : d.rating === "ok" ? "😐" : "😍";
+  const eventType = d.event_config?.eventType;
+  const diag = d.diagnostics;
+
+  const saveRule = async () => {
+    if (!rule.trim() || !eventType) return;
+    setRuleState("saving");
+    const res = await fetch("/api/admin/lessons", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scopeType: "event", scopeValue: eventType, rule }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setRuleState("saved");
+      setRuleMsg("Saved as INACTIVE — verify, then activate it in Rules.");
+    } else {
+      setRuleState("error");
+      setRuleMsg(data.error || "Failed");
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <a href={`/design/${d.id}`} target="_blank" rel="noreferrer" className="block">
+        <div className="grid grid-cols-2">
+          <img src={d.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
+          <img src={d.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+        </div>
+      </a>
+      <div className="p-3 space-y-2.5">
+        <div className="flex items-start gap-2">
+          <span className="text-xl leading-none">{face}</span>
+          <p className="text-sm text-zinc-800 dark:text-zinc-200 flex-1">
+            {d.reason?.trim() || <span className="text-zinc-400 italic">no reason given</span>}
+          </p>
+        </div>
+
+        <p className="text-[11px] text-zinc-500">
+          {d.user_email || "anonymous"} · {new Date(d.rated_at).toLocaleString()}
+        </p>
+
+        {/* Why it may have turned out this way. */}
+        <div className="flex flex-wrap gap-1 text-[10px]">
+          {[
+            d.mode,
+            d.event_config?.eventLabel,
+            d.event_config?.subTheme,
+            d.event_config?.colorScheme,
+            diag.roomType,
+            diag.clutterLevel && `clutter: ${diag.clutterLevel}`,
+            diag.venueKind,
+            d.was_cleared ? "room cleared" : "not cleared",
+            diag.hadStagingPlan ? "staging plan" : "no staging plan",
+            `${diag.matched}/${diag.productCount} products matched`,
+          ]
+            .filter(Boolean)
+            .map((t, i) => (
+              <span
+                key={i}
+                className={`px-1.5 py-0.5 rounded border ${
+                  typeof t === "string" && t.includes("/") && diag.noMatch > 0
+                    ? "border-amber-300 text-amber-700 bg-amber-50 dark:bg-amber-950/30"
+                    : "border-zinc-200 dark:border-zinc-700 text-zinc-500"
+                }`}
+              >
+                {String(t)}
+              </span>
+            ))}
+        </div>
+
+        {/* Teach it, so this stops happening. */}
+        {eventType ? (
+          <div className="pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            <p className="text-[11px] text-zinc-500 mb-1.5">
+              Turn this into a rule for every future <b>{eventType}</b> design
+            </p>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={rule}
+                onChange={(e) => setRule(e.target.value)}
+                maxLength={200}
+                placeholder="e.g. Always place a Ganpati idol on the platform"
+                className="flex-1 px-2 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 outline-none focus:border-orange-700"
+              />
+              <button
+                onClick={saveRule}
+                disabled={!rule.trim() || ruleState === "saving"}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 disabled:opacity-40"
+              >
+                {ruleState === "saving" ? "…" : "Save"}
+              </button>
+            </div>
+            {ruleMsg && (
+              <p className={`text-[10px] mt-1 ${ruleState === "error" ? "text-red-600" : "text-emerald-700"}`}>
+                {ruleMsg}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-[11px] text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
+            Space design — rules are event-scoped only for now.
+          </p>
+        )}
+
+        <div className="pt-1">
+          <RegenerateSend design={d} defaultNote={d.reason || ""} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<"pending" | "published" | "all">("pending");
+  const [tab, setTab] = useState<"pending" | "published" | "all" | "feedback">("pending");
   const [designs, setDesigns] = useState<PendingDesign[]>([]);
   const [approved, setApproved] = useState<ApprovedDesign[]>([]);
   const [all, setAll] = useState<AllDesign[]>([]);
+  const [feedback, setFeedback] = useState<FeedbackDesign[]>([]);
   const [allHasMore, setAllHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -334,6 +491,19 @@ function AdminContent() {
     setLoadingMore(false);
   }, []);
 
+  const loadFeedback = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch("/api/admin/feedback?limit=40");
+    if (res.status === 403) {
+      setForbidden(true);
+      setLoading(false);
+      return;
+    }
+    const data = await res.json();
+    setFeedback(data.designs || []);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     fetch("/api/admin/features")
       .then((r) => r.json())
@@ -380,8 +550,9 @@ function AdminContent() {
     if (status !== "authenticated") return;
     if (tab === "pending") load();
     else if (tab === "published") loadApproved();
+    else if (tab === "feedback") loadFeedback();
     else loadAll(0);
-  }, [status, tab, load, loadApproved, loadAll]);
+  }, [status, tab, load, loadApproved, loadAll, loadFeedback]);
 
   const review = async (id: string, action: "approve" | "reject") => {
     setDesigns((d) => d.filter((x) => x.id !== id));
@@ -700,6 +871,25 @@ function AdminContent() {
                 </div>
               ))}
             </div>
+          ))}
+
+        {tab === "feedback" &&
+          (feedback.length === 0 ? (
+            <p className="text-center text-zinc-500 py-20">
+              No complaints yet. Nothing to fix.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-zinc-500 mb-4">
+                Designs users rated 😞 or 😐, newest first — with the inputs that
+                produced them, so you can see the cause and not just the verdict.
+              </p>
+              <div className="grid gap-5 lg:grid-cols-2">
+                {feedback.map((d) => (
+                  <FeedbackCard key={`${d.id}-${d.rated_at}`} d={d} />
+                ))}
+              </div>
+            </>
           ))}
 
         {tab === "all" &&

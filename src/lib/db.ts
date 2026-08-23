@@ -560,6 +560,240 @@ export async function getPendingDesigns() {
 /** Admin-only: every generated design (regardless of privacy/gallery status),
  *  newest first, with the owner's email — for reviewing outputs to refine
  *  prompts. Paginated. */
+/**
+ * Designs that got a rating, newest first, with the inputs that produced them.
+ *
+ * getAllDesigns deliberately selects a narrow column set for the admin grid, and
+ * that set answers "what did it look like" but never "why did it look like
+ * that". Diagnosing a complaint meant opening Postgres. This widens the query to
+ * the fields that actually explain a bad design — what the analysis saw, whether
+ * the room really got cleared, and how many product slots came back empty.
+ */
+let lessonsSchemaReady = false;
+async function ensureLessonsSchema() {
+  if (lessonsSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS design_lessons (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      scope_type TEXT NOT NULL,
+      scope_value TEXT NOT NULL,
+      rule TEXT NOT NULL,
+      source_feedback_id BIGINT,
+      active BOOLEAN NOT NULL DEFAULT false,
+      verified_at TIMESTAMPTZ
+    )
+  `;
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_design_lessons_scope
+      ON design_lessons (scope_type, scope_value, active)
+  `;
+  lessonsSchemaReady = true;
+}
+
+export interface DesignLesson {
+  id: number;
+  scope_type: string;
+  scope_value: string;
+  rule: string;
+  active: boolean;
+  verified_at: string | null;
+  created_at: string;
+}
+
+/** Hard caps. Rules accumulate silently, and a brief stuffed with twenty
+ *  half-contradictory instructions degrades designs in a way that reads as a
+ *  model regression rather than as something we did to ourselves. */
+export const MAX_ACTIVE_LESSONS = 6;
+export const MAX_LESSON_CHARS = 200;
+
+const LESSONS_TTL_MS = 60 * 1000;
+let lessonsCache: { at: number; value: DesignLesson[] } | null = null;
+
+/** Every active lesson, cached — generation must not pay a DB round-trip. */
+async function allActiveLessons(): Promise<DesignLesson[]> {
+  if (lessonsCache && Date.now() - lessonsCache.at < LESSONS_TTL_MS) {
+    return lessonsCache.value;
+  }
+  try {
+    await ensureLessonsSchema();
+    const { rows } = await sql`
+      SELECT id, scope_type, scope_value, rule, active, verified_at, created_at
+      FROM design_lessons WHERE active = true ORDER BY created_at ASC
+    `;
+    const value = rows as unknown as DesignLesson[];
+    lessonsCache = { at: Date.now(), value };
+    return value;
+  } catch (err) {
+    // Never let a lessons failure break generation — no rules is the old,
+    // known-good behaviour.
+    console.error("[allActiveLessons] failed (non-fatal):", err);
+    return [];
+  }
+}
+
+/**
+ * Active rules for one event, newest-capped.
+ *
+ * v1 is event-scoped only. The rules are injected in buildEventContext, which
+ * returns undefined for space, so a rule cannot reach a room redesign by
+ * construction — see CLAUDE.md on space being hands-off.
+ */
+export async function getLessonsForEvent(eventType: string): Promise<string[]> {
+  const all = await allActiveLessons();
+  return all
+    .filter((l) => l.scope_type === "event" && l.scope_value === eventType)
+    .slice(0, MAX_ACTIVE_LESSONS)
+    .map((l) => l.rule);
+}
+
+export async function listLessons(): Promise<DesignLesson[]> {
+  await ensureLessonsSchema();
+  const { rows } = await sql`
+    SELECT id, scope_type, scope_value, rule, active, verified_at, created_at
+    FROM design_lessons ORDER BY created_at DESC LIMIT 200
+  `;
+  return rows as unknown as DesignLesson[];
+}
+
+export async function createLesson(params: {
+  scopeType: string;
+  scopeValue: string;
+  rule: string;
+  sourceFeedbackId?: number | null;
+}): Promise<{ ok: boolean; id?: number; error?: string }> {
+  const rule = params.rule.trim().slice(0, MAX_LESSON_CHARS);
+  if (!rule) return { ok: false, error: "Empty rule" };
+  try {
+    await ensureLessonsSchema();
+    const { rows } = await sql`
+      INSERT INTO design_lessons (scope_type, scope_value, rule, source_feedback_id)
+      VALUES (${params.scopeType}, ${params.scopeValue}, ${rule}, ${params.sourceFeedbackId ?? null})
+      RETURNING id
+    `;
+    lessonsCache = null;
+    // BIGSERIAL comes back from the driver as a string; the declared type says
+    // number, so coerce rather than hand callers a lie they might do maths on.
+    return { ok: true, id: Number(rows[0]?.id) };
+  } catch (err) {
+    console.error("[createLesson] failed:", err);
+    return { ok: false, error: "Insert failed" };
+  }
+}
+
+/** Activating enforces the per-scope cap, so the brief can't grow without bound. */
+export async function setLessonActive(
+  id: number,
+  active: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await ensureLessonsSchema();
+    if (active) {
+      const { rows } = await sql`
+        SELECT scope_type, scope_value FROM design_lessons WHERE id = ${id} LIMIT 1
+      `;
+      const l = rows[0];
+      if (!l) return { ok: false, error: "Not found" };
+      const { rows: c } = await sql`
+        SELECT COUNT(*)::int AS n FROM design_lessons
+        WHERE active = true AND scope_type = ${l.scope_type} AND scope_value = ${l.scope_value}
+      `;
+      if ((c[0]?.n ?? 0) >= MAX_ACTIVE_LESSONS) {
+        return { ok: false, error: `At most ${MAX_ACTIVE_LESSONS} active rules per scope` };
+      }
+    }
+    // NOW() has to stay SQL. Interpolating it through the tag would bind the
+    // literal string "NOW()" as a parameter, and Postgres rejects that as a
+    // timestamptz at runtime — a failure no typecheck would have caught.
+    await sql`
+      UPDATE design_lessons
+      SET active = ${active},
+          verified_at = CASE WHEN ${active} THEN NOW() ELSE NULL END
+      WHERE id = ${id}
+    `;
+    lessonsCache = null;
+    return { ok: true };
+  } catch (err) {
+    console.error("[setLessonActive] failed:", err);
+    return { ok: false, error: "Update failed" };
+  }
+}
+
+export async function deleteLesson(id: number): Promise<{ ok: boolean }> {
+  try {
+    await ensureLessonsSchema();
+    await sql`DELETE FROM design_lessons WHERE id = ${id}`;
+    lessonsCache = null;
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function getFeedbackDesigns(
+  opts: { limit?: number; offset?: number; badOnly?: boolean } = {}
+) {
+  await ensureFeedbackSchema();
+  const limit = Math.min(opts.limit ?? 40, 120);
+  const offset = opts.offset ?? 0;
+  const where = opts.badOnly ? `WHERE f.rating IN ('sad','ok')` : "";
+  const { rows } = await sql.query(
+    `SELECT f.rating, f.reason, f.created_at AS rated_at,
+            d.id, d.mode, d.design_narrative, d.original_image_url,
+            d.generated_image_url, d.created_at, d.is_unlocked, d.gallery_status,
+            d.event_config, d.user_id, d.selected_items, d.removed_items,
+            (d.cleared_image_url IS NOT NULL) AS was_cleared,
+            d.room_analysis, d.products,
+            u.email AS user_email
+     FROM design_feedback f
+     JOIN designs d ON d.id = f.design_id
+     LEFT JOIN users u ON u.id = d.user_id
+     ${where}
+     ORDER BY f.created_at DESC
+     LIMIT $1 OFFSET $2`,
+    [limit, offset]
+  );
+
+  // Summarise server-side: products/room_analysis are large JSONB blobs and the
+  // admin list only needs the handful of fields that explain the outcome.
+  return rows.map((r) => {
+    const ra = asObj(r.room_analysis);
+    const products = Array.isArray(asObj(r.products)) ? (asObj(r.products) as unknown[]) : [];
+    let matched = 0;
+    let noMatch = 0;
+    for (const p of products as { amazonProduct?: unknown }[]) {
+      if (p && p.amazonProduct) matched++;
+      else noMatch++;
+    }
+    return {
+      ...r,
+      room_analysis: undefined,
+      products: undefined,
+      diagnostics: {
+        roomType: (ra as Record<string, unknown>)?.roomType ?? null,
+        clutterLevel: (ra as Record<string, unknown>)?.clutterLevel ?? null,
+        venueKind: (ra as Record<string, unknown>)?.venueKind ?? null,
+        hadStagingPlan: !!(ra as Record<string, unknown>)?.stagingPlan,
+        productCount: products.length,
+        matched,
+        noMatch,
+      },
+    };
+  });
+}
+
+/** JSONB columns arrive parsed from the driver, but tolerate a string too. */
+function asObj(raw: unknown): unknown {
+  if (typeof raw === "string") {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  return raw ?? null;
+}
+
 export async function getAllDesigns(opts: { limit?: number; offset?: number } = {}) {
   const limit = Math.min(opts.limit ?? 60, 120);
   const offset = opts.offset ?? 0;
@@ -840,6 +1074,7 @@ export async function getUpcomingEventReminders(daysAhead: number) {
 export async function getAnalyticsStats() {
   await ensurePaymentsColumns();
   await ensureImageGenSchema();
+  await ensureFeedbackSchema();
   const [totals, funnel, revenue, revenueByCurrency, roomTypes, signups, imageGenDaily, imageGenTotals] = await Promise.all([
     sql`
       SELECT
@@ -927,6 +1162,22 @@ export async function getAnalyticsStats() {
     imageGen: {
       daily: imageGenDaily.rows,
       totals: imageGenTotals.rows[0],
+    },
+    // Rating mix overall and per occasion — the per-occasion split is what makes
+    // a learned rule's effect visible, rather than just a global average.
+    feedback: {
+      last30: await getFeedbackStats(30),
+      byOccasion: (
+        await sql`
+          SELECT COALESCE(d.event_config->>'eventLabel', d.mode) AS occasion,
+                 f.rating, COUNT(*)::int AS n
+          FROM design_feedback f
+          JOIN designs d ON d.id = f.design_id
+          WHERE f.created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY occasion, f.rating
+          ORDER BY n DESC
+        `
+      ).rows,
     },
   };
 }

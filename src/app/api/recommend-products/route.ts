@@ -4,6 +4,7 @@ import { recommendProducts, parseJsonWithRetry } from "@/lib/gemini";
 import { localeFromRequest } from "@/lib/locale";
 import { notifyAdminError } from "@/lib/email";
 import { timed } from "@/lib/timing";
+import { withLessons } from "@/lib/lessons";
 
 export async function POST(request: Request) {
   try {
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
       userAnswers,
       selectedProductTypes,
       eventContext,
+      eventType,
       removeLabels,
       autoCleared,
     } = await request.json();
@@ -31,6 +33,8 @@ export async function POST(request: Request) {
     // digits inside `fitScore` — and a bare JSON.parse turned that into "We
     // couldn't create a design plan" with no second chance. Same guard
     // analyzeRoom has had since a081b74.
+    // Learned corrections ride along with the event brief. No-op for space.
+    const brief = await withLessons(eventContext, eventType);
     const recommendations = await timed("recommend-products", () =>
       parseJsonWithRetry<{ products?: unknown; designVision?: string }>(
         () =>
@@ -38,7 +42,7 @@ export async function POST(request: Request) {
             roomAnalysis,
             userAnswers,
             selectedProductTypes || [],
-            eventContext,
+            brief,
             Array.isArray(removeLabels) ? removeLabels : [],
             localeFromRequest(request),
             !!autoCleared
