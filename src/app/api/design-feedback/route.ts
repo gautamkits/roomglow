@@ -48,10 +48,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Could not save feedback" }, { status: 500 });
     }
 
-    // Alert admins post-response so a slow mailer never delays the tap. Only on
-    // a NEW low rating: re-tapping the same face must not re-alert, and adding a
-    // reason to an existing complaint sends one follow-up, not a duplicate.
-    if (ALERT_ON.includes(rating as DesignRating) && (saved.isNew || trimmed)) {
+    // Alert admins post-response so a slow mailer never delays the tap.
+    //
+    // Fire on a TRANSITION into a low rating, not on "is this row new" — a user
+    // who tapped happy and then changed to sad is an existing row, and that
+    // complaint reached nobody. Re-tapping the same face still stays quiet,
+    // and adding a reason to a standing complaint sends one follow-up.
+    const becameLow =
+      saved.isNew || saved.previousRating !== (rating as DesignRating);
+    if (ALERT_ON.includes(rating as DesignRating) && (becameLow || trimmed)) {
       const locale = localeFromRequest(request);
       after(async () => {
         const design = await getDesign(designId).catch(() => null);

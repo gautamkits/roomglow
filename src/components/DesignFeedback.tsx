@@ -42,6 +42,12 @@ export default function DesignFeedback({ designId }: { designId: string }) {
   };
 
   const pick = (r: Rating) => {
+    // Changing your mind clears the reason box with it — the text was written
+    // about the old verdict, and the server drops it for the same reason.
+    if (r !== rating) {
+      setReason("");
+      setReasonSent(false);
+    }
     setRating(r);
     setSent(true);
     void post(r);

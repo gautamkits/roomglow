@@ -204,30 +204,46 @@ export type DesignRating = "happy" | "ok" | "sad";
 /**
  * Save (or change) one person's verdict on a design.
  *
- * Returns whether this is the first time they rated it, so the caller only
- * alerts an admin on a genuinely new complaint and not on every re-tap.
+ * Returns the PREVIOUS rating, not just whether the row is new. The caller
+ * alerts on a transition INTO a low rating, and "is this row new" cannot
+ * express that: someone who taps 😍 and then changes to 😞 is not a new row,
+ * and that complaint used to reach nobody.
  */
 export async function saveDesignFeedback(params: {
   designId: string;
   userId: string;
   rating: DesignRating;
   reason?: string | null;
-}): Promise<{ ok: boolean; isNew: boolean }> {
+}): Promise<{ ok: boolean; isNew: boolean; previousRating: DesignRating | null }> {
   try {
     await ensureFeedbackSchema();
-    const { rows } = await sql`
+    const { rows: prevRows } = await sql`
+      SELECT rating, reason FROM design_feedback
+      WHERE design_id = ${params.designId}::uuid AND user_id = ${params.userId}
+      LIMIT 1
+    `;
+    const previousRating = (prevRows[0]?.rating as DesignRating | undefined) ?? null;
+    const previousReason = (prevRows[0]?.reason as string | null | undefined) ?? null;
+
+    // A reason belongs to the rating it was written about. Carrying it across a
+    // change left "the backdrop didn't match" attached to a happy face — wrong
+    // in the admin list and wrong in the stats. Keep it only while the verdict
+    // is unchanged, or when a fresh one is supplied.
+    const reason =
+      params.reason ?? (previousRating === params.rating ? previousReason : null);
+
+    await sql`
       INSERT INTO design_feedback (design_id, user_id, rating, reason)
-      VALUES (${params.designId}::uuid, ${params.userId}, ${params.rating}, ${params.reason ?? null})
+      VALUES (${params.designId}::uuid, ${params.userId}, ${params.rating}, ${reason})
       ON CONFLICT (design_id, user_id) DO UPDATE
         SET rating = EXCLUDED.rating,
-            reason = COALESCE(EXCLUDED.reason, design_feedback.reason),
+            reason = EXCLUDED.reason,
             created_at = NOW()
-      RETURNING (xmax = 0) AS inserted
     `;
-    return { ok: true, isNew: !!rows[0]?.inserted };
+    return { ok: true, isNew: previousRating === null, previousRating };
   } catch (err) {
     console.error("[saveDesignFeedback] failed:", err);
-    return { ok: false, isNew: false };
+    return { ok: false, isNew: false, previousRating: null };
   }
 }
 
