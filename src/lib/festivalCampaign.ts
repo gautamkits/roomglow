@@ -33,6 +33,40 @@ import { sendFestivalCampaignEmail } from "@/lib/email";
 const THRESHOLDS = [20, 10, 5] as const;
 export const MIN_DAYS_BEFORE = 5;
 
+/**
+ * Real dates for the movable festivals, per year.
+ *
+ * This is the "real per-year date table" the rule below asks for. `season` in
+ * events.ts is a REPRESENTATIVE date used only to show or hide an event in the
+ * picker — for Ganesh Chaturthi it says 5 Sept while the 2026 festival is
+ * actually 14 Sept, nine days out. Counting down to that would have told people
+ * the festival was a week away when they still had a fortnight, and worse, an
+ * order placed on a wrong "last chance" date arrives after the event.
+ *
+ * Rules for maintaining this:
+ * - Only add dates you have actually verified for that year.
+ * - A movable festival with no entry for the year is SKIPPED, never fallen
+ *   back to the events.ts placeholder. Silence beats a wrong countdown.
+ */
+const MOVABLE_DATES: Record<string, string[]> = {
+  ganesh_chaturthi: ["2026-09-14"],
+  navratri: ["2026-10-11"],
+  dussehra: ["2026-10-20"],
+  diwali: ["2026-11-08"],
+};
+
+/** The dated occurrence of a movable festival on/after `now`, if we know it. */
+function movableOccurrence(eventId: string, now: Date): Date | null {
+  const dates = MOVABLE_DATES[eventId];
+  if (!dates) return null;
+  for (const iso of dates) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    if (daysUntil(dt, now) >= 0) return dt;
+  }
+  return null; // table has run out — skip rather than guess
+}
+
 /** Festivals that fall on the same calendar date every year. */
 const FIXED_DATE_FESTIVALS = new Set([
   "makar_sankranti", // 14 Jan
@@ -82,9 +116,12 @@ export async function runFestivalCampaign(
   const festivals: string[] = [];
 
   for (const ev of EVENTS) {
-    if (!ev.season || !FIXED_DATE_FESTIVALS.has(ev.id)) continue;
-
-    const date = nextOccurrence(ev.season.month, ev.season.day, now);
+    if (!ev.season) continue;
+    // Fixed-date festivals use their calendar date; movable ones are eligible
+    // only when the per-year table actually knows the date for this year.
+    const movable = movableOccurrence(ev.id, now);
+    const date = movable ?? (FIXED_DATE_FESTIVALS.has(ev.id) ? nextOccurrence(ev.season.month, ev.season.day, now) : null);
+    if (!date) continue;
     const days = daysUntil(date, now);
 
     // Belt and braces: the threshold list already excludes anything under 5,

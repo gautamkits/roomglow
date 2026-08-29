@@ -1738,8 +1738,16 @@ export interface FestivalRecipient {
 }
 
 /** Opted-in users in one market, deduped by email (see getActivationCandidates). */
+/**
+ * Mailable users for a market. Excludes opt-outs and de-dupes by email.
+ *
+ * Pass `null` to reach every user regardless of locale — only for a deliberate
+ * one-off broadcast. The cron always passes a real market, because a US user
+ * should not receive every Indian festival mail; that is what the locale column
+ * was added for.
+ */
 export async function getFestivalRecipients(
-  locale: string
+  locale: string | null
 ): Promise<FestivalRecipient[]> {
   await ensureFestivalSchema();
   await ensureEmailPrefsSchema();
@@ -1747,7 +1755,7 @@ export async function getFestivalRecipients(
     SELECT DISTINCT ON (lower(u.email)) u.id, u.email, u.name
       FROM users u
      WHERE u.email <> ''
-       AND u.locale = ${locale}
+       AND (${locale}::text IS NULL OR u.locale = ${locale})
        AND NOT EXISTS (
          SELECT 1 FROM email_optouts eo WHERE eo.email = lower(u.email)
        )
