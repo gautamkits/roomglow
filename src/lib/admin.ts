@@ -1,3 +1,5 @@
+import { designTotal } from "@/lib/price";
+import type { ProductResult } from "@/lib/types";
 export function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   const allow = (process.env.ADMIN_EMAILS || "")
@@ -31,6 +33,22 @@ export function designItems(d: DesignLike): string[] {
     })
     .filter(Boolean) as string[];
   return [...new Set(names.map((n) => n.trim()))];
+}
+
+/**
+ * What the whole look costs, ready to render — "₹12,499", or "from ₹12,499"
+ * when some products have no price and the figure is only a floor.
+ *
+ * Returns null when nothing is priceable, so a card shows no price rather than
+ * a confident ₹0. Shares designTotal with the design page's "Shop the look"
+ * sidebar, so the gallery and the design itself can never quote different
+ * numbers for the same design.
+ */
+export function designPrice(d: DesignLike): string | null {
+  const prods = (parseJsonish(d.products) as ProductResult[] | null) || [];
+  const total = designTotal(prods);
+  if (!total) return null;
+  return total.partial ? `from ${total.formatted}` : total.formatted;
 }
 
 /** Build descriptive alt text for SEO from a design row. */

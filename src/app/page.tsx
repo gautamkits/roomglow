@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { unstable_cache } from "next/cache";
 import type { Metadata } from "next";
-import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles, TrendingUp } from "lucide-react";
+import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles, TrendingUp, ShoppingBag } from "lucide-react";
 import { auth } from "@/auth";
 import { getGalleryCards } from "@/lib/db";
 import { localeFromCookieHeader } from "@/lib/locale";
@@ -11,6 +11,7 @@ import { getUpcomingSeasonalEvents } from "@/lib/events";
 import {
   designTitle,
   designAltText,
+  designPrice,
   designRoomType,
   designEventType,
   matchesQuery,
@@ -48,6 +49,18 @@ const getCachedGalleryCards = (sort: string) =>
     ["gallery-cards", sort],
     { tags: ["gallery"], revalidate: 300 }
   )();
+
+/** Renders a design's basket total, or nothing when no product is priced. */
+function CardPrice({ d }: { d: Parameters<typeof designPrice>[0] }) {
+  const price = designPrice(d);
+  if (!price) return null;
+  return (
+    <span className="mt-1 flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+      <ShoppingBag size={10} className="shrink-0" />
+      <span className="truncate">{price}</span>
+    </span>
+  );
+}
 
 export default async function Home({
   searchParams,
@@ -349,6 +362,9 @@ export default async function Home({
                       {designTitle(d)}
                     </span>
                   </Link>
+                  {/* What the whole look costs. The single strongest signal that
+                      these are real, buyable products rather than a render. */}
+                  <CardPrice d={d} />
                 </div>
                 <div className="flex items-center justify-between px-3 pb-2.5 pt-1.5">
                   <LikeButton designId={d.id} initialCount={d.like_count || 0} />
