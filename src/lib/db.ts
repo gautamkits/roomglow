@@ -950,6 +950,75 @@ export async function unlockDesign(designId: string, userId: string): Promise<bo
  * never transfer it to the admin: ownership drives designVisibility, the
  * user's own gallery, and their design-ready email.
  */
+let giftColumnsReady = false;
+async function ensureGiftColumns() {
+  if (giftColumnsReady) return;
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS gifted_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS gifted_by TEXT`;
+  giftColumnsReady = true;
+}
+
+/**
+ * Hand a locked design to its owner for free.
+ *
+ * Stamped rather than silently unlocked: `is_unlocked` alone cannot tell a
+ * gift from a sale, and without the distinction the unlocked count in analytics
+ * quietly overstates how many people actually paid. Deliberately writes NO
+ * payments row for the same reason — revenue must stay revenue.
+ *
+ * Returns `alreadyUnlocked` so the caller can skip the email instead of telling
+ * someone they have been given something they already had.
+ */
+export async function giftDesign(params: {
+  designId: string;
+  adminEmail: string;
+}): Promise<{ ok: boolean; alreadyUnlocked: boolean }> {
+  try {
+    await ensureGiftColumns();
+    const { rows } = await sql`
+      SELECT is_unlocked FROM designs WHERE id = ${params.designId}::uuid LIMIT 1
+    `;
+    if (!rows.length) return { ok: false, alreadyUnlocked: false };
+    if (rows[0].is_unlocked) return { ok: true, alreadyUnlocked: true };
+
+    await sql`
+      UPDATE designs
+      SET is_unlocked = true, gifted_at = NOW(), gifted_by = ${params.adminEmail}
+      WHERE id = ${params.designId}::uuid
+    `;
+    return { ok: true, alreadyUnlocked: false };
+  } catch (err) {
+    console.error("[giftDesign] failed:", err);
+    return { ok: false, alreadyUnlocked: false };
+  }
+}
+
+/**
+ * People who reached checkout and did not pay, newest first — the gift list.
+ *
+ * Mirrors getDueCheckoutReminders' join but drops the reminder-stage and
+ * opt-out filters: an admin deciding who to gift wants the whole picture,
+ * including people who already had all three nudges and still didn't convert.
+ * Those are exactly the ones worth a gift.
+ */
+export async function getAbandonedCheckouts(limit = 50) {
+  await ensureCheckoutIntentsSchema();
+  await ensureGiftColumns();
+  const { rows } = await sql`
+    SELECT ci.id AS intent_id, ci.design_id, ci.email, ci.name, ci.amount,
+           ci.currency, ci.last_reminder_stage, ci.created_at,
+           EXTRACT(EPOCH FROM (now() - ci.created_at)) / 86400 AS days_since,
+           d.mode, d.generated_image_url, d.original_image_url,
+           d.design_narrative, d.event_config, d.is_unlocked, d.gifted_at
+      FROM checkout_intents ci
+      JOIN designs d ON d.id = ci.design_id
+     WHERE d.is_unlocked = false
+     ORDER BY ci.created_at DESC
+     LIMIT ${limit}
+  `;
+  return rows;
+}
+
 export async function unlockDesignAsAdmin(designId: string): Promise<boolean> {
   const { rowCount } = await sql`
     UPDATE designs SET is_unlocked = true WHERE id = ${designId}

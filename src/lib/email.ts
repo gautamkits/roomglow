@@ -511,6 +511,61 @@ function adminRecipients(): string[] {
  * Best-effort and flood-limited, like notifyAdminError — a burst of bad ratings
  * is exactly when you least want the mailer to become the bottleneck.
  */
+/**
+ * Tell someone a design has been unlocked for them, free.
+ *
+ * TRANSACTIONAL — deliberately not passed through `suppressed()`. This is not a
+ * pitch: it tells a person that something they made is now theirs to open. An
+ * opt-out means "stop marketing at me", and honouring it here would leave a
+ * gifted design sitting unopened forever with the recipient never told. Same
+ * reasoning that keeps design-ready and sign-in mail unsuppressible.
+ */
+export async function sendGiftDesignEmail(data: {
+  to: string;
+  name?: string | null;
+  designId: string;
+  generatedImageUrl?: string | null;
+  eventLabel?: string | null;
+  /** Optional line from the admin, shown as a quote above the design. */
+  note?: string | null;
+}): Promise<{ ok: boolean }> {
+  const link = `${SITE_URL}/design/${data.designId}`;
+  const hello = data.name ? `Hi ${esc(data.name.split(" ")[0])},` : "Hi,";
+  const occasion = data.eventLabel ? ` ${esc(data.eventLabel)}` : "";
+  const noteHtml = data.note?.trim()
+    ? `<p style="margin:0 0 18px;padding:12px 16px;border-left:3px solid ${CLAY};background:${LINEN};color:${TEXT};font-size:14px;font-style:italic;">${esc(
+        data.note.trim()
+      )}</p>`
+    : "";
+  const shot = data.generatedImageUrl
+    ? `<img src="${esc(data.generatedImageUrl)}" alt="Your design" style="width:100%;max-width:552px;border-radius:10px;border:1px solid ${BORDER};display:block;margin:0 0 18px;" />`
+    : "";
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:24px;background:${LINEN};font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#fff;border:1px solid ${BORDER};border-radius:14px;overflow:hidden;">
+    <tr><td style="background:${INK};padding:16px 24px;color:${LINEN};font-size:18px;font-weight:700;">🎁 Your${occasion} design is unlocked</td></tr>
+    <tr><td style="padding:22px 24px;">
+      <p style="font-size:15px;color:${TEXT};margin:0 0 14px;">${hello}</p>
+      <p style="font-size:15px;color:${TEXT};margin:0 0 18px;line-height:1.5;">
+        We've unlocked your${occasion} design — it's yours, on us. Open it to see the
+        full design and the shopping list with every item.
+      </p>
+      ${noteHtml}
+      ${shot}
+      <p style="margin:0 0 6px;"><a href="${esc(link)}" style="display:inline-block;background:${CLAY_CTA};color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:15px;font-weight:600;">Open your design</a></p>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  return sendMail({
+    to: { address: data.to, name: data.name },
+    subject: `🎁 Your${occasion} design is unlocked — on us`,
+    html,
+    label: "gift-design",
+  });
+}
+
 export async function notifyAdminFeedback(data: {
   designId: string;
   rating: string;

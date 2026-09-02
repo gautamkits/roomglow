@@ -61,6 +61,21 @@ interface FeedbackDesign extends AllDesign {
   };
 }
 
+interface AbandonedIntent {
+  intent_id: string;
+  design_id: string;
+  email: string;
+  name: string | null;
+  amount: number;
+  currency: string;
+  last_reminder_stage: number;
+  days_since: number;
+  mode: string;
+  generated_image_url: string;
+  original_image_url: string;
+  event_config: StoredEventConfig | null;
+}
+
 const ALL_PAGE = 60;
 
 /**
@@ -298,6 +313,7 @@ const ADMIN_TABS = [
   { key: "published", label: "Published" },
   { key: "all", label: "All designs" },
   { key: "feedback", label: "Feedback" },
+  { key: "abandoned", label: "Abandoned" },
 ] as const;
 
 /**
@@ -426,14 +442,88 @@ function FeedbackCard({ d }: { d: FeedbackDesign }) {
   );
 }
 
+/**
+ * One abandoned checkout, with a one-click gift.
+ *
+ * Gifting only unlocks a design that already exists — no re-render, so it costs
+ * nothing beyond the email. That makes it a genuinely cheap save for someone who
+ * got all the way to checkout and stopped.
+ */
+function AbandonedCard({ i, onGifted }: { i: AbandonedIntent; onGifted: () => void }) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const gift = async () => {
+    setBusy(true);
+    setMsg("");
+    const res = await fetch("/api/admin/gift-design", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designId: i.design_id, note }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (res.ok) {
+      setMsg(data.alreadyUnlocked ? "Already unlocked — no email sent." : `Gifted · emailed ${data.sentTo}`);
+      onGifted();
+    } else {
+      setMsg(data.error || "Failed");
+    }
+  };
+
+  const price = `${i.currency === "usd" ? "$" : "₹"}${Math.round((i.amount || 0) / 100)}`;
+
+  return (
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <a href={`/design/${i.design_id}`} target="_blank" rel="noreferrer" className="block">
+        <div className="grid grid-cols-2">
+          <img src={i.original_image_url} alt="Before" className="w-full aspect-square object-cover" />
+          <img src={i.generated_image_url} alt="After" className="w-full aspect-square object-cover" />
+        </div>
+      </a>
+      <div className="p-3 space-y-2">
+        <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          {i.event_config?.eventLabel || i.mode} · {price}
+        </p>
+        <p className="text-[11px] text-zinc-500">
+          {i.name || i.email} · {Math.round(i.days_since)}d ago ·{" "}
+          {i.last_reminder_stage === 0
+            ? "no reminders yet"
+            : `${i.last_reminder_stage} of 3 reminders sent`}
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={200}
+            placeholder="Personal note (optional)"
+            className="flex-1 px-2 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 outline-none focus:border-orange-700"
+          />
+          <button
+            onClick={gift}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-orange-700 text-white disabled:opacity-50 whitespace-nowrap"
+          >
+            {busy ? "…" : "🎁 Gift"}
+          </button>
+        </div>
+        {msg && <p className="text-[10px] text-emerald-700">{msg}</p>}
+      </div>
+    </div>
+  );
+}
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [tab, setTab] = useState<"pending" | "published" | "all" | "feedback">("pending");
+  const [tab, setTab] = useState<"pending" | "published" | "all" | "feedback" | "abandoned">("pending");
   const [designs, setDesigns] = useState<PendingDesign[]>([]);
   const [approved, setApproved] = useState<ApprovedDesign[]>([]);
   const [all, setAll] = useState<AllDesign[]>([]);
   const [feedback, setFeedback] = useState<FeedbackDesign[]>([]);
+  const [abandoned, setAbandoned] = useState<AbandonedIntent[]>([]);
   const [allHasMore, setAllHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -504,6 +594,19 @@ function AdminContent() {
     setLoading(false);
   }, []);
 
+  const loadAbandoned = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch("/api/admin/abandoned?limit=50");
+    if (res.status === 403) {
+      setForbidden(true);
+      setLoading(false);
+      return;
+    }
+    const data = await res.json();
+    setAbandoned(data.intents || []);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     fetch("/api/admin/features")
       .then((r) => r.json())
@@ -551,8 +654,9 @@ function AdminContent() {
     if (tab === "pending") load();
     else if (tab === "published") loadApproved();
     else if (tab === "feedback") loadFeedback();
+    else if (tab === "abandoned") loadAbandoned();
     else loadAll(0);
-  }, [status, tab, load, loadApproved, loadAll, loadFeedback]);
+  }, [status, tab, load, loadApproved, loadAll, loadFeedback, loadAbandoned]);
 
   const review = async (id: string, action: "approve" | "reject") => {
     setDesigns((d) => d.filter((x) => x.id !== id));
@@ -871,6 +975,26 @@ function AdminContent() {
                 </div>
               ))}
             </div>
+          ))}
+
+        {tab === "abandoned" &&
+          (abandoned.length === 0 ? (
+            <p className="text-center text-zinc-500 py-20">
+              Nobody abandoned a checkout. Everyone who started, paid.
+            </p>
+          ) : (
+            <>
+              <p className="text-xs text-zinc-500 mb-4">
+                Reached checkout and didn&apos;t pay. Gifting unlocks the design they
+                already made and emails it — no re-render, so it costs nothing but
+                the email.
+              </p>
+              <div className="grid gap-5 lg:grid-cols-2">
+                {abandoned.map((i) => (
+                  <AbandonedCard key={i.intent_id} i={i} onGifted={loadAbandoned} />
+                ))}
+              </div>
+            </>
           ))}
 
         {tab === "feedback" &&
