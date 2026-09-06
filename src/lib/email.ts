@@ -9,22 +9,6 @@ import { isEmailOptedOut } from "@/lib/db";
 const ZEPTOMAIL_API_URL =
   process.env.ZEPTOMAIL_API_URL || "https://api.zeptomail.in/v1.1/email";
 const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
-/**
- * Blind archive copy of every user-facing email, for the operator's own records.
- *
- * BCC rather than CC: the recipient's copy is byte-identical to what it would
- * have been, and the archive address never appears in their headers.
- *
- * Skipped for admin-only labels — those already land in the same inbox and
- * would otherwise arrive twice — and skipped when the archive address is itself
- * the recipient, which would mail a copy of a mail to its own reader.
- *
- * Unset means no archiving, so this stays inert until MAIL_ARCHIVE_BCC is
- * configured in the environment.
- */
-const MAIL_ARCHIVE_BCC = process.env.MAIL_ARCHIVE_BCC?.trim();
-/** Labels already addressed to admins; archiving them only duplicates. */
-const ADMIN_ONLY_LABELS = new Set(["admin-error", "admin-feedback"]);
 const FROM_ADDRESS = process.env.MAIL_FROM_ADDRESS || "designs@noosho.com";
 const FROM_NAME = process.env.MAIL_FROM_NAME || "Noosho";
 
@@ -98,19 +82,6 @@ export async function sendMail(opts: {
       subject: opts.subject,
       htmlbody: opts.html,
     };
-    // Archive copy. Never for admin-only labels, and never when the archive
-    // address is already on the To line.
-    if (
-      MAIL_ARCHIVE_BCC &&
-      !ADMIN_ONLY_LABELS.has(opts.label) &&
-      !recipients.some(
-        (r) => r.address.toLowerCase() === MAIL_ARCHIVE_BCC.toLowerCase()
-      )
-    ) {
-      payload.bcc = [
-        { email_address: { address: MAIL_ARCHIVE_BCC, name: "Archive" } },
-      ];
-    }
     if (opts.replyTo) {
       payload.reply_to = [
         { address: opts.replyTo.address, name: opts.replyTo.name || opts.replyTo.address },
@@ -130,32 +101,15 @@ export async function sendMail(opts: {
       };
     }
 
-    const post = () =>
-      fetch(ZEPTOMAIL_API_URL, {
-        method: "POST",
-        headers: {
-          Authorization: authHeader,
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-    let res = await post();
-
-    // The archive copy must never cost anyone their mail. ZeptoMail rejects a
-    // payload outright for a single unexpected key — that is how `headers`
-    // instead of `mime_headers` once silently killed every marketing send — so
-    // if the request fails while carrying `bcc`, drop it and send the real mail
-    // anyway. Losing the copy is an inconvenience; losing the email is not.
-    if (!res.ok && payload.bcc) {
-      const why = await res.text().catch(() => "");
-      console.error(
-        `[email] ZeptoMail ${opts.label} rejected with bcc (${res.status}) — resending without the archive copy: ${why.slice(0, 200)}`
-      );
-      delete payload.bcc;
-      res = await post();
-    }
+    const res = await fetch(ZEPTOMAIL_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
