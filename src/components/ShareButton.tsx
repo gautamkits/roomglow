@@ -6,9 +6,14 @@ import { Share2, Download, Link2, Check } from "lucide-react";
 export default function ShareButton({
   designId,
   variant = "full",
+  compact = false,
 }: {
   designId: string;
   variant?: "full" | "ghost";
+  /** Drop the word "Share" below `sm` and tighten the padding. For rows that
+   *  have to fit inside a 160px gallery card on a phone, where the label pushed
+   *  the neighbouring "View" link off the edge of the card. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -50,10 +55,13 @@ export default function ShareButton({
     <div className="relative inline-block">
       <button
         onClick={nativeShare}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${base}`}
+        aria-label="Share"
+        className={`flex items-center gap-1.5 py-1.5 text-sm rounded-lg transition-colors ${
+          compact ? "px-0 sm:px-3" : "px-3"
+        } ${base}`}
       >
         <Share2 size={15} />
-        Share
+        <span className={compact ? "hidden sm:inline" : undefined}>Share</span>
       </button>
 
       {open && (

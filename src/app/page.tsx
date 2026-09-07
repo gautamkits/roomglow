@@ -368,8 +368,11 @@ export default async function Home({
                 </div>
                 <div className="flex items-center justify-between px-3 pb-2.5 pt-1.5">
                   <LikeButton designId={d.id} initialCount={d.like_count || 0} />
-                  <div className="flex items-center gap-3">
-                    <ShareButton designId={d.id} variant="ghost" />
+                  {/* gap-2 on phones: like + share + view had to fit a 158px
+                      row inside the 2-up grid, and at gap-3 with a "Share"
+                      label the row needed 196px — "View" was clipped to "V". */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <ShareButton designId={d.id} variant="ghost" compact />
                     <Link
                       href={`/design/${d.id}`}
                       className="group/view inline-flex items-center gap-0.5 text-xs font-medium text-orange-700 hover:text-orange-800 transition-colors"
