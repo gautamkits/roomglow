@@ -317,6 +317,7 @@ export default async function Home({
                     blurBefore={d.original_blur}
                     blurAfter={d.generated_blur}
                     aspect="aspect-[4/5] sm:aspect-[4/3]"
+                    objectPosition="object-[50%_38%] sm:object-center"
                     rounded={false}
                     showLabels={false}
                     priority={i < 4}

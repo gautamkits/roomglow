@@ -10,6 +10,12 @@ interface BeforeAfterSliderProps {
   beforeLabel?: string;
   afterLabel?: string;
   rounded?: boolean;
+  /** Tailwind object-position class(es) for the cropped fill, e.g.
+   *  "object-[50%_38%]". Only meaningful alongside `aspect`. A frame taller
+   *  than the photo crops it, and a room's subject sits above centre — dead
+   *  centre fills the bottom half with carpet. Both images get the same value
+   *  so the before/after wipe stays registered. */
+  objectPosition?: string;
   /** Tailwind aspect class (e.g. "aspect-[4/3]"). When set, images are
    *  optimized via next/image (fill) and cropped to the ratio. */
   aspect?: string;
@@ -28,6 +34,7 @@ export default function BeforeAfterSlider({
   afterLabel = "After",
   rounded = true,
   aspect,
+  objectPosition = "",
   showLabels = true,
   blurBefore,
   blurAfter,
@@ -95,7 +102,7 @@ export default function BeforeAfterSlider({
             sizes={sizes}
             draggable={false}
             priority={priority}
-            className="object-cover"
+            className={`object-cover ${objectPosition}`}
             {...(blurAfter ? { placeholder: "blur" as const, blurDataURL: blurAfter } : {})}
           />
           <Image
@@ -104,7 +111,7 @@ export default function BeforeAfterSlider({
             fill
             sizes={sizes}
             draggable={false}
-            className="object-cover"
+            className={`object-cover ${objectPosition}`}
             style={beforeClip}
             {...(blurBefore ? { placeholder: "blur" as const, blurDataURL: blurBefore } : {})}
           />
