@@ -305,12 +305,18 @@ export default async function Home({
                 className="group rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-orange-200 dark:hover:border-orange-900/50 hover:shadow-xl hover:shadow-orange-900/5 transition-all duration-200"
               >
                 <div className="relative">
+                  {/* Portrait on phones so two rows fill the screen instead of
+                      three — the reason a Myntra screenful shows four products
+                      and ours showed six. 4:5 rather than their 3:4: a room
+                      photo is landscape, and every step taller crops more of it
+                      away. Back to 4:3 from sm up, where the grid is wide
+                      enough not to need it. */}
                   <BeforeAfterSlider
                     beforeSrc={d.original_image_url}
                     afterSrc={d.generated_image_url}
                     blurBefore={d.original_blur}
                     blurAfter={d.generated_blur}
-                    aspect="aspect-[4/3]"
+                    aspect="aspect-[4/5] sm:aspect-[4/3]"
                     rounded={false}
                     showLabels={false}
                     priority={i < 4}
