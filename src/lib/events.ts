@@ -1,5 +1,6 @@
 import type { Locale } from "@/lib/locale";
 import type { EventConfig } from "@/lib/types";
+import { verifiedOccurrence } from "@/lib/festivalDates";
 
 /**
  * The one-paragraph event brief threaded into every AI step (analyze,
@@ -212,6 +213,11 @@ export interface EventDefinition {
   // used only for visibility gating — the actual reminder date is whatever the
   // user picks in SetupPanel.
   season?: { month: number; day: number };
+  // How many days the festival runs PAST its start date. Ganesh Chaturthi is ten
+  // days; dropping it from the picker on day two, while people are still
+  // decorating and the campaign is still mailing, is the bug this prevents.
+  // Absent (0) = a one-day event, offered through the day itself and no longer.
+  tailDays?: number;
   // Relationship festivals (Raksha Bandhan, Valentine's) are calendar events but
   // are centered on a person, so they still ask "who's it for?" — but not a date
   // (that's set by the calendar). Personal events imply this via `!season`.
@@ -341,7 +347,8 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Traditional diya", "Rangoli", "Royal", "Modern minimal", "Floral"],
     colorSchemes: ["Marigold & red", "Gold & maroon", "Purple & gold", "Pink & orange"],
     markets: ["IN"],
-    season: { month: 10, day: 31 }, // movable (Oct–Nov)
+    season: { month: 10, day: 31 }, // movable (Oct–Nov) — real dates in festivalDates.ts
+    tailDays: 2, // Diwali proper, then Govardhan Puja and Bhai Dooj
     completionItems: [
       { category: "Backdrop", query: "diwali backdrop decoration" },
       { category: "Sweets", query: "diwali sweets box" },
@@ -489,7 +496,8 @@ export const EVENTS: EventDefinition[] = [
       { label: "Eco-friendly", subTheme: "Eco-friendly", colorScheme: "Green & gold" },
     ],
     markets: ["IN"],
-    season: { month: 9, day: 5 }, // movable (Aug–Sep)
+    season: { month: 9, day: 5 }, // movable (Aug–Sep) — real dates in festivalDates.ts
+    tailDays: 10, // runs to Anant Chaturdashi
     completionItems: [
       { category: "Backdrop", query: "ganpati mandap backdrop cloth" },
       { category: "Ganesh idol", query: "eco friendly ganesh idol" },
@@ -506,7 +514,8 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Garba / dandiya", "Traditional", "Floral", "Royal", "Modern minimal"],
     colorSchemes: ["Marigold & red", "Bright & bold", "Rainbow", "Gold & maroon"],
     markets: ["IN"],
-    season: { month: 9, day: 29 }, // movable (Sep–Oct)
+    season: { month: 9, day: 29 }, // movable (Sep–Oct) — real dates in festivalDates.ts
+    tailDays: 9, // nine nights
     completionItems: [
       { category: "Backdrop", query: "navratri backdrop decoration" },
       { category: "Dandiya", query: "dandiya sticks decorated" },
@@ -523,7 +532,7 @@ export const EVENTS: EventDefinition[] = [
     subThemes: ["Traditional", "Floral marigold", "Royal", "Modern minimal"],
     colorSchemes: ["Marigold & red", "Gold & maroon", "Red & yellow", "Green & gold"],
     markets: ["IN"],
-    season: { month: 10, day: 11 }, // movable (October)
+    season: { month: 10, day: 11 }, // movable (October) — real dates in festivalDates.ts
     completionItems: [
       { category: "Backdrop", query: "dussehra backdrop decoration" },
       { category: "Decorations", query: "dussehra decoration items" },
@@ -716,13 +725,30 @@ function startOfDay(now: Date): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
-/** A festival's next occurrence of its `season` anchor — this year's date, rolled
- *  to next year once it's past. Null for evergreen events (no `season`). */
+/** A festival's current-or-next occurrence. Null for evergreen events (no
+ *  `season`).
+ *
+ *  Prefers a VERIFIED date from festivalDates.ts, falling back to the `season`
+ *  anchor — which for a movable festival can be a week or two out. That gap is
+ *  why the anchor alone is not enough: Ganesh Chaturthi's anchor (5 Sept) rolled
+ *  to next year on 6 Sept 2026 and took the event out of the picker eight days
+ *  before the real festival on the 14th.
+ *
+ *  A festival stays on its current occurrence until the whole run is over, so a
+ *  ten-day festival does not vanish on day two. Every visibility and countdown
+ *  helper below derives from this one function. */
 function nextSeasonOccurrence(ev: EventDefinition, today: Date): Date | null {
   if (!ev.season) return null;
+  const tail = ev.tailDays ?? 0;
+
+  const verified = verifiedOccurrence(ev.id, today, tail);
+  if (verified) return verified;
+
   const { month, day } = ev.season;
   const occ = new Date(today.getFullYear(), month - 1, day);
-  return occ < today ? new Date(today.getFullYear() + 1, month - 1, day) : occ;
+  const runEnd = new Date(occ);
+  runEnd.setDate(runEnd.getDate() + tail); // setDate handles month/year overflow
+  return runEnd < today ? new Date(today.getFullYear() + 1, month - 1, day) : occ;
 }
 
 /** Whether a seasonal festival's next occurrence is close enough to offer now.

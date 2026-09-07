@@ -1,4 +1,5 @@
 import { EVENTS } from "@/lib/events";
+import { verifiedOccurrence } from "@/lib/festivalDates";
 import {
   getFestivalRecipients,
   claimFestivalSend,
@@ -34,37 +35,21 @@ const THRESHOLDS = [20, 10, 5] as const;
 export const MIN_DAYS_BEFORE = 5;
 
 /**
- * Real dates for the movable festivals, per year.
+ * The dated occurrence of a movable festival on/after `now`, if we know it.
  *
- * This is the "real per-year date table" the rule below asks for. `season` in
- * events.ts is a REPRESENTATIVE date used only to show or hide an event in the
- * picker — for Ganesh Chaturthi it says 5 Sept while the 2026 festival is
- * actually 14 Sept, nine days out. Counting down to that would have told people
- * the festival was a week away when they still had a fortnight, and worse, an
- * order placed on a wrong "last chance" date arrives after the event.
+ * The per-year table now lives in `festivalDates.ts`, shared with the event
+ * picker so the two cannot disagree — a countdown email for a festival the
+ * picker has already dropped sends people to a create page that can't serve
+ * them, which is exactly what happened to Ganesh Chaturthi.
  *
- * Rules for maintaining this:
- * - Only add dates you have actually verified for that year.
- * - A movable festival with no entry for the year is SKIPPED, never fallen
- *   back to the events.ts placeholder. Silence beats a wrong countdown.
+ * No tail is passed: a campaign counts down to the START of a festival, so a
+ * run already under way must not resolve to a date in the past. And unlike the
+ * picker, no entry means SKIP — never fall back to the events.ts placeholder.
+ * Silence beats a wrong "last chance to order" date.
  */
-const MOVABLE_DATES: Record<string, string[]> = {
-  ganesh_chaturthi: ["2026-09-14"],
-  navratri: ["2026-10-11"],
-  dussehra: ["2026-10-20"],
-  diwali: ["2026-11-08"],
-};
-
-/** The dated occurrence of a movable festival on/after `now`, if we know it. */
 function movableOccurrence(eventId: string, now: Date): Date | null {
-  const dates = MOVABLE_DATES[eventId];
-  if (!dates) return null;
-  for (const iso of dates) {
-    const [y, m, d] = iso.split("-").map(Number);
-    const dt = new Date(y, m - 1, d);
-    if (daysUntil(dt, now) >= 0) return dt;
-  }
-  return null; // table has run out — skip rather than guess
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return verifiedOccurrence(eventId, today);
 }
 
 /** Festivals that fall on the same calendar date every year. */
