@@ -1,7 +1,7 @@
 import type { Locale } from "@/lib/locale";
 import type { OccasionProduct } from "@/lib/types";
 import { getMakeoverStyle } from "@/lib/makeover";
-import { searchProducts } from "@/lib/amazon";
+import { searchProducts, MAKEOVER_QUALITY } from "@/lib/amazon";
 import { recommendMakeoverExtras } from "@/lib/gemini";
 
 // In-memory cache (per serverless instance, 24h TTL) so repeat views of the
@@ -39,7 +39,8 @@ export async function getMakeoverExtras(
 
   const results = await Promise.all(
     queries.map(async (item) => {
-      const found = await searchProducts(item.query, 2, locale);
+      // Same known-brand + rating bar as the main makeover outfit.
+      const found = await searchProducts(item.query, 2, locale, MAKEOVER_QUALITY);
       return found.map((p) => ({ ...p, category: item.category }));
     })
   );

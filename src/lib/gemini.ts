@@ -3,6 +3,7 @@ import sharp from "sharp";
 import type { RoomAnalysis, RoomGeometry } from "./types";
 import type { Locale } from "./locale";
 import { timed } from "./timing";
+import { brandHintForPrompt } from "./brands";
 
 /**
  * Per-step thinking budget for the `gemini-2.5-flash` calls.
@@ -1171,9 +1172,11 @@ export async function recommendOutfit(
   styleType: string,
   styleContext: string,
   selectedItems: string[],
-  gender?: string
+  gender?: string,
+  locale: "IN" | "US" = "IN"
 ): Promise<string> {
   const genderHint = gender ? `Gender/preference: ${gender}.` : "";
+  const brandHint = brandHintForPrompt(locale);
   const itemsList = selectedItems.length > 0
     ? `The user specifically wants these items: ${selectedItems.join(", ")}.`
     : "";
@@ -1192,10 +1195,15 @@ ${itemsList}
 
 Create ONE cohesive, complete outfit that this person wears ALL AT ONCE. For each item provide:
 - category: specific clothing item (e.g. "wrap dress", "slim blazer", "strappy heels")
-- searchQuery: Amazon search query, 3-5 words (e.g. "women camel wrap dress", "slim fit navy blazer"). Include the gender and color.
+- searchQuery: Amazon search query that MUST start with a well-known brand, then gender, colour and garment — 4-6 words (e.g. "Levi's women camel wrap dress", "Van Heusen men navy slim blazer"). Pick the brand from this list, choosing one that genuinely sells that category: ${brandHint}. Never write a generic query with no brand.
 - placement: body zone for the virtual try-on image (e.g. "upper body / torso", "lower body / legs", "feet", "over right shoulder as a bag", "neck and ears as jewellery")
 - reason: WHY this silhouette/color flatters THIS person's specific body type and skin tone (1 sentence)
 - colorSuggestion: exact color (e.g. "camel tan", "emerald green", "ivory white")
+
+QUALITY BAR — this is a paid styling service, not a bargain-bin list:
+- Every item must be from a real, recognisable brand a shopper would trust; no unbranded or generic listings.
+- Prefer the label's mainline quality pieces over its cheapest filler, and match the brand to the style (sportswear brands for gym, tailoring brands for office/formal).
+- Vary the brands across the outfit — do not put the same brand on every item.
 
 CRITICAL RULES — the outfit must be physically wearable as a single look:
 - Return EXACTLY ONE item per body zone. NEVER include two tops, two bottoms, or two pairs of footwear — a person cannot wear both a shirt and a polo, or both pants and shorts.
@@ -1257,7 +1265,7 @@ The person already has their main garments (top, bottom, footwear). Suggest 4-6 
 
 For each item provide:
 - category: a short label (e.g. "Watch", "Bag", "Sunglasses")
-- query: a 3-5 word ${marketplace} search query that MUST include the gender word "${genderWord === "unisex" ? "unisex" : genderWord.replace("'s", "")}" and be specific enough to return relevant results (e.g. "men brown leather watch", "women straw beach hat").
+- query: a 4-6 word ${marketplace} search query that MUST start with a well-known brand and include the gender word "${genderWord === "unisex" ? "unisex" : genderWord.replace("'s", "")}" (e.g. "Fossil men brown leather watch", "Ray-Ban unisex aviator sunglasses"). Pick brands from: ${brandHintForPrompt(locale === "US" ? "US" : "IN")}. Choose quality pieces from recognisable labels — never an unbranded generic listing.
 
 Keep every item gender-appropriate for a ${genderWord} look (do not suggest earrings or a clutch for a men's look unless unisex). Keep them cohesive with the ${styleLabel} style.`;
 

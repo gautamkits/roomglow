@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { recommendOutfit, parseJsonWithRetry } from "@/lib/gemini";
 import { getFeatures } from "@/lib/db";
+import { localeFromRequest } from "@/lib/locale";
 import { notifyAdminError } from "@/lib/email";
 
 export async function POST(request: Request) {
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
     }
 
     const { personAnalysis, styleType, styleContext, selectedItems, gender } = await request.json();
+    // Locale picks the brand list the stylist is told to shop from — amazon.in
+    // and amazon.com carry different labels.
+    const locale = localeFromRequest(request);
     if (!personAnalysis || !styleType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
@@ -28,7 +32,8 @@ export async function POST(request: Request) {
           styleType,
           styleContext || styleType,
           selectedItems || [],
-          gender
+          gender,
+          locale
         ),
       3,
       "recommendOutfit"

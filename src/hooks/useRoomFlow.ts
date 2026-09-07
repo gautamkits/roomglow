@@ -672,7 +672,8 @@ export function useRoomFlow() {
         );
         const { categories } = await callStep(
           "/api/search-products",
-          { products: p.recs },
+          // Mode drives the makeover-only known-brand/quality bar server-side.
+          { products: p.recs, mode },
           "We couldn't find products on Amazon. Try selecting different items."
         );
         p.categories = categories;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sourceCategoryCandidates } from "@/lib/amazon";
+import { sourceCategoryCandidates, MAKEOVER_QUALITY } from "@/lib/amazon";
 import { localeFromRequest } from "@/lib/locale";
 import type { ProductRecommendation } from "@/lib/types";
 import { notifyAdminError } from "@/lib/email";
@@ -13,13 +13,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
     }
 
-    const body = await request.json() as { products: ProductRecommendation[] };
-    const { products } = body;
+    const body = await request.json() as {
+      products: ProductRecommendation[];
+      mode?: string;
+    };
+    const { products, mode } = body;
     if (!products?.length) {
       return NextResponse.json({ error: "No products" }, { status: 400 });
     }
 
     const locale = localeFromRequest(request);
+
+    // Makeover only: an outfit has to be a real, well-rated label to be worth
+    // wearing. Space and event decor stays unfiltered — most legitimate decor
+    // sellers are unbranded, so the same bar would empty those categories.
+    const quality = mode === "makeover" ? MAKEOVER_QUALITY : undefined;
 
     // Get top 5 candidates per category for AI curation. Retry/backoff and the
     // bare-category fallback both live in sourceCategoryCandidates so this path
@@ -27,7 +35,9 @@ export async function POST(request: Request) {
     const categories = await timed(
       "search-products",
       () =>
-        Promise.all(products.map((rec) => sourceCategoryCandidates(rec, locale, 5))),
+        Promise.all(
+          products.map((rec) => sourceCategoryCandidates(rec, locale, 5, quality))
+        ),
       // These run in parallel, so total ms is the slowest category, not the sum
       // — a single retrying category sets the wall-clock for the whole step.
       { categories: products.length }

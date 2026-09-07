@@ -1,4 +1,5 @@
 import { type Locale, AFFILIATE_TAGS, AMAZON_DOMAINS } from "@/lib/locale";
+import { matchKnownBrand } from "@/lib/brands";
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY!;
 
@@ -17,7 +18,31 @@ export interface AmazonSearchResult {
   affiliateUrl: string;
   rating: number;
   asin: string;
+  /** Number of customer ratings, when upstream reports it — the other half of
+   *  "is this any good": a 5.0 from three people is not a quality signal. */
+  ratingsCount?: number;
+  /** Known brand matched in the title, when a brand filter was applied. */
+  brand?: string;
 }
+
+/**
+ * Optional quality bar applied to search results. Off by default: space and
+ * event decor is dominated by legitimately unbranded sellers, so gating those
+ * would empty their categories. Used by the **makeover** flow only.
+ */
+export interface QualityFilter {
+  /** Keep only listings whose title names a brand from `lib/brands.ts`. */
+  requireKnownBrand?: boolean;
+  minRating?: number;
+  minRatings?: number;
+}
+
+/** The bar for Personal Makeover: a real label, well rated, by enough people. */
+export const MAKEOVER_QUALITY: QualityFilter = {
+  requireKnownBrand: true,
+  minRating: 3.8,
+  minRatings: 50,
+};
 
 export type AmazonSearchStatus = "ok" | "no_results" | "upstream_error";
 
@@ -32,6 +57,11 @@ export interface AmazonSearchOutcome {
   rawCount: number;
   /** Upstream HTTP status of the final attempt, when it failed. */
   httpStatus?: number;
+  /** Which rung of the quality ladder produced `results` — "strict" means the
+   *  full bar was met; "none" that nothing cleared any rung and we returned
+   *  unfiltered listings rather than leave the user an empty outfit slot.
+   *  Absent when no filter was requested. */
+  filterTier?: "strict" | "brand" | "rated" | "none";
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -51,7 +81,8 @@ function isRetryableStatus(status: number): boolean {
 export async function searchProductsDetailed(
   searchQuery: string,
   count: number = 5,
-  locale: Locale = "IN"
+  locale: Locale = "IN",
+  quality?: QualityFilter
 ): Promise<AmazonSearchOutcome> {
   const params = new URLSearchParams({
     query: searchQuery,
@@ -102,22 +133,28 @@ export async function searchProductsDetailed(
       const tag = AFFILIATE_TAGS[locale];
       const domain = AMAZON_DOMAINS[locale];
 
-      const results: AmazonSearchResult[] = products
+      // Map the WHOLE page before slicing: a quality bar picks from the full
+      // page of matches, not from whichever five happened to come back first.
+      const usable: AmazonSearchResult[] = products
         .filter((p: Record<string, string>) => p.product_photo && p.product_price)
-        .slice(0, count)
         .map((item: Record<string, string>) => {
           const asin = item.asin || "";
+          const title = item.product_title || "Unknown Product";
           return {
-            title: item.product_title || "Unknown Product",
+            title,
             price: item.product_price || "Price unavailable",
             imageUrl: item.product_photo || "",
             affiliateUrl: asin
               ? `https://www.${domain}/dp/${asin}?tag=${tag}`
               : item.product_url || "",
             rating: parseFloat(item.product_star_rating) || 0,
+            ratingsCount: parseRatingsCount(item.product_num_ratings),
+            brand: matchKnownBrand(title, item.brand) ?? undefined,
             asin,
           };
         });
+
+      const { results, tier } = applyQuality(usable, quality, count, searchQuery);
 
       // Second, previously invisible way a category goes empty: upstream had
       // matches but every one of them lacked a photo or a price.
@@ -131,6 +168,7 @@ export async function searchProductsDetailed(
         results,
         status: results.length ? "ok" : "no_results",
         rawCount,
+        ...(tier ? { filterTier: tier } : {}),
       };
     } catch (error) {
       // Network failure or per-attempt timeout — both retryable.
@@ -149,6 +187,76 @@ export async function searchProductsDetailed(
   return { results: [], status: "upstream_error", rawCount: 0, httpStatus: lastHttpStatus };
 }
 
+/** Upstream sends "1,234", 1234, or nothing at all. A reported 0 is treated as
+ *  "unknown", not "nobody rated it" — this API omits rating data for plenty of
+ *  well-reviewed listings, and rejecting those would empty most categories. The
+ *  best-first sort already pushes unrated listings behind rated ones. */
+function parseRatingsCount(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const n = parseInt(String(raw).replace(/[^0-9]/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : undefined;
+}
+
+function meetsRatingBar(p: AmazonSearchResult, q: QualityFilter): boolean {
+  if (q.minRating !== undefined && p.rating > 0 && p.rating < q.minRating) return false;
+  // A listing with no rating count reported is not evidence of a bad product —
+  // only reject when upstream actually gave us a number and it is too small.
+  if (q.minRatings !== undefined && p.ratingsCount !== undefined && p.ratingsCount < q.minRatings) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Apply the quality bar, relaxing it rung by rung rather than handing the user
+ * an empty outfit slot: brand + ratings → brand only → ratings only →
+ * unfiltered. Sorted best-first within whichever rung answers.
+ */
+function applyQuality(
+  usable: AmazonSearchResult[],
+  quality: QualityFilter | undefined,
+  count: number,
+  searchQuery: string
+): { results: AmazonSearchResult[]; tier?: "strict" | "brand" | "rated" | "none" } {
+  if (!quality) return { results: usable.slice(0, count) };
+
+  const branded = (p: AmazonSearchResult) => !quality.requireKnownBrand || !!p.brand;
+  const rated = (p: AmazonSearchResult) => meetsRatingBar(p, quality);
+
+  const rungs: { tier: "strict" | "brand" | "rated" | "none"; keep: (p: AmazonSearchResult) => boolean }[] = [
+    { tier: "strict", keep: (p) => branded(p) && rated(p) },
+    { tier: "brand", keep: branded },
+    { tier: "rated", keep: rated },
+    { tier: "none", keep: () => true },
+  ];
+
+  // Upstream repeats the same ASIN across a page often enough that an outfit
+  // slot could otherwise offer the curator five copies of one product.
+  const seen = new Set<string>();
+  const pool = usable.filter((p) => {
+    if (!p.asin) return true;
+    if (seen.has(p.asin)) return false;
+    seen.add(p.asin);
+    return true;
+  });
+
+  for (const rung of rungs) {
+    const hits = pool.filter(rung.keep);
+    if (!hits.length) continue;
+    // Best-first: rating, then how many people rated it.
+    hits.sort(
+      (a, b) => b.rating - a.rating || (b.ratingsCount ?? 0) - (a.ratingsCount ?? 0)
+    );
+    if (rung.tier !== "strict") {
+      console.warn(
+        `Amazon search "${searchQuery}": quality bar relaxed to "${rung.tier}" (${pool.length} usable listings)`
+      );
+    }
+    return { results: hits.slice(0, count), tier: rung.tier };
+  }
+  return { results: [], tier: "none" };
+}
+
 /** ~300ms, ~900ms, with jitter so concurrent category searches don't retry in lockstep. */
 function backoffMs(attempt: number): number {
   return BASE_BACKOFF_MS * Math.pow(3, attempt - 1) + Math.random() * 150;
@@ -159,9 +267,10 @@ function backoffMs(attempt: number): number {
 export async function searchProducts(
   searchQuery: string,
   count: number = 5,
-  locale: Locale = "IN"
+  locale: Locale = "IN",
+  quality?: QualityFilter
 ): Promise<AmazonSearchResult[]> {
-  const { results } = await searchProductsDetailed(searchQuery, count, locale);
+  const { results } = await searchProductsDetailed(searchQuery, count, locale, quality);
   return results;
 }
 
@@ -195,14 +304,15 @@ export async function sourceCategoryCandidates(
     colorSuggestion: string;
   },
   locale: Locale,
-  count: number = 5
+  count: number = 5,
+  quality?: QualityFilter
 ): Promise<SourcedCategory> {
-  let outcome = await searchProductsDetailed(rec.searchQuery, count, locale);
+  let outcome = await searchProductsDetailed(rec.searchQuery, count, locale, quality);
   let usedFallbackQuery = false;
 
   if (outcome.status === "no_results" && rec.category !== rec.searchQuery) {
     usedFallbackQuery = true;
-    outcome = await searchProductsDetailed(rec.category, count, locale);
+    outcome = await searchProductsDetailed(rec.category, count, locale, quality);
   }
 
   // One structured line per category: a silent zero used to leave no trace at all.
@@ -216,6 +326,7 @@ export async function sourceCategoryCandidates(
       finalCount: outcome.results.length,
       status: outcome.status,
       httpStatus: outcome.httpStatus,
+      filterTier: outcome.filterTier,
       locale,
     })
   );

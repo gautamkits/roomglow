@@ -4,7 +4,7 @@ import {
   generateDesignImage,
   type CategoryCandidates,
 } from "@/lib/gemini";
-import { sourceCategoryCandidates } from "@/lib/amazon";
+import { sourceCategoryCandidates, MAKEOVER_QUALITY } from "@/lib/amazon";
 import { buildEventContext } from "@/lib/events";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
 import type { Locale } from "@/lib/locale";
@@ -99,7 +99,14 @@ export async function regenerateDesign(opts: {
   // 2. Source candidates, mirroring /api/search-products (same 5-per-category
   //    and the same fall back to the bare category when a query finds nothing).
   const categories: CategoryCandidates[] = await Promise.all(
-    recs.map((rec) => sourceCategoryCandidates(rec, opts.locale, 5))
+    recs.map((rec) =>
+      sourceCategoryCandidates(
+        rec,
+        opts.locale,
+        5,
+        opts.mode === "makeover" ? MAKEOVER_QUALITY : undefined
+      )
+    )
   );
 
   // 3. Pick one per category.
