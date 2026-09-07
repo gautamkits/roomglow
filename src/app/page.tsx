@@ -290,7 +290,11 @@ export default async function Home({
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 -mx-3 sm:mx-0">
+            {/* On a phone the grid bleeds out of the page's px-5 to an 8px
+                margin with an 8px gutter — the spacing Myntra's product grid
+                uses at this width — taking each card from 160px to 176px.
+                Text blocks above and below keep the wider page padding. */}
             {pageDesigns.map((d, i) => (
               <TiltCard
                 key={d.id}
