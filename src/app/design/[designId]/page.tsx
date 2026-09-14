@@ -1,3 +1,4 @@
+import type { WallPaint } from "@/lib/types";
 import type { Metadata } from "next";
 import { auth } from "@/auth";
 import { getDesign } from "@/lib/db";
@@ -195,6 +196,11 @@ export default async function DesignPage({
                 selected_items: d.selected_items,
                 removed_items: d.removed_items,
                 kept_items: keptFromDesign(d),
+                wall_paint:
+                  d.mode === "space"
+                    ? ((parseJsonish(d.room_analysis) as { wallPaint?: WallPaint } | null)
+                        ?.wallPaint ?? null)
+                    : null,
               }
             : null
         }

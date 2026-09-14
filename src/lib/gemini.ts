@@ -1,6 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import sharp from "sharp";
-import type { RoomAnalysis, RoomGeometry } from "./types";
+import type { RoomAnalysis, RoomGeometry, WallPaint } from "./types";
 import type { Locale } from "./locale";
 import { timed } from "./timing";
 import { brandHintForPrompt } from "./brands";
@@ -184,6 +184,16 @@ const roomAnalysisSchema = {
     removableObjects: { type: Type.ARRAY, items: removableObjectSchema },
     venueKind: { type: Type.STRING },
     stagingPlan: stagingPlanSchema,
+    // Space only, and OPTIONAL: this schema is shared with the event branch.
+    // analyzeRoom strips it from event output.
+    wallCondition: {
+      type: Type.OBJECT,
+      properties: {
+        needsRepaint: { type: Type.BOOLEAN },
+        issues: { type: Type.STRING },
+      },
+      required: ["needsRepaint", "issues"],
+    },
   },
   required: [
     "roomType",
@@ -217,6 +227,9 @@ Fill in:
 - existingFurniture: array of items you actually see
 - lightingCondition: "bright" | "moderate" | "dim"
 - colorPalette: 3 hex colors representing the room
+- wallCondition: judge the painted walls you can see.
+  - needsRepaint: true ONLY for visible damage — peeling or flaking paint, damp patches or water stains, exposed plaster or brick, cracks, heavy patchy discolouration or grime. Walls that are sound but plain, dated, or a colour you dislike are FALSE. Wallpaper, tile, stone, wood panelling and deliberate feature walls are FALSE.
+  - issues: one short phrase naming the damage you see (e.g. "peeling paint and exposed brick on the right wall"), or "none".
 - suggestedProducts: 6-8 products
 - clutterLevel: "clean" if the room is empty or nearly so (good blank canvas), "moderate" if it has some furniture/objects, "cluttered" if it is full of furniture and items that would crowd a new design
 - removableObjects: ONLY the LARGE, MAIN movable pieces the user might realistically want to remove or replace — substantial furniture and large décor (e.g. sofa, bed, dining/coffee table, chairs, shelving unit, rug, large floor lamp, large potted plant, cabinet/console, TV). Each has a short snake_case "id" and a human "label". EXCLUDE permanent architecture (walls, floor, ceiling, windows, doors, built-in cabinetry) AND all small clutter / tabletop items (remotes, bottles, cups, thermos, food/fruit, books, papers, chargers, cushions, small decor and any loose small object) — those are tidied away automatically and must NOT be listed. If a listed large object rests on another listed object, set "restsOn" to that supporting object's "id" (e.g. a lamp on a side table, a TV on a console) — it must be EXACTLY one of the ids you listed above, copied verbatim, and nothing else; omit it entirely when the object stands on the floor. Return an empty array only if there are no large movable pieces.
@@ -320,7 +333,29 @@ CRITICAL RULES for suggestedProducts:
     },
   });
 
-  return enforceVenueBranch(response.text ?? "");
+  const text = response.text ?? "";
+  return enforceVenueBranch(eventContext ? stripKeys(text, ["wallCondition"]) : text);
+}
+
+/** Remove top-level keys from a model JSON response. Keeps space-only fields
+ *  out of event output, since the schemas are shared and the model fills in
+ *  fields it was never instructed about. Unparseable input is returned
+ *  untouched for the caller's retry logic to handle. */
+function stripKeys(json: string, keys: string[]): string {
+  if (!json) return json;
+  try {
+    const parsed = JSON.parse(json);
+    let changed = false;
+    for (const k of keys) {
+      if (parsed && typeof parsed === "object" && k in parsed) {
+        delete parsed[k];
+        changed = true;
+      }
+    }
+    return changed ? JSON.stringify(parsed) : json;
+  } catch {
+    return json;
+  }
 }
 
 /**
@@ -794,7 +829,10 @@ export async function generateDesignImage(
   // True when the room image passed in has already been through emptyRoom, so
   // the prompt must stop describing furniture as present. See furnitureBlock
   // and the scaleReferences note.
-  canvasCleared: boolean = false
+  canvasCleared: boolean = false,
+  // Space only: repaint damaged walls in this colour. Ignored for events, and
+  // absent for every room with sound walls — which leaves the prompt identical.
+  wallPaint?: WallPaint
 ): Promise<{
   generatedImage: string;
   hotspots: HotspotBox[];
@@ -908,11 +946,16 @@ SCALE CONSTRAINTS (critical — respect the room's REAL size):
 - ALL existing furniture (sofa, tables, shelves, etc.) — keep them exactly where they are.
 - All cables, outlets, and existing items stay as-is.`;
 
+  const repaint = !eventContext && wallPaint;
+  const wallLine = repaint
+    ? `- The exact same wall positions, openings, windows, doors, switches and outlets — BUT REPAINT THE WALLS: repair all peeling paint, damp stains, cracks and exposed brick or plaster, and finish every visible painted wall smoothly and evenly in ${wallPaint.colorName} (${wallPaint.hex}), ${wallPaint.finish} finish, lit consistently with the room. Leave tile, wood and stone surfaces unpainted.`
+    : `- The exact same walls, wall color, and wall texture.`;
+
   parts.push({
     text: `${intro}${scaleBlock}
 
 MUST PRESERVE EXACTLY (never change the architecture):
-- The exact same walls, wall color, and wall texture. Do NOT add, extend, close off, or invent any walls — if a side of the room is open, half-walls, or has no visible wall in the photo, keep it exactly that open (do NOT enclose the space or "complete" the room).
+${wallLine} Do NOT add, extend, close off, or invent any walls — if a side of the room is open, half-walls, or has no visible wall in the photo, keep it exactly that open (do NOT enclose the space or "complete" the room).
 - The exact same floor and flooring material
 - The exact same ceiling, ceiling fan, and light fixtures
 - The exact same room dimensions, boundaries, perspective, and camera angle — do NOT crop, zoom, or reframe
@@ -1475,6 +1518,26 @@ const recommendationSchema = {
   required: ["designVision", "products"],
 };
 
+// Space only: recommendationSchema plus wallPaint. Sent ONLY when the walls
+// need repainting, so every other space design and every event gets the exact
+// schema it always has.
+const recommendationWithWallSchema = {
+  ...recommendationSchema,
+  properties: {
+    ...recommendationSchema.properties,
+    wallPaint: {
+      type: Type.OBJECT,
+      properties: {
+        colorName: { type: Type.STRING },
+        hex: { type: Type.STRING },
+        finish: { type: Type.STRING },
+        reason: { type: Type.STRING },
+      },
+      required: ["colorName", "hex", "finish", "reason"],
+    },
+  },
+};
+
 export async function recommendProducts(
   roomAnalysis: RoomAnalysis,
   userAnswers: Record<string, string>,
@@ -1585,9 +1648,24 @@ export async function recommendProducts(
 - Current Colors: ${roomAnalysis.colorPalette.join(", ")}${stagingBlock}${removedBlock}
 ${productTypesList}`;
 
+  // Space only, and only when analyzeRoom saw damaged walls. The colour is
+  // decided FIRST so every product is chosen against the wall it will sit on,
+  // not the stained one in the photo.
+  const repaintWalls = !eventContext && !!roomAnalysis.wallCondition?.needsRepaint;
+  const wallBlock = repaintWalls
+    ? `
+
+WALLS WILL BE REPAINTED: the walls are damaged (${roomAnalysis.wallCondition!.issues}) and will be repaired and freshly painted as part of this design.
+- Choose the wall colour FIRST. It is the base of the whole palette.
+- Then choose every product's colorSuggestion to complement that wall colour — contrast or tone-on-tone, but deliberately, so paint and products read as one design.
+- Pick a realistic interior paint: warm whites, soft greige, sage, muted blue, dusty terracotta and similar. No neon, no high-gloss, and no dark colour in a dim or small room.
+- Return it as wallPaint: colorName (a paint-shade style name, e.g. "Warm Ivory"), hex (the #RRGGBB value), finish ("matte" or "eggshell"), reason (one sentence on how it works with the products and the room's light).
+- Name the wall colour in the designVision.`
+    : "";
+
   const spacePrompt = `You are an expert interior designer. Based on the space analysis and user preferences below, create a design vision and recommend specific products that would transform this space.
 
-${analysisBlock}
+${analysisBlock}${wallBlock}
 
 Think like a professional designer:
 1. First define a clear design direction (color scheme, style, mood)
@@ -1640,7 +1718,7 @@ Also write a clear 2-3 sentence designVision describing the styling — color pa
     ],
     config: {
       responseMimeType: "application/json",
-      responseSchema: recommendationSchema,
+      responseSchema: repaintWalls ? recommendationWithWallSchema : recommendationSchema,
       ...thinking("RECOMMEND"),
     },
   });
@@ -1650,7 +1728,12 @@ Also write a clear 2-3 sentence designVision describing the styling — color pa
   // enforceVenueBranch makes the indoor/outdoor split binding rather than
   // requested. Without it a "1 — the wall is 3 ft, this backdrop is 8 ft"
   // still gets searched on Amazon, curated, and rendered into the room.
-  return eventContext ? enforceFit(response.text ?? "") : (response.text ?? "");
+  //
+  // wallPaint survives only when the walls really are being repainted — the
+  // prompt asks, the code decides.
+  const text = response.text ?? "";
+  if (eventContext) return enforceFit(stripKeys(text, ["wallPaint"]));
+  return repaintWalls ? text : stripKeys(text, ["wallPaint"]);
 }
 
 const suggestionListSchema = {

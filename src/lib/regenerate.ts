@@ -174,7 +174,10 @@ export async function regenerateDesign(opts: {
     undefined,
     opts.detect,
     opts.roomAnalysis?.geometry,
-    false
+    false,
+    false,
+    // Space only (generateDesignImage also ignores it with an eventContext).
+    isEvent ? undefined : opts.roomAnalysis?.wallPaint
   );
 
   return {

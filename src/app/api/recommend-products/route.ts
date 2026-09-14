@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     // Learned corrections ride along with the event brief. No-op for space.
     const brief = await withLessons(eventContext, eventType);
     const recommendations = await timed("recommend-products", () =>
-      parseJsonWithRetry<{ products?: unknown; designVision?: string }>(
+      parseJsonWithRetry<{ products?: unknown; designVision?: string; wallPaint?: unknown }>(
         () =>
           recommendProducts(
             roomAnalysis,
@@ -55,6 +55,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       products: recommendations.products,
       designVision: recommendations.designVision || "",
+      // Space only, and only when damaged walls are being repainted.
+      wallPaint: recommendations.wallPaint ?? null,
     });
   } catch (error) {
     console.error("Product recommendation failed:", error);

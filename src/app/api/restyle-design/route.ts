@@ -81,7 +81,10 @@ export async function POST(request: Request) {
     const products = (design.products as ProductResult[]) ?? [];
     // Ground the restyle at the room's real scale when the stored analysis has
     // geometry (absent on pre-geometry designs).
-    let analysis: { geometry?: import("@/lib/types").RoomGeometry } | null = null;
+    let analysis: {
+      geometry?: import("@/lib/types").RoomGeometry;
+      wallPaint?: import("@/lib/types").WallPaint;
+    } | null = null;
     try {
       analysis =
         typeof design.room_analysis === "string"
@@ -106,7 +109,9 @@ export async function POST(request: Request) {
       false,
       // Tells the prompt not to describe furniture as present when we are
       // re-rendering on an already-emptied canvas.
-      !!design.cleared_image_url
+      !!design.cleared_image_url,
+      // Keep repainted walls painted — a restyle must not bring the damage back.
+      analysis?.wallPaint
     );
 
     // Track the billed image-gen call for cost analytics (same as generate-image).

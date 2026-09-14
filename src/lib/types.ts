@@ -35,7 +35,27 @@ export interface RoomAnalysis {
    * Absent/false means the existing tidy-up flow, which is the shipped default.
    */
   alwaysEmpty?: boolean;
+  /** Space only. Whether the walls are damaged enough to repaint. Stripped from
+   *  event analyses in code — the schema is shared and the model fills fields
+   *  it was never asked about. */
+  wallCondition?: WallCondition;
+  /** Space only. The colour damaged walls were repainted in, chosen with the
+   *  products. Written onto the saved analysis by the create flow so restyles
+   *  keep the walls painted; absent on every design with sound walls. */
+  wallPaint?: WallPaint;
   questions: Question[]; // kept for backwards compatibility
+}
+
+export interface WallCondition {
+  needsRepaint: boolean;
+  issues: string;
+}
+
+export interface WallPaint {
+  colorName: string;
+  hex: string;
+  finish: string;
+  reason: string;
 }
 
 /**

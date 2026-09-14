@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       geometry,
       optimizeLayout,
       canvasCleared,
+      wallPaint,
     } = await request.json();
     if (!originalImage || !products?.length) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
@@ -69,7 +70,9 @@ export async function POST(request: Request) {
       detect,
       geometry || undefined,
       !!optimizeLayout,
-      !!canvasCleared
+      !!canvasCleared,
+      // generateDesignImage ignores this for events.
+      wallPaint || undefined
     );
 
     // Track the billed image-gen call (restyle vs fresh design) for cost analytics.

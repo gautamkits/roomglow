@@ -14,6 +14,7 @@ import type {
   Hotspot,
 } from "@/lib/types";
 import { isProtectedLabel } from "@/lib/types";
+import type { WallPaint } from "@/lib/types";
 import { useSession } from "next-auth/react";
 import { track, trackFunnel } from "@/lib/analytics";
 import { smartBudgetInstruction, type SearchCategory } from "@/lib/budget";
@@ -75,6 +76,8 @@ export function useRoomFlow() {
   const [products, setProducts] = useState<ProductResult[]>([]);
   const [hotspots, setHotspots] = useState<Hotspot[]>([]);
   const [designNarrative, setDesignNarrative] = useState<string>("");
+  // Space only: the colour damaged walls were repainted in. Null otherwise.
+  const [wallPaint, setWallPaint] = useState<WallPaint | null>(null);
   const [designId, setDesignId] = useState<string | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [promoApplied, setPromoApplied] = useState(false);
@@ -457,6 +460,7 @@ export function useRoomFlow() {
     recs?: ProductRecommendation[];
     categories?: unknown;
     designVision?: string;
+    wallPaint?: WallPaint | null;
     curatedProducts?: ProductResult[];
     narrative?: string;
     generatedImg?: string;
@@ -624,9 +628,10 @@ export function useRoomFlow() {
           p.designVision = vision || "";
           setOutfitVision(vision || "");
         } else {
-          const { products: recs, designVision }: {
+          const { products: recs, designVision, wallPaint: paint }: {
             products: ProductRecommendation[];
             designVision: string;
+            wallPaint?: WallPaint | null;
           } = await callStep(
             "/api/recommend-products",
             {
@@ -660,6 +665,7 @@ export function useRoomFlow() {
           );
           p.recs = recs;
           p.designVision = designVision || "";
+          p.wallPaint = eventContext ? null : paint ?? null;
         }
       }
 
@@ -694,6 +700,7 @@ export function useRoomFlow() {
               originalImage: canvas,
               designVision: p.designVision || "Create a cohesive, stylish design",
               categories: p.categories,
+              wallPaint: p.wallPaint ?? null,
               budgetInstruction: noBudget
                 ? undefined
                 : smartBudgetInstruction(
@@ -713,6 +720,7 @@ export function useRoomFlow() {
       const curated = p.curatedProducts ?? [];
       setProducts(curated);
       setDesignNarrative(p.narrative || "");
+      setWallPaint(p.wallPaint ?? null);
 
       // 4. Render the design image
       if (!p.generatedImg) {
@@ -751,6 +759,7 @@ export function useRoomFlow() {
                 // Stops the prompt describing furniture as present when the
                 // empty pass has already removed it.
                 canvasCleared: !!p.canvas,
+                wallPaint: p.wallPaint ?? undefined,
               },
           isMakeover
             ? "We couldn't generate your makeover. Please try again."
@@ -775,7 +784,12 @@ export function useRoomFlow() {
               mode,
               eventConfig,
               makeoverConfig,
-              roomAnalysis,
+              // Saved on the analysis so a restyle from the design page keeps
+              // the repainted walls — no new column needed.
+              roomAnalysis:
+                roomAnalysis && p.wallPaint
+                  ? { ...roomAnalysis, wallPaint: p.wallPaint }
+                  : roomAnalysis,
               products: curated,
               hotspots: p.hotspots || [],
               designNarrative: p.narrative || "",
@@ -1016,7 +1030,13 @@ export function useRoomFlow() {
           body: JSON.stringify(
             isMakeover
               ? { originalImage: baseImage ?? image, products: productPayload, styleHint }
-              : { originalImage: baseImage ?? image, eventContext, styleHint, products: productPayload }
+              : {
+                  originalImage: baseImage ?? image,
+                  eventContext,
+                  styleHint,
+                  products: productPayload,
+                  wallPaint: mode === "space" ? wallPaint ?? undefined : undefined,
+                }
           ),
         });
         if (!res.ok) throw new Error("Generation failed");
@@ -1035,7 +1055,7 @@ export function useRoomFlow() {
         setStep("results");
       }
     },
-    [image, baseImage, products, mode, eventConfig, makeoverConfig, generatedImage, restyleCount]
+    [image, baseImage, products, mode, eventConfig, makeoverConfig, generatedImage, restyleCount, wallPaint]
   );
 
   // Post-unlock premium action: clear the room, then re-render the same products
@@ -1087,6 +1107,7 @@ export function useRoomFlow() {
           eventContext,
           geometry: roomAnalysis?.geometry,
           optimizeLayout: mode === "space" ? optimizeLayout : false,
+          wallPaint: mode === "space" ? wallPaint ?? undefined : undefined,
           products: products.map((p: ProductResult) => ({
             category: p.recommendation.category,
             placement: p.recommendation.placement,
@@ -1111,7 +1132,7 @@ export function useRoomFlow() {
       );
       setStep("results");
     }
-  }, [image, products, isUnlocked, restyleCount, mode, eventConfig, roomAnalysis, generatedImage, optimizeLayout]);
+  }, [image, products, isUnlocked, restyleCount, mode, eventConfig, roomAnalysis, generatedImage, optimizeLayout, wallPaint]);
 
   const handleUnlocked = useCallback(() => {
     setIsUnlocked(true);
@@ -1131,6 +1152,7 @@ export function useRoomFlow() {
     setProducts([]);
     setHotspots([]);
     setDesignNarrative("");
+    setWallPaint(null);
     setDesignId(null);
     setIsUnlocked(false);
     setPromoApplied(false);
@@ -1168,6 +1190,7 @@ export function useRoomFlow() {
     products,
     hotspots,
     designNarrative,
+    wallPaint,
     designId,
     isUnlocked,
     promoApplied,

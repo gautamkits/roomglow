@@ -1,5 +1,6 @@
 "use client";
 
+import WallColour from "@/components/WallColour";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
@@ -52,6 +53,7 @@ function HomeContent() {
     products,
     hotspots,
     designNarrative,
+    wallPaint,
     designId,
     isUnlocked,
     promoApplied,
@@ -492,6 +494,8 @@ function HomeContent() {
                 🎁 Your first design is on us — enjoy! Future designs use normal pricing.
               </div>
             )}
+
+            {wallPaint && isUnlocked && mode === "space" && <WallColour paint={wallPaint} />}
 
             {designNarrative && isUnlocked && (
               <div className="mb-4 border-l-2 border-orange-700 pl-3.5 py-0.5 max-w-2xl animate-fade-up">

@@ -15,6 +15,8 @@ import BookDecorCTA from "@/components/BookDecorCTA";
 import MakeoverProducts from "@/components/MakeoverProducts";
 import InstallPrompt from "@/components/InstallPrompt";
 import ManageAccess from "@/components/ManageAccess";
+import WallColour from "@/components/WallColour";
+import type { WallPaint } from "@/lib/types";
 import { RESTYLE_UI_ENABLED } from "@/lib/uiFlags";
 import { ArrowLeft, Download, Wand2, Sparkles, RefreshCw } from "lucide-react";
 
@@ -32,6 +34,8 @@ interface DesignData {
   selected_items?: string[] | null;
   removed_items?: string[] | null;
   kept_items?: string[] | null;
+  /** Space designs whose damaged walls were repainted. */
+  wall_paint?: WallPaint | null;
 }
 
 /** JSONB columns can arrive as an array or a JSON string; normalize to string[]. */
@@ -311,6 +315,10 @@ function Viewer({
               {design.design_narrative}
             </p>
           </div>
+        )}
+
+        {design.wall_paint && design.mode === "space" && showProducts && (
+          <WallColour paint={design.wall_paint} />
         )}
 
         {/* Directly under the design and its narrative, not after the product

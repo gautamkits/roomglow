@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { curateProducts, parseJsonWithRetry, type CategoryCandidates } from "@/lib/gemini";
 import { notifyAdminError } from "@/lib/email";
 import { timed } from "@/lib/timing";
-import type { ProductResult, ProductMatchStatus } from "@/lib/types";
+import type { ProductResult, ProductMatchStatus, WallPaint } from "@/lib/types";
 
 export async function POST(request: Request) {
   try {
@@ -12,13 +12,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Please sign in to continue." }, { status: 401 });
     }
 
-    const { originalImage, designVision, categories, budgetInstruction } =
+    const { originalImage, designVision, categories, budgetInstruction, wallPaint } =
       (await request.json()) as {
         originalImage: string;
         designVision: string;
         categories: CategoryCandidates[];
         budgetInstruction?: string;
+        wallPaint?: WallPaint | null;
       };
+    // Curation judges colour harmony against the photo, where the walls are
+    // still the damaged ones. Tell it what they are about to become.
+    const vision = wallPaint
+      ? `${designVision} Walls will be repainted ${wallPaint.colorName} (${wallPaint.hex}) — choose products that complement that wall colour.`
+      : designVision;
 
     if (!originalImage || !categories?.length) {
       return NextResponse.json({ error: "Missing data" }, { status: 400 });
@@ -30,7 +36,7 @@ export async function POST(request: Request) {
         selections?: { categoryIndex: number; optionIndex: number; reason: string }[];
         designNarrative?: string;
       }>(
-        () => curateProducts(base64, designVision, categories, budgetInstruction),
+        () => curateProducts(base64, vision, categories, budgetInstruction),
         3,
         "curateProducts"
       )
