@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Film, Copy, Check, Download, Send } from "lucide-react";
-import { upload } from "@vercel/blob/client";
+import { Film, Copy, Check, Download } from "lucide-react";
 import { SITE_URL } from "@/lib/site";
 import { designTitle, designDescription, designItems } from "@/lib/admin";
 import {
@@ -71,13 +70,7 @@ export interface RevealDesign {
   products?: unknown;
   hotspots?: unknown;
   selected_items?: unknown;
-  /** Set once this design has been posted to Instagram from here. */
-  ig_permalink?: string | null;
-  ig_posted_at?: string | null;
 }
-
-/** Instagram rejects captions over this. */
-const IG_CAPTION_LIMIT = 2200;
 
 function slugify(s: string): string {
   return s
@@ -110,15 +103,6 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [ctaLine, setCtaLine] = useState("Comment HI for the shopping list");
   // Default to 2 shop cards (clamped to what's available) for a fuller "shop" scene.
   const [cardCount, setCardCount] = useState(Math.min(2, allProducts.length));
-  // null = follow the generated caption (it tracks the CTA line); a string once
-  // the admin has edited it by hand.
-  const [captionDraft, setCaptionDraft] = useState<string | null>(null);
-  const [postStage, setPostStage] = useState<string | null>(null);
-  const [posted, setPosted] = useState<{ permalink: string | null; at: string } | null>(
-    design.ig_posted_at
-      ? { permalink: design.ig_permalink ?? null, at: design.ig_posted_at }
-      : null
-  );
 
   const supported = isRevealVideoSupported();
   const title = designTitle(design);
@@ -138,8 +122,6 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     "#homedecor",
     ...tags,
   ].join(" ")}`;
-  const captionText = captionDraft ?? caption;
-  const captionTooLong = captionText.length > IG_CAPTION_LIMIT;
 
   const exportVideo = async () => {
     setBusy(true);
@@ -207,59 +189,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     }
   };
 
-  /**
-   * Render the 7s before/after, upload it to Blob, and publish it as a Reel.
-   * Always the simple variant — the one chosen for Instagram — whatever style
-   * is selected for download.
-   */
-  const postToInstagram = async (force = false) => {
-    if (force && !window.confirm("This design is already on Instagram. Post it again?")) return;
-    setBusy(true);
-    setError(null);
-    setPct(0);
-    try {
-      setPostStage("Rendering");
-      const blob = await generateSimpleRevealVideo(
-        {
-          beforeUrl: `/api/image/${design.id}/before?inline=1`,
-          afterUrl: `/api/image/${design.id}/after?inline=1`,
-          outro,
-          offer: { priceLine, ctaLine },
-        },
-        (f) => setPct(Math.round(f * 100))
-      );
-
-      setPostStage("Uploading");
-      const { url } = await upload(`reels/${design.id}.mp4`, blob, {
-        access: "public",
-        handleUploadUrl: "/api/admin/reel-upload",
-        contentType: "video/mp4",
-      });
-
-      setPostStage("Instagram is processing");
-      const res = await fetch("/api/admin/instagram-post", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ designId: design.id, videoUrl: url, caption: captionText, force }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 409) {
-        setPosted({ permalink: data.permalink ?? null, at: new Date().toISOString() });
-        throw new Error("Already posted to Instagram.");
-      }
-      if (!res.ok) throw new Error(data.error || "Posting to Instagram failed.");
-      setPosted({ permalink: data.permalink ?? null, at: new Date().toISOString() });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Posting to Instagram failed.");
-    } finally {
-      setPostStage(null);
-      setBusy(false);
-    }
-  };
-
   const copyCaption = async () => {
     try {
-      await navigator.clipboard.writeText(captionText);
+      await navigator.clipboard.writeText(caption);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -374,7 +306,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             <Film size={15} />
             {prepping
               ? "Detecting product spots…"
-              : busy && !postStage
+              : busy
                 ? `Rendering… ${pct}%`
                 : "Export reveal MP4"}
           </button>
@@ -382,46 +314,6 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             {variant === "simple"
               ? "Before → after wipe with the noosho watermark. Ready for Reels/Shorts."
               : "Logo intro → upload → style → reveal → shop → noosho.com. Ready for Reels/Shorts."}
-          </p>
-
-          {posted ? (
-            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/20 px-2.5 py-2 text-xs">
-              <span className="inline-flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300">
-                <Send size={14} />
-                Posted {new Date(posted.at).toLocaleDateString()}
-                {posted.permalink && (
-                  <a
-                    href={posted.permalink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium underline underline-offset-2"
-                  >
-                    View
-                  </a>
-                )}
-              </span>
-              <button
-                onClick={() => postToInstagram(true)}
-                disabled={busy || captionTooLong}
-                className="text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 disabled:opacity-50"
-              >
-                Post again
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => postToInstagram(false)}
-              disabled={busy || captionTooLong}
-              className="mt-2.5 w-full flex items-center justify-center gap-2 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 text-sm font-medium hover:bg-stone-50 dark:hover:bg-zinc-800 transition-colors disabled:opacity-60"
-            >
-              <Send size={15} />
-              {postStage
-                ? `${postStage}${postStage === "Rendering" ? ` ${pct}%` : ""}…`
-                : "Post to Instagram"}
-            </button>
-          )}
-          <p className="mt-1.5 text-[11px] text-zinc-400">
-            Posts the 7s before/after as a Reel on @nooshodesign, with the caption below.
           </p>
         </>
       ) : (
@@ -452,29 +344,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             {copied ? "Copied" : "Copy caption"}
           </button>
         </div>
-        <textarea
-          value={captionText}
-          onChange={(e) => setCaptionDraft(e.target.value)}
-          disabled={busy}
-          rows={8}
-          className="w-full resize-y text-xs text-zinc-600 dark:text-zinc-300 bg-stone-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 font-sans leading-relaxed outline-none focus:border-orange-700 transition-colors disabled:opacity-60"
-        />
-        <div className="mt-1 flex items-center justify-between text-[10px]">
-          {captionDraft !== null ? (
-            <button
-              onClick={() => setCaptionDraft(null)}
-              disabled={busy}
-              className="text-zinc-400 hover:text-zinc-600"
-            >
-              Reset to generated
-            </button>
-          ) : (
-            <span />
-          )}
-          <span className={captionTooLong ? "text-red-600 font-medium" : "text-zinc-400"}>
-            {captionText.length}/{IG_CAPTION_LIMIT}
-          </span>
-        </div>
+        <pre className="whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300 bg-stone-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-lg p-2.5 font-sans leading-relaxed">
+{caption}
+        </pre>
       </div>
     </div>
   );

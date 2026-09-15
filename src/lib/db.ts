@@ -154,11 +154,6 @@ async function ensureDesignColumns() {
   // the furnished photo silently puts back the furniture the design was built
   // without. Null on every design that was rendered on the original.
   await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS cleared_image_url TEXT`;
-  // Set when the admin posts this design's reveal to Instagram. ig_media_id is
-  // the double-post guard; the permalink and time are shown on the admin card.
-  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS ig_media_id TEXT`;
-  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS ig_permalink TEXT`;
-  await sql`ALTER TABLE designs ADD COLUMN IF NOT EXISTS ig_posted_at TIMESTAMPTZ`;
   designColumnsReady = true;
 }
 
@@ -2056,47 +2051,4 @@ export async function countRestyles(rootId: string): Promise<number> {
 export async function setRestyledFrom(designId: string, rootId: string) {
   await ensureDesignColumns();
   await sql`UPDATE designs SET restyled_from = ${rootId} WHERE id = ${designId}`;
-}
-
-/** Instagram post state for a design, or null when the design doesn't exist. */
-export async function getDesignInstagramPost(designId: string): Promise<{
-  ig_media_id: string | null;
-  ig_permalink: string | null;
-  ig_posted_at: string | null;
-} | null> {
-  await ensureDesignColumns();
-  const { rows } = await sql`
-    SELECT ig_media_id, ig_permalink, ig_posted_at FROM designs WHERE id = ${designId}
-  `;
-  return (rows[0] as { ig_media_id: string | null; ig_permalink: string | null; ig_posted_at: string | null }) ?? null;
-}
-
-export async function markDesignPostedToInstagram(
-  designId: string,
-  mediaId: string,
-  permalink: string | null
-) {
-  await ensureDesignColumns();
-  await sql`
-    UPDATE designs
-    SET ig_media_id = ${mediaId}, ig_permalink = ${permalink}, ig_posted_at = now()
-    WHERE id = ${designId}
-  `;
-}
-
-/** Instagram post state for many designs at once, keyed by design id. Kept out
- *  of getGalleryCards on purpose: that query also feeds the public homepage and
- *  must not depend on these columns existing. */
-export async function getInstagramPosts(
-  ids: string[]
-): Promise<Record<string, { ig_permalink: string | null; ig_posted_at: string | null }>> {
-  if (!ids.length) return {};
-  await ensureDesignColumns();
-  const { rows } = await sql.query(
-    `SELECT id, ig_permalink, ig_posted_at FROM designs WHERE id = ANY($1::uuid[]) AND ig_media_id IS NOT NULL`,
-    [ids]
-  );
-  const out: Record<string, { ig_permalink: string | null; ig_posted_at: string | null }> = {};
-  for (const r of rows) out[r.id] = { ig_permalink: r.ig_permalink, ig_posted_at: r.ig_posted_at };
-  return out;
 }
