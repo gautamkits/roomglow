@@ -17,7 +17,16 @@ const nextConfig: NextConfig = {
   // whole @img tree into the trace keeps the pair together.
   outputFileTracingIncludes: {
     "/api/**": ["./node_modules/@img/**"],
+    // Server-rendered reels (src/lib/serverReel.ts) read these at runtime by
+    // path, which file tracing can't see.
+    "/api/admin/reels/**": [
+      "./node_modules/ffmpeg-static/**",
+      "./node_modules/@napi-rs/**",
+      "./assets/fonts/**",
+      "./public/outro/**",
+    ],
   },
+  serverExternalPackages: ["@napi-rs/canvas", "ffmpeg-static"],
   images: {
     formats: ["image/avif", "image/webp"],
     // Cache optimized variants for a day so warm loads skip re-optimization.

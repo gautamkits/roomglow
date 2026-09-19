@@ -7,9 +7,9 @@ import { loadOutroClip, appendOutro } from "./outroClip";
 // mockup, or shop scenes — just the two photos. Kept alongside the branded
 // commercial (revealVideo.ts) as a lighter export option. 9:16, 1080×1920.
 
-const W = 1080;
-const H = 1920;
-const FPS = 30;
+export const W = 1080;
+export const H = 1920;
+export const FPS = 30;
 
 const HOLD_BEFORE = 24; // ~0.8s
 const WIPE = 90; // ~3.0s
@@ -17,7 +17,7 @@ const WIPE = 90; // ~3.0s
 // price and a call to action. The offer caption lands in this beat, so the hold
 // has to cover a fade-in plus dwell time on two lines.
 const HOLD_AFTER = 96; // ~3.2s
-const TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
+export const TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
 /** Fade the offer caption in over this many frames once the wipe finishes. */
 const OFFER_FADE = 12; // ~0.4s
 
@@ -37,9 +37,9 @@ function smoothstep(t: number): number {
   return c * c * (3 - 2 * c);
 }
 
-type Rect = { x: number; y: number; w: number; h: number };
+export type Rect = { x: number; y: number; w: number; h: number };
 
-function containRect(iw: number, ih: number, bw: number, bh: number): Rect {
+export function containRect(iw: number, ih: number, bw: number, bh: number): Rect {
   const scale = Math.min(bw / iw, bh / ih);
   const w = iw * scale;
   const h = ih * scale;
@@ -201,8 +201,8 @@ function drawOffer(
  *  rect still showing "before" from the left. Exposed for visual verification. */
 export function renderSimpleRevealFrame(
   ctx: CanvasRenderingContext2D,
-  before: HTMLImageElement,
-  after: HTMLImageElement,
+  before: CanvasImageSource,
+  after: CanvasImageSource,
   rect: Rect,
   revealX: number,
   offer?: OfferCaption,
@@ -267,6 +267,22 @@ export function renderSimpleRevealFrame(
   drawWatermark(ctx);
 }
 
+/** Wipe position and caption opacity for frame `i` of the main timeline.
+ *  Shared by the browser export and the server renderer (serverReel.ts). */
+export function simpleRevealFrameState(i: number): { revealX: number; offerAlpha: number } {
+  let revealX = 1;
+  if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
+    revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
+  } else if (i >= HOLD_BEFORE + WIPE) {
+    revealX = 0;
+  }
+  // Fade the caption in only once the design is fully revealed, so it never
+  // sits over the "before" photo or competes with the wipe.
+  const wipeEnd = HOLD_BEFORE + WIPE;
+  const offerAlpha = i < wipeEnd ? 0 : smoothstep((i - wipeEnd) / OFFER_FADE);
+  return { revealX, offerAlpha };
+}
+
 /** Render the original before→after wipe as a 9:16 H.264 MP4, entirely in-browser. */
 export async function generateSimpleRevealVideo(
   { beforeUrl, afterUrl, outro = true, offer }: RevealVideoInput,
@@ -323,19 +339,7 @@ export async function generateSimpleRevealVideo(
 
   const frameDur = 1_000_000 / FPS; // microseconds
   for (let i = 0; i < TOTAL; i++) {
-    let revealX = 1;
-    if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
-      revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
-    } else if (i >= HOLD_BEFORE + WIPE) {
-      revealX = 0;
-    }
-
-    // Fade the caption in only once the design is fully revealed, so it never
-    // sits over the "before" photo or competes with the wipe.
-    const wipeEnd = HOLD_BEFORE + WIPE;
-    const offerAlpha =
-      i < wipeEnd ? 0 : smoothstep((i - wipeEnd) / OFFER_FADE);
-
+    const { revealX, offerAlpha } = simpleRevealFrameState(i);
     renderSimpleRevealFrame(ctx, before, after, rect, revealX, offer, offerAlpha);
 
     const frame = new VideoFrame(canvas, {
