@@ -6,6 +6,9 @@ export function isAdminEmail(email: string | null | undefined): boolean {
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
+  // The username/password automation login (see auth.ts "admin-password").
+  const bot = process.env.ADMIN_BOT_EMAIL?.trim().toLowerCase();
+  if (bot) allow.push(bot);
   return allow.includes(email.toLowerCase());
 }
 

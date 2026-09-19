@@ -1,7 +1,8 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 import {
   createUser,
   findUserByGoogleId,
@@ -38,6 +39,36 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: String(dbUser.id),
           email: dbUser.email,
           name: dbUser.name || fallbackName,
+          image: dbUser.avatar_url || null,
+        };
+      },
+    }),
+    // Username + password for automation agents (e.g. Muse) that can't click
+    // through Google OAuth. Signs in AS the admin email in ADMIN_BOT_EMAIL, so
+    // every existing isAdminEmail() check just works. Disabled unless all three
+    // env vars are set.
+    Credentials({
+      id: "admin-password",
+      name: "Admin password",
+      credentials: { username: {}, password: {} },
+      async authorize(credentials, request) {
+        const expectedUser = process.env.ADMIN_BOT_USERNAME;
+        const expectedPass = process.env.ADMIN_BOT_PASSWORD;
+        const email = process.env.ADMIN_BOT_EMAIL;
+        if (!expectedUser || !expectedPass || !email) return null;
+        const ip = request ? clientIp(request) : "unknown";
+        if (!rateLimit(`admin-pw:ip:${ip}`, 10, 60 * 60 * 1000).ok) return null;
+        const hash = (v: unknown) =>
+          createHash("sha256").update(typeof v === "string" ? v : "").digest();
+        const userOk = timingSafeEqual(hash(credentials?.username), hash(expectedUser));
+        const passOk = timingSafeEqual(hash(credentials?.password), hash(expectedPass));
+        if (!userOk || !passOk) return null;
+        const dbUser = await upsertUserByEmail(email, "Admin bot");
+        if (!dbUser) return null;
+        return {
+          id: String(dbUser.id),
+          email: dbUser.email,
+          name: dbUser.name || "Admin bot",
           image: dbUser.avatar_url || null,
         };
       },
