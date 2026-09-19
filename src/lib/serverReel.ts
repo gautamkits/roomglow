@@ -33,6 +33,10 @@ const RENDER_VERSION = "v1";
 const OUTRO_FILE = path.join(process.cwd(), "public/outro/noosho-outro.mp4");
 const OUTRO_CROSSFADE_S = 0.3; // matches OUTRO_CROSSFADE_FRAMES in outroClip.ts
 const DEFAULT_CTA = "Comment HI for the shopping list";
+// Same store the design images live in (see save-design): production exposes
+// it as newblob_*; the default BLOB_READ_WRITE_TOKEN resolves to a private store.
+const blobToken =
+  process.env.newblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
 
 let fontsReady = false;
 function ensureFonts() {
@@ -194,7 +198,7 @@ export async function getOrRenderReel(design: DesignRow, refresh = false): Promi
   const key = blobKey(design.id);
   if (!refresh) {
     try {
-      const existing = await head(key);
+      const existing = await head(key, { token: blobToken });
       if (existing?.url) return existing.url;
     } catch {
       /* not cached yet */
@@ -206,6 +210,7 @@ export async function getOrRenderReel(design: DesignRow, refresh = false): Promi
     contentType: "video/mp4",
     addRandomSuffix: false,
     allowOverwrite: true,
+    token: blobToken,
   });
   return blob.url;
 }
