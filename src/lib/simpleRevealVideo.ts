@@ -249,12 +249,16 @@ export function renderSimpleRevealFrame(
     ctx.restore();
   }
 
-  // 5. Before / After pills.
-  const pillY = rect.y + 36;
+  // 5. Before / After pills. Kept inside Instagram's Reels safe zone: the top
+  //    ~14% sits under the "Reels / Friends" header, and taller phones crop the
+  //    side edges, so a full-bleed photo would push the pills off-screen.
+  const SAFE_TOP = 300;
+  const SAFE_SIDE = 170;
+  const pillY = Math.max(rect.y + 36, SAFE_TOP);
   if (revealX > 0.05) {
-    drawPill(ctx, "Before", rect.x + 70, pillY, "rgba(255,255,255,0.92)", "#1c1917");
+    drawPill(ctx, "Before", Math.max(rect.x + 70, SAFE_SIDE), pillY, "rgba(255,255,255,0.92)", "#1c1917");
   }
-  drawPill(ctx, "After", rect.x + rect.w - 60, pillY, "#a04525", "#ffffff");
+  drawPill(ctx, "After", Math.min(rect.x + rect.w - 60, W - SAFE_SIDE), pillY, "#a04525", "#ffffff");
 
   // 6. Offer caption — before the watermark so the scrim can't cover it.
   if (offer) drawOffer(ctx, offer, offerAlpha);
