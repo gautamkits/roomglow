@@ -2053,34 +2053,3 @@ export async function setRestyledFrom(designId: string, rootId: string) {
   await sql`UPDATE designs SET restyled_from = ${rootId} WHERE id = ${designId}`;
 }
 
-// ─── Reel posting log (admin /admin/reels) ───
-// Which published designs have been posted as Instagram Reels, so the daily
-// random pick can skip recent ones.
-let reelPostsSchemaReady = false;
-async function ensureReelPostsSchema() {
-  if (reelPostsSchemaReady) return;
-  await sql`
-    CREATE TABLE IF NOT EXISTS reel_posts (
-      id BIGSERIAL PRIMARY KEY,
-      design_id TEXT NOT NULL,
-      posted_by TEXT,
-      posted_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    )
-  `;
-  await sql`CREATE INDEX IF NOT EXISTS idx_reel_posts_design ON reel_posts (design_id, posted_at DESC)`;
-  reelPostsSchemaReady = true;
-}
-
-export async function recordReelPost(designId: string, postedBy: string | null) {
-  await ensureReelPostsSchema();
-  await sql`INSERT INTO reel_posts (design_id, posted_by) VALUES (${designId}, ${postedBy})`;
-}
-
-/** design_id → most recent posted_at (ISO). */
-export async function getLastReelPosts(): Promise<Record<string, string>> {
-  await ensureReelPostsSchema();
-  const { rows } = await sql`
-    SELECT design_id, MAX(posted_at) AS last FROM reel_posts GROUP BY design_id
-  `;
-  return Object.fromEntries(rows.map((r) => [r.design_id, new Date(r.last).toISOString()]));
-}

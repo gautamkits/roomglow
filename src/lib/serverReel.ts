@@ -163,12 +163,17 @@ async function renderReel(design: DesignRow): Promise<Buffer> {
     // Append the brand outro with the same 0.3s crossfade as the browser export
     // (which is video-only too).
     const mainDur = TOTAL / FPS;
+    // Built as a list and joined at runtime: the production bundle folded the
+    // equivalent concatenated template literal into a broken filter string.
+    const norm = ["fps=" + FPS, "format=yuv420p", "setsar=1"];
+    const graph = [
+      "[0:v]" + norm.join(",") + "[a]",
+      "[1:v]" + [`scale=${W}:${H}:force_original_aspect_ratio=increase`, `crop=${W}:${H}`, ...norm].join(",") + "[b]",
+      `[a][b]xfade=transition=fade:duration=${OUTRO_CROSSFADE_S}:offset=${(mainDur - OUTRO_CROSSFADE_S).toFixed(3)}[v]`,
+    ].join(";");
     await run([
       "-y", "-i", main, "-i", OUTRO_FILE,
-      "-filter_complex",
-      `[0:v]fps=${FPS},format=yuv420p,setsar=1[a];` +
-        `[1:v]fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},format=yuv420p,setsar=1[b];` +
-        `[a][b]xfade=transition=fade:duration=${OUTRO_CROSSFADE_S}:offset=${(mainDur - OUTRO_CROSSFADE_S).toFixed(3)}[v]`,
+      "-filter_complex", graph,
       "-map", "[v]",
       "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
       "-movflags", "+faststart",
