@@ -18,6 +18,12 @@ type Props = {
   size?: number;
   /** Freeze all motion (e.g. inside a canvas capture or a static email). */
   still?: boolean;
+  /** Eyelid closure 0–1, for frame-by-frame blinking in video renders. */
+  blink?: number;
+  /** Mouth override, for lip-sync in video renders. */
+  mouth?: "smile" | "open" | "wide" | "o";
+  /** Waving-arm angle in degrees (wave pose), for frame-by-frame waving. */
+  armAngle?: number;
   className?: string;
   title?: string;
 };
@@ -29,6 +35,8 @@ const CREAM = "#FAF6F0";
 const INK = "#181410";
 const BLUSH = "#F2A7A0";
 const BOX = "#D9A47A";
+const BOW = "#F27A9E";
+const BOW_DEEP = "#C23E6C";
 
 // Eye centres and ring radius, shared by every pose.
 const EL = { x: 74, y: 112 };
@@ -41,7 +49,13 @@ export default function Mascot({
   still = false,
   className = "",
   title = "noosho",
+  blink = 0,
+  mouth,
+  armAngle = 0,
 }: Props) {
+  // Eyelids only appear in video frames (blink > 0). A deterministic id keeps
+  // this hook-free so the component still renders in server components.
+  const uid = `${pose}${Math.round(blink * 100)}`;
   const happy = pose === "celebrate" || pose === "wave";
   const asleep = pose === "sleep";
   const width = (size * 200) / 260;
@@ -74,25 +88,43 @@ export default function Mascot({
           fill={CLAY}
         />
 
-        {/* bow — the little nod to her */}
-        <g className="nm-bow" transform="rotate(-18 70 72)">
-          {/* sits ON the clay so the cream reads; at the top edge it vanished into the background */}
-          <path d="M70 72 L48 60 Q42 72 48 86 Z" fill={CREAM} />
-          <path d="M70 72 L92 60 Q98 72 92 86 Z" fill={CREAM} />
-          <path d="M70 72 L52 66 M70 72 L88 66" stroke="#E8DCCD" strokeWidth="2" />
-          <circle cx="70" cy="72" r="7" fill={BLUSH} />
+        {/* bow — the little nod to her. Pink with a deeper outline: the old cream
+            bow disappeared against the clay and the linen background. The tilt
+            lives on the outer group so the CSS wiggle can't override it. */}
+        <g transform="rotate(-18 70 70)">
+          <g className="nm-bow">
+            <path d="M70 70 L42 54 Q34 70 42 88 Z" fill={BOW} stroke={BOW_DEEP} strokeWidth="3" strokeLinejoin="round" />
+            <path d="M70 70 L98 54 Q106 70 98 88 Z" fill={BOW} stroke={BOW_DEEP} strokeWidth="3" strokeLinejoin="round" />
+            <path d="M46 62 Q52 60 56 64 M94 62 Q88 60 84 64" stroke="#FFD3DF" strokeWidth="3" fill="none" strokeLinecap="round" />
+            <circle cx="70" cy="70" r="9" fill={BOW_DEEP} />
+            <circle cx="67" cy="67" r="2.5" fill="#FFD3DF" />
+          </g>
         </g>
 
         {/* ring eyes = the Twin Rings */}
-        <Eye c={EL} rim={CREAM} asleep={asleep} happy={happy} />
-        <Eye c={ER} rim={CLAY_DEEP} asleep={asleep} happy={happy} />
+        <Eye c={EL} rim={CREAM} asleep={asleep} happy={happy} blink={blink} id={`${uid}l`} />
+        <Eye c={ER} rim={CLAY_DEEP} asleep={asleep} happy={happy} blink={blink} id={`${uid}r`} />
 
         {/* cheeks */}
         <ellipse cx="58" cy="148" rx="11" ry="7" fill={BLUSH} opacity="0.9" />
         <ellipse cx="142" cy="148" rx="11" ry="7" fill={BLUSH} opacity="0.9" />
 
         {/* mouth */}
-        {happy ? (
+        {mouth === "open" ? (
+          <g>
+            <ellipse cx="100" cy="154" rx="10" ry="8" fill={INK} />
+            <ellipse cx="100" cy="158" rx="6" ry="3" fill="#F2A7A0" />
+          </g>
+        ) : mouth === "wide" ? (
+          <g>
+            <path d="M86 148 Q100 172 114 148 Z" fill={INK} />
+            <ellipse cx="100" cy="160" rx="7" ry="3.5" fill="#F2A7A0" />
+          </g>
+        ) : mouth === "o" ? (
+          <ellipse cx="100" cy="155" rx="6" ry="8" fill={INK} />
+        ) : mouth === "smile" ? (
+          <path d="M91 150 Q100 159 109 150" stroke={INK} strokeWidth="3.5" fill="none" strokeLinecap="round" />
+        ) : happy ? (
           <path d="M88 150 Q100 166 112 150 Z" fill={INK} />
         ) : asleep ? (
           <circle cx="100" cy="154" r="3" fill={INK} />
@@ -103,7 +135,7 @@ export default function Mascot({
         )}
 
         {/* front arms + props */}
-        <ArmsFront pose={pose} />
+        <ArmsFront pose={pose} armAngle={armAngle} />
       </g>
 
       {(pose === "celebrate" || pose === "idea") && <Sparkles pose={pose} />}
@@ -122,12 +154,17 @@ function Eye({
   rim,
   asleep,
   happy,
+  blink = 0,
+  id,
 }: {
   c: { x: number; y: number };
   rim: string;
   asleep: boolean;
   happy: boolean;
+  blink?: number;
+  id: string;
 }) {
+  const lid = !asleep && !happy && blink > 0.02;
   return (
     <g>
       <circle cx={c.x} cy={c.y} r={R} fill="#FFFDF9" stroke={rim} strokeWidth="8" />
@@ -139,6 +176,28 @@ function Eye({
         <g className="nm-pupil">
           <circle cx={c.x + 2} cy={c.y + 2} r="10" fill={INK} />
           <circle cx={c.x + 5} cy={c.y - 2} r="3" fill="#fff" />
+        </g>
+      )}
+      {lid && (
+        <g>
+          <clipPath id={`lid${id}`}>
+            <circle cx={c.x} cy={c.y} r={R - 3} />
+          </clipPath>
+          <rect
+            clipPath={`url(#lid${id})`}
+            x={c.x - R}
+            y={c.y - R}
+            width={R * 2}
+            height={R * 2 * blink}
+            fill={CLAY}
+          />
+          <path
+            d={`M${c.x - R + 5} ${c.y - R + 2 * R * blink} Q${c.x} ${c.y - R + 2 * R * blink + 5} ${c.x + R - 5} ${c.y - R + 2 * R * blink}`}
+            stroke={INK}
+            strokeWidth="3.5"
+            fill="none"
+            strokeLinecap="round"
+          />
         </g>
       )}
     </g>
@@ -156,7 +215,7 @@ function ArmsBack({ pose }: { pose: MascotPose }) {
   return <Arm d="M40 150 Q24 172 30 196" />;
 }
 
-function ArmsFront({ pose }: { pose: MascotPose }) {
+function ArmsFront({ pose, armAngle = 0 }: { pose: MascotPose; armAngle?: number }) {
   switch (pose) {
     case "peek":
       // Right arm lifts a magnifying glass over the right ring eye.
@@ -198,8 +257,10 @@ function ArmsFront({ pose }: { pose: MascotPose }) {
       );
     case "wave":
       return (
-        <g className="nm-wave">
-          <Arm d="M160 150 Q184 132 178 104" />
+        <g transform={`rotate(${armAngle} 158 150)`}>
+          <g className="nm-wave">
+            <Arm d="M160 150 Q184 132 178 104" />
+          </g>
         </g>
       );
     default: // idle, sleep

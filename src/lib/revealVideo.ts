@@ -761,3 +761,34 @@ export async function generateRevealVideo(
   const { buffer } = muxer.target as ArrayBufferTarget;
   return new Blob([buffer], { type: "video/mp4" });
 }
+
+// Shared with the Noosho promo engine (src/lib/promo). Re-exported rather than
+// copied so both videos keep one brand system, one easing set, one codec pick.
+export {
+  loadImage,
+  pickCodec,
+  fitContain,
+  drawCover,
+  roundRect,
+  wrapText,
+  drawLockup,
+  drawBackdrop,
+  clamp,
+  lerp,
+  easeOutCubic,
+  easeInOutCubic,
+  easeOutExpo,
+  easeOutBack,
+  easeInOutSine,
+  W as REEL_W,
+  H as REEL_H,
+  FPS as REEL_FPS,
+  INK,
+  CLAY,
+  CLAY_BR,
+  CLAY_LT,
+  CREAM,
+  SORA,
+  UI,
+};
+export type { Rect };
