@@ -7,7 +7,7 @@ import { Wand2, ArrowRight, Sofa, PartyPopper, Sparkles, TrendingUp, ShoppingBag
 import { auth } from "@/auth";
 import { getGalleryCards } from "@/lib/db";
 import { localeFromCookieHeader } from "@/lib/locale";
-import { getUpcomingSeasonalEvents } from "@/lib/events";
+import { getEvent, getUpcomingSeasonalEvents } from "@/lib/events";
 import {
   designTitle,
   designAltText,
@@ -88,7 +88,8 @@ export default async function Home({
   // US: Halloween/Thanksgiving). Computed per-request — deliberately outside the
   // 5-min gallery cache, which is keyed on `sort` and would freeze a date-
   // dependent order. Soonest first; evergreen events are never "upcoming".
-  const upcomingEvents = getUpcomingSeasonalEvents(localeFromCookieHeader(cookieHeader));
+  const locale = localeFromCookieHeader(cookieHeader);
+  const upcomingEvents = getUpcomingSeasonalEvents(locale);
   const trendingRankById = new Map(upcomingEvents.map((u, i) => [u.event.id, i]));
   // Infinity = not trending, so it sorts after everything ranked.
   const trendingRank = (d: (typeof allCards)[number]) =>
@@ -96,6 +97,20 @@ export default async function Home({
       ? trendingRankById.get(d.event_config?.eventType) ?? Infinity
       : Infinity;
   const isTrending = (d: (typeof allCards)[number]) => trendingRank(d) !== Infinity;
+
+  // An event design that does not ship to this visitor's market — annaprasan or
+  // Indian Independence Day for a US shopper — is noise, but hiding it would
+  // thin an already small gallery, so it sorts last instead. `markets` on the
+  // event definition is the only locale signal available: `designs` has no
+  // locale column. Unknown/legacy event ids count as on-market so a data quirk
+  // never makes a published design vanish. Space designs are always on-market.
+  const isOffMarket = (d: (typeof allCards)[number]) => {
+    if (d.mode !== "event") return false;
+    const id = d.event_config?.eventType;
+    const def = id ? getEvent(id) : undefined;
+    return def ? !def.markets.includes(locale) : false;
+  };
+  const marketRank = (d: (typeof allCards)[number]) => (isOffMarket(d) ? 1 : 0);
 
   // Facets from the full approved set
   const roomFacets = [
@@ -106,14 +121,24 @@ export default async function Home({
         .filter(Boolean) as string[]
     ),
   ].sort();
-  const eventFacets = [
-    ...new Set(
-      allCards
-        .filter((d) => d.mode === "event")
-        .map((d) => designEventType(d))
-        .filter(Boolean) as string[]
-    ),
-  ].sort();
+  // Same market rule as the grid: off-market categories still appear (so nothing
+  // becomes unreachable) but sort after the ones that apply here. A label counts
+  // as off-market only when every design using it is — labels are free text on
+  // the design, so two event ids can share one.
+  const eventFacetOffMarket = new Map<string, boolean>();
+  for (const d of allCards) {
+    if (d.mode !== "event") continue;
+    const label = designEventType(d);
+    if (!label) continue;
+    const prev = eventFacetOffMarket.get(label);
+    const off = isOffMarket(d);
+    eventFacetOffMarket.set(label, prev === undefined ? off : prev && off);
+  }
+  const eventFacets = [...eventFacetOffMarket.keys()].sort(
+    (a, b) =>
+      Number(eventFacetOffMarket.get(a)) - Number(eventFacetOffMarket.get(b)) ||
+      a.localeCompare(b)
+  );
 
   // Apply filters
   const designs = allCards.filter((d) => {
@@ -126,9 +151,14 @@ export default async function Home({
 
   // Lead with designs for festivals that are almost here, soonest event first.
   // sort() is stable, so everything else keeps its like_count/published_at order.
-  const ordered = isDefaultView
-    ? [...designs].sort((a, b) => trendingRank(a) - trendingRank(b))
-    : designs;
+  // Market relevance always wins; trending only reorders the default view.
+  // sort() is stable, so within a group everything keeps its like_count/
+  // published_at order.
+  const ordered = [...designs].sort(
+    (a, b) =>
+      marketRank(a) - marketRank(b) ||
+      (isDefaultView ? trendingRank(a) - trendingRank(b) : 0)
+  );
 
   const totalPages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
