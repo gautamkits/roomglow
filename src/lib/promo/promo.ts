@@ -12,7 +12,6 @@
  */
 
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import Mascot, { type MascotPose } from "@/components/Mascot";
 import {
   loadImage,
@@ -118,13 +117,27 @@ export type PromoAssets = {
 
 const POSES: MascotPose[] = ["idle", "peek", "carry", "idea", "celebrate", "wave", "sleep"];
 
+
+/**
+ * Noosho as standalone SVG markup, via React's normal client renderer.
+ * (react-dom/server is off-limits in app bundles — Next refuses to build it —
+ * and this module is now imported by the before/after export.) Browser-only;
+ * loaded lazily so server imports of this module stay inert.
+ */
+async function nooshoSvg(props: Parameters<typeof Mascot>[0]): Promise<string> {
+  const [{ createRoot }, { flushSync }] = await Promise.all([import("react-dom/client"), import("react-dom")]);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  flushSync(() => root.render(createElement(Mascot, props)));
+  const markup = host.innerHTML;
+  root.unmount();
+  return markup.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+}
+
 async function nooshoSprites(): Promise<Record<MascotPose, HTMLImageElement>> {
   const entries = await Promise.all(
     POSES.map(async (pose) => {
-      const svg = renderToStaticMarkup(createElement(Mascot, { pose, size: 520, still: true })).replace(
-        "<svg",
-        '<svg xmlns="http://www.w3.org/2000/svg"'
-      );
+      const svg = await nooshoSvg({ pose, size: 520, still: true });
       const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       return [pose, await loadImage(url)] as const;
     })
@@ -226,10 +239,7 @@ export async function loadExpressions(): Promise<Map<string, HTMLImageElement>> 
   const out = new Map<string, HTMLImageElement>();
   await Promise.all(
     jobs.map(async ([key, props]) => {
-      const svg = renderToStaticMarkup(createElement(Mascot, props as Parameters<typeof Mascot>[0])).replace(
-        "<svg",
-        '<svg xmlns="http://www.w3.org/2000/svg"'
-      );
+      const svg = await nooshoSvg(props as Parameters<typeof Mascot>[0]);
       out.set(key, await loadImage(URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }))));
     })
   );
@@ -261,8 +271,21 @@ export function setFrameTime(t: number) {
   FRAME_T = t;
 }
 
+/** Just what's needed to draw Noosho — lets other videos use her without the promo assets. */
+export type NooshoKit = Pick<PromoAssets, "noosho" | "expr" | "envelope">;
+
+/** Load Noosho's sprites and expression frames, or null if anything fails. */
+export async function loadNooshoKit(): Promise<NooshoKit | null> {
+  try {
+    const [noosho, expr] = await Promise.all([nooshoSprites(), loadExpressions()]);
+    return { noosho, expr };
+  } catch {
+    return null;
+  }
+}
+
 function pickExpression(
-  a: PromoAssets,
+  a: NooshoKit,
   pose: MascotPose,
   o: { mouth?: Mouth | "smile"; talk?: boolean; seed?: number }
 ): HTMLImageElement {
@@ -293,7 +316,7 @@ export const CAPTION_Y = 1500; // above Instagram's bottom UI, below the content
 
 export function drawNoosho(
   ctx: CanvasRenderingContext2D,
-  a: PromoAssets,
+  a: NooshoKit,
   pose: MascotPose,
   cx: number,
   footY: number,

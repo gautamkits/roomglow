@@ -1,6 +1,7 @@
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { isRevealVideoSupported, type RevealVideoInput } from "./revealVideo";
 import { loadOutroClip, appendOutro } from "./outroClip";
+import { loadNooshoKit, drawNoosho, setFrameTime, type NooshoKit } from "./promo/promo";
 
 // The original "before → after" reveal: a simple horizontal wipe with a drag
 // handle, Before/After pills, and a noosho watermark. No logo intro, phone
@@ -206,7 +207,9 @@ export function renderSimpleRevealFrame(
   rect: Rect,
   revealX: number,
   offer?: OfferCaption,
-  offerAlpha = 0
+  offerAlpha = 0,
+  /** Noosho pushing the divider. `sinceReveal` is seconds since the wipe ended (<0 before). */
+  noosho?: { kit: NooshoKit; t: number; sinceReveal: number }
 ) {
   // 1. Solid neutral backdrop — never the design, so the letterbox bands above
   //    and below the photo stay clean and never expose the final design.
@@ -249,6 +252,12 @@ export function renderSimpleRevealFrame(
     ctx.restore();
   }
 
+  // 4b. Noosho drives the wipe: curious beside the handle before it starts,
+  //     pushing it across (leaning in, hopping, excited) during the wipe, then
+  //     she hops up-left and celebrates ABOVE the offer band so the price and
+  //     CTA are never covered.
+  if (noosho) drawSliderNoosho(ctx, rect, revealX, noosho);
+
   // 5. Before / After pills. Kept inside Instagram's Reels safe zone: the top
   //    ~14% sits under the "Reels / Friends" header, and taller phones crop the
   //    side edges, so a full-bleed photo would push the pills off-screen.
@@ -269,6 +278,59 @@ export function renderSimpleRevealFrame(
 
 /** Wipe position and caption opacity for frame `i` of the main timeline.
  *  Shared by the browser export and the server renderer (serverReel.ts). */
+/** Noosho's part of the before/after reel. Size and positions in 1080x1920 space. */
+function drawSliderNoosho(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  revealX: number,
+  n: { kit: NooshoKit; t: number; sinceReveal: number }
+) {
+  const h = 280;
+  const foot = rect.y + rect.h - 10;
+  const hx = rect.x + rect.w * revealX; // divider x
+  const clampX = (x: number) => Math.max(120, Math.min(W - 120, x));
+  if (n.sinceReveal < 0 && revealX >= 0.999) {
+    // before the wipe: curious, peeking at the room beside the handle
+    drawNoosho(ctx, n.kit, "peek", clampX(hx - 90), foot, h, { t: n.t, bob: 5 });
+  } else if (n.sinceReveal < 0) {
+    // pushing the divider leftwards: face the travel, lean in, little hops
+    const hop = Math.abs(Math.sin(n.t * 11)) * 16;
+    drawNoosho(ctx, n.kit, "wave", clampX(hx + 70), foot, h, { flip: true, rot: -0.14, jump: hop, mouth: "wide" });
+  } else {
+    // revealed: jump up-left in an arc and celebrate above the caption band
+    const k = Math.min(1, n.sinceReveal / 0.45);
+    const e = 1 - Math.pow(1 - k, 3);
+    const x = 70 + (230 - 70) * e;
+    const y = foot + (1370 - foot) * e - Math.sin(k * Math.PI) * 120;
+    const bounce = k >= 1 ? Math.abs(Math.sin((n.sinceReveal - 0.45) * 6)) * 26 : 0;
+    drawNoosho(ctx, n.kit, "celebrate", x, y, h, { jump: bounce });
+    // sparkles + a few hearts right as the room lands
+    for (let i = 0; i < 6; i++) {
+      const p = (n.sinceReveal * 0.9 + i / 6) % 1;
+      if (n.sinceReveal > 2.6) break;
+      ctx.save();
+      ctx.globalAlpha = Math.sin(p * Math.PI);
+      const sx = x - 120 + i * 48 + Math.sin(n.t * 3 + i) * 10;
+      const sy = y - h - 20 - p * 220;
+      ctx.translate(sx, sy);
+      ctx.scale(1.1, 1.1);
+      ctx.beginPath();
+      if (i % 2) {
+        ctx.moveTo(0, 6);
+        ctx.bezierCurveTo(-20, -8, -10, -24, 0, -12);
+        ctx.bezierCurveTo(10, -24, 20, -8, 0, 6);
+        ctx.fillStyle = "#F27A9E";
+      } else {
+        ctx.moveTo(0, -14); ctx.quadraticCurveTo(0, 0, 14, 0); ctx.quadraticCurveTo(0, 0, 0, 14);
+        ctx.quadraticCurveTo(0, 0, -14, 0); ctx.quadraticCurveTo(0, 0, 0, -14);
+        ctx.fillStyle = "#FFD27A";
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
 export function simpleRevealFrameState(i: number): { revealX: number; offerAlpha: number } {
   let revealX = 1;
   if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
@@ -285,17 +347,19 @@ export function simpleRevealFrameState(i: number): { revealX: number; offerAlpha
 
 /** Render the original before→after wipe as a 9:16 H.264 MP4, entirely in-browser. */
 export async function generateSimpleRevealVideo(
-  { beforeUrl, afterUrl, outro = true, offer }: RevealVideoInput,
+  { beforeUrl, afterUrl, outro = true, offer, noosho = true }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
     throw new Error("Video export needs a Chromium browser (Chrome or Edge).");
   }
 
-  const [before, after, outroClip] = await Promise.all([
+  const [before, after, outroClip, kit] = await Promise.all([
     loadImage(beforeUrl),
     loadImage(afterUrl),
     outro ? loadOutroClip() : Promise.resolve(null),
+    // null on any failure → the export falls back to the plain grip
+    noosho ? loadNooshoKit() : Promise.resolve(null),
   ]);
   const ALL_FRAMES = TOTAL + (outroClip?.frameCount ?? 0);
 
@@ -340,7 +404,12 @@ export async function generateSimpleRevealVideo(
   const frameDur = 1_000_000 / FPS; // microseconds
   for (let i = 0; i < TOTAL; i++) {
     const { revealX, offerAlpha } = simpleRevealFrameState(i);
-    renderSimpleRevealFrame(ctx, before, after, rect, revealX, offer, offerAlpha);
+    const t = i / FPS;
+    setFrameTime(t);
+    renderSimpleRevealFrame(
+      ctx, before, after, rect, revealX, offer, offerAlpha,
+      kit ? { kit, t, sinceReveal: (i - (HOLD_BEFORE + WIPE)) / FPS } : undefined
+    );
 
     const frame = new VideoFrame(canvas, {
       timestamp: Math.round(i * frameDur),

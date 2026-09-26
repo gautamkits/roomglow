@@ -161,6 +161,7 @@ export default function Landing({ onStart }: { onStart?: () => void } = {}) {
               afterSrc="/samples/patio-after.png"
               beforeLabel="Before"
               afterLabel="Noosho"
+              mascot
             />
             <p className="text-center text-xs text-zinc-400 mt-3">
               ← Drag to see a real transformation

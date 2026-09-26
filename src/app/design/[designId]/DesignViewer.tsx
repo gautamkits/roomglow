@@ -309,6 +309,7 @@ function Viewer({
               <BeforeAfterSlider
                 beforeSrc={design.original_image_url}
                 afterSrc={design.generated_image_url}
+                mascot
               />
               <p className="text-center text-xs text-zinc-400 mt-3">
                 Drag the handle to compare the original with the new design

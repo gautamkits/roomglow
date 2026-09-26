@@ -668,6 +668,8 @@ export interface RevealVideoInput {
   products?: RevealProduct[];
   /** Append the pre-rendered brand outro clip (with its CTA). Default true. */
   outro?: boolean;
+  /** Noosho pushes the divider in the before/after export. Default true. */
+  noosho?: boolean;
   /**
    * Engagement caption burned into the last beat of the before/after export:
    * the basket price and a "comment to get the list" prompt, which is what

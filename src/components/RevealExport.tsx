@@ -90,6 +90,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [copied, setCopied] = useState(false);
   const [variant, setVariant] = useState<RevealVariant>("full");
   const [outro, setOutro] = useState(true);
+  const [noosho, setNoosho] = useState(true);
   const allProducts = buyableProducts(design);
   // Deliberately NOT from `allProducts` — that list is filtered to products with
   // an image AND price and then sliced to 2 for the shop cards, so totalling it
@@ -147,6 +148,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             beforeUrl,
             afterUrl,
             outro,
+            noosho,
             offer: { priceLine, ctaLine },
           },
           (f) => setPct(Math.round(f * 100))
@@ -292,6 +294,19 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                 </p>
               )}
             </div>
+          )}
+          {/* Noosho pushes the divider — before/after variant only. */}
+          {variant === "simple" && (
+            <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={noosho}
+                onChange={(e) => setNoosho(e.target.checked)}
+                disabled={busy}
+                className="accent-orange-700"
+              />
+              <span className="text-[11px] text-zinc-500">Noosho slides it</span>
+            </label>
           )}
           {/* Pre-rendered brand outro clip (carries its own CTA), appended last. */}
           <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">

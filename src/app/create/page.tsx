@@ -555,6 +555,7 @@ function HomeContent() {
                   <BeforeAfterSlider
                     beforeSrc={image}
                     afterSrc={generatedImage}
+                    mascot
                   />
                   <p className="text-center text-xs text-zinc-400 mt-3">
                     Drag the handle to compare your original room with the new design
