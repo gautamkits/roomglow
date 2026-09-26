@@ -61,7 +61,7 @@ export default function NoMatchFallback({
         )}
         {searchUrl && (
           <a
-            href={outboundHref(searchUrl)}
+            href={outboundHref(searchUrl, { surface: "no-match-search" })}
             target="_blank"
             rel="nofollow sponsored noopener noreferrer"
             className="flex items-center gap-1 px-2.5 py-1.5 border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs font-medium rounded-md transition-colors"

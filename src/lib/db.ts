@@ -297,6 +297,55 @@ export async function recordImageGen(kind: string, userId?: string | null) {
   }
 }
 
+// Logs every outbound affiliate click. The product is "shoppable" — without
+// this there is no way to tell which products, categories or price bands people
+// actually click, so curation cannot be steered toward what earns. Amazon
+// Associates reports conversions but never tells us which design produced them.
+//
+// design_id is TEXT, not UUID: a click can come from a surface with no design
+// (occasion/makeover grids), and a bad value must never break the redirect.
+let affiliateClickSchemaReady = false;
+async function ensureAffiliateClickSchema() {
+  if (affiliateClickSchemaReady) return;
+  await sql`
+    CREATE TABLE IF NOT EXISTS affiliate_clicks (
+      id BIGSERIAL PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      design_id TEXT,
+      product_index INTEGER,
+      category TEXT,
+      surface TEXT,
+      asin TEXT,
+      locale TEXT
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_created ON affiliate_clicks (created_at)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_affiliate_clicks_design ON affiliate_clicks (design_id)`;
+  affiliateClickSchemaReady = true;
+}
+
+export async function recordAffiliateClick(click: {
+  designId?: string | null;
+  productIndex?: number | null;
+  category?: string | null;
+  surface?: string | null;
+  asin?: string | null;
+  locale?: string | null;
+}) {
+  try {
+    await ensureAffiliateClickSchema();
+    await sql`
+      INSERT INTO affiliate_clicks (design_id, product_index, category, surface, asin, locale)
+      VALUES (${click.designId ?? null}, ${click.productIndex ?? null},
+              ${click.category ?? null}, ${click.surface ?? null},
+              ${click.asin ?? null}, ${click.locale ?? null})
+    `;
+  } catch (err) {
+    // Never fail a click. The redirect matters more than the telemetry.
+    console.error("[recordAffiliateClick] failed (non-fatal):", err);
+  }
+}
+
 export async function saveDesign(params: {
   mode: string;
   eventConfig: unknown;

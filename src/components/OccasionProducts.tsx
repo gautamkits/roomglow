@@ -107,7 +107,7 @@ export default function OccasionProducts({
                   )}
                 </div>
                 <a
-                  href={outboundHref(p.affiliateUrl)}
+                  href={outboundHref(p.affiliateUrl, { surface: "occasion" })}
                   target="_blank"
                   rel="nofollow sponsored noopener noreferrer"
                   className="flex items-center justify-center gap-1.5 w-full py-2 px-3 bg-orange-700 hover:bg-orange-800 text-white text-xs font-medium rounded-lg transition-colors"

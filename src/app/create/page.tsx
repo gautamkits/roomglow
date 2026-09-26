@@ -548,6 +548,7 @@ function HomeContent() {
               ) : (
                 <div className={isUnlocked ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
                   <ImageWithHotspots
+                    designId={designId ?? undefined}
                     imageSrc={
                       !isUnlocked && designId
                         ? `/api/image/${designId}/after`

@@ -284,6 +284,7 @@ function Viewer({
           ) : (
           <div className={showProducts ? "" : "blur-[24px] pointer-events-none select-none sm:max-h-[540px] overflow-hidden"}>
             <ImageWithHotspots
+              designId={design.id as string}
               imageSrc={generatedSrc}
               hotspots={showProducts ? design.hotspots : []}
               products={design.products as never[]}

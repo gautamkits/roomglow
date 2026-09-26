@@ -14,9 +14,14 @@ interface ProductCardProps {
   /** Re-source this row after a transient Amazon outage. */
   onRetry?: () => void;
   retrying?: boolean;
+  /** Attribution for affiliate clicks. Optional — the link works without it. */
+  designId?: string;
+  productIndex?: number;
 }
 
 export default function ProductCard({
+  designId,
+  productIndex,
   product,
   onClose,
   onHide,
@@ -85,7 +90,12 @@ export default function ProductCard({
             </p>
             <div className={isSheet ? "flex items-center gap-2" : ""}>
               <a
-                href={outboundHref(amazonProduct.affiliateUrl)}
+                href={outboundHref(amazonProduct.affiliateUrl, {
+                  designId,
+                  productIndex,
+                  category: recommendation.category,
+                  surface: "card",
+                })}
                 target="_blank"
                 rel="nofollow sponsored noopener noreferrer"
                 className={`flex items-center justify-center gap-1.5 bg-orange-700 hover:bg-orange-800 text-white font-medium rounded-lg transition-colors text-sm ${

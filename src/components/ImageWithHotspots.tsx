@@ -13,6 +13,8 @@ interface ImageWithHotspotsProps {
   hotspots: Hotspot[];
   products: ProductResult[];
   hidePrices?: boolean;
+  /** Attribution for affiliate clicks. Optional — links work without it. */
+  designId?: string;
 }
 
 export default function ImageWithHotspots({
@@ -20,6 +22,7 @@ export default function ImageWithHotspots({
   hotspots,
   products: incomingProducts,
   hidePrices = false,
+  designId,
 }: ImageWithHotspotsProps) {
   const [activeHotspot, setActiveHotspot] = useState<number | null>(null);
   const [hiddenProducts, setHiddenProducts] = useState<Set<number>>(new Set());
@@ -216,6 +219,8 @@ export default function ImageWithHotspots({
                   onMouseLeave={closeDelayed}
                 >
                   <ProductCard
+                    designId={designId}
+                    productIndex={hotspot.productIndex}
                     product={product}
                     onClose={() => setActiveHotspot(null)}
                     onRetry={
@@ -245,6 +250,8 @@ export default function ImageWithHotspots({
             <div className="absolute bottom-0 left-0 right-0" onClick={(e) => e.stopPropagation()}>
               <ProductCard
                 variant="sheet"
+                designId={designId}
+                productIndex={hotspot.productIndex}
                 product={product}
                 hidePrices={hidePrices}
                 onRetry={
@@ -340,7 +347,12 @@ export default function ImageWithHotspots({
                 <div className="flex flex-col items-end gap-1.5 shrink-0">
                   {ap ? (
                     <a
-                      href={outboundHref(ap.affiliateUrl)}
+                      href={outboundHref(ap.affiliateUrl, {
+                        designId,
+                        productIndex: i,
+                        category: product.recommendation.category,
+                        surface: "sidebar",
+                      })}
                       target="_blank"
                       rel="nofollow sponsored noopener noreferrer"
                       className="flex items-center gap-1 px-2.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-medium rounded-md transition-colors"
