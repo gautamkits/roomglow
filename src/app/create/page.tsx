@@ -19,6 +19,7 @@ import { clearFlowSnapshot } from "@/lib/flowPersistence";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import { useLocale } from "@/lib/useLocale";
 import CreateSetup from "@/components/CreateSetup";
+import NooshoSays from "@/components/NooshoSays";
 import TidyUpSelection from "@/components/TidyUpSelection";
 import ImageWithHotspots from "@/components/ImageWithHotspots";
 import PaywallOverlay from "@/components/PaywallOverlay";
@@ -222,6 +223,9 @@ function HomeContent() {
                 </div>
               </div>
             )}
+            <NooshoSays pose="wave" className="justify-center mb-4">
+              got your photo! sign in so i can save your design 💛
+            </NooshoSays>
             <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
               Sign in to see your design
             </h2>
@@ -452,6 +456,12 @@ function HomeContent() {
                     ? "Your new look"
                     : "Your redesigned space"}
                 </h2>
+                {/* Locked designs get Noosho on the paywall instead. */}
+                {isUnlocked && (
+                  <NooshoSays pose="celebrate" size={56} className="mt-3">
+                    ta-da! 🎉 tap any piece to shop it
+                  </NooshoSays>
+                )}
               </div>
 
               <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 "use client";
 
+import NooshoSays from "@/components/NooshoSays";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SessionProvider, useSession } from "next-auth/react";
@@ -234,6 +235,16 @@ function Viewer({
           <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             {modeLabel}
           </h2>
+          {/* Noosho at the finish line. Locked designs get her on the paywall. */}
+          {isUnlocked && isOwner ? (
+            <NooshoSays pose="celebrate" size={56} className="mt-3">
+              ta-da! 🎉 tap any piece to shop it
+            </NooshoSays>
+          ) : approved && !isOwner ? (
+            <NooshoSays pose="wave" size={56} className="mt-3">
+              like this? send me your room and i’ll design yours ✨
+            </NooshoSays>
+          ) : null}
         </div>
 
         {/* Owner-only: manage who can view this (private) design */}

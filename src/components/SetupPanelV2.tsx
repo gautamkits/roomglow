@@ -17,6 +17,8 @@
  * is off, so this is revertible from /admin without a deploy.
  */
 
+import NooshoSays from "./NooshoSays";
+import type { MascotPose } from "./Mascot";
 import { useState, useEffect, useMemo } from "react";
 import {
   Sofa,
@@ -300,6 +302,22 @@ export default function SetupPanelV2({
     (mode !== "event" || (!!event && !!subTheme && !!colorScheme)) &&
     (mode !== "makeover" || !!makeoverStyleId);
 
+  // What Noosho says at each step — short, warm, and about the step itself.
+  const guide: { pose: MascotPose; line: string } =
+    step === "mode"
+      ? { pose: "wave", line: "hi, i’m Noosho 👋 what are we making today?" }
+      : step === "photo"
+        ? mode === "event"
+          ? { pose: "peek", line: "show me the venue! one photo, i’ll take it from there 📸" }
+          : mode === "makeover"
+            ? { pose: "peek", line: "show me you! one clear photo is perfect 📸" }
+            : { pose: "peek", line: "show me the room! any angle works 📸" }
+        : step === "occasion"
+          ? { pose: "celebrate", line: "ooh a party? what’s the occasion? 🎉" }
+          : mode === "event"
+            ? { pose: "idea", line: "love it. pick the vibe and i’ll start decorating ✨" }
+            : { pose: "idea", line: "last bit! then i go shopping for real pieces 🛒" };
+
   const back = () => {
     if (step === "details") setStep(mode === "event" ? "occasion" : "photo");
     else if (step === "occasion") setStep("photo");
@@ -338,6 +356,11 @@ export default function SetupPanelV2({
           ))}
         </div>
       </div>
+
+      {/* Noosho walks them through every step. */}
+      <NooshoSays pose={guide.pose} className="mb-5">
+        {guide.line}
+      </NooshoSays>
 
       <div className="flex-1">
         {/* ── Step 1: what are we designing ── */}
