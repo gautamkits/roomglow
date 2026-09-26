@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
-import { BarChart2, Users, Zap, TrendingUp, Heart, ArrowLeft, Cpu } from "lucide-react";
+import { BarChart2, Users, Zap, TrendingUp, Heart, ArrowLeft, Cpu, ShoppingBag } from "lucide-react";
 
 interface AnalyticsData {
   totals: {
@@ -36,6 +36,12 @@ interface AnalyticsData {
   imageGen: {
     daily: { day: string; total: string; design: string; restyle: string; empty: string; makeover?: string }[];
     totals: { total: string; calls_7d: string; calls_30d: string; empty_30d: string };
+  };
+  affiliate?: {
+    last30: number;
+    byCategory: { category: string; clicks: number }[];
+    bySurface: { surface: string; clicks: number }[];
+    daily: { day: string; clicks: number }[];
   };
 }
 
@@ -362,6 +368,69 @@ function AnalyticsContent() {
                 </div>
               ) : (
                 <p className="text-xs text-zinc-400">No image-gen calls recorded yet — data starts accumulating from now.</p>
+              )}
+            </div>
+          );
+        })()}
+
+        {data.affiliate && (() => {
+          const af = data.affiliate;
+          const designs30d = Number(data.totals.designs_30d) || 0;
+          // Clicks per design says whether people shop a design or just look at
+          // it — the single number that tells you if "shoppable" is working.
+          const perDesign = designs30d > 0 ? (af.last30 / designs30d).toFixed(1) : "—";
+          const maxCat = Math.max(1, ...af.byCategory.map((c) => c.clicks));
+          return (
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-5 mb-6">
+              <div className="flex items-center gap-2 mb-1">
+                <ShoppingBag size={15} className="text-zinc-400" />
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Affiliate clicks (last 30 days)
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mb-4">
+                Outbound clicks to Amazon via /api/go. Clicks are not sales — Amazon Associates
+                reports the conversions, this shows which products earn the click.
+              </p>
+
+              {af.last30 === 0 ? (
+                <p className="text-xs text-zinc-400">
+                  No clicks recorded yet. Tracking started when this shipped; it cannot be backfilled.
+                </p>
+              ) : (
+                <>
+                  <div className="flex gap-6 mb-4 text-sm">
+                    <div>
+                      <div className="text-xl font-semibold text-zinc-800 dark:text-zinc-100">{af.last30}</div>
+                      <div className="text-xs text-zinc-400">clicks</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-semibold text-zinc-800 dark:text-zinc-100">{perDesign}</div>
+                      <div className="text-xs text-zinc-400">per design (30d)</div>
+                    </div>
+                    <div>
+                      <div className="text-xl font-semibold text-zinc-800 dark:text-zinc-100">
+                        {af.bySurface.map((s) => `${s.surface} ${s.clicks}`).join(" · ") || "—"}
+                      </div>
+                      <div className="text-xs text-zinc-400">by surface</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {af.byCategory.map((c) => (
+                      <div key={c.category} className="flex items-center gap-2">
+                        <span className="w-32 shrink-0 truncate text-xs text-zinc-500">{c.category}</span>
+                        <div className="flex-1 h-2 rounded bg-zinc-100 dark:bg-zinc-800">
+                          <div
+                            className="h-2 rounded bg-orange-700"
+                            style={{ width: `${(c.clicks / maxCat) * 100}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-right text-xs tabular-nums text-zinc-500">{c.clicks}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           );

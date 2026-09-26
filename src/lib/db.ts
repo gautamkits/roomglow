@@ -1209,6 +1209,7 @@ export async function getAnalyticsStats() {
   await ensurePaymentsColumns();
   await ensureImageGenSchema();
   await ensureFeedbackSchema();
+  await ensureAffiliateClickSchema();
   const [totals, funnel, revenue, revenueByCurrency, roomTypes, signups, imageGenDaily, imageGenTotals] = await Promise.all([
     sql`
       SELECT
@@ -1296,6 +1297,38 @@ export async function getAnalyticsStats() {
     imageGen: {
       daily: imageGenDaily.rows,
       totals: imageGenTotals.rows[0],
+    },
+    // Which products people actually click through to buy. The unlock fee is
+    // only half the revenue; this is the only view of the affiliate half, and
+    // the only signal for whether curation is picking things people want.
+    affiliate: {
+      last30: Number(
+        (
+          await sql`SELECT COUNT(*)::int AS n FROM affiliate_clicks
+                    WHERE created_at >= NOW() - INTERVAL '30 days'`
+        ).rows[0].n
+      ),
+      byCategory: (
+        await sql`SELECT COALESCE(category, '(untagged)') AS category,
+                         COUNT(*)::int AS clicks
+                  FROM affiliate_clicks
+                  WHERE created_at >= NOW() - INTERVAL '30 days'
+                  GROUP BY category ORDER BY clicks DESC LIMIT 15`
+      ).rows,
+      bySurface: (
+        await sql`SELECT COALESCE(surface, '(untagged)') AS surface,
+                         COUNT(*)::int AS clicks
+                  FROM affiliate_clicks
+                  WHERE created_at >= NOW() - INTERVAL '30 days'
+                  GROUP BY surface ORDER BY clicks DESC`
+      ).rows,
+      daily: (
+        await sql`SELECT to_char(created_at::date, 'YYYY-MM-DD') AS day,
+                         COUNT(*)::int AS clicks
+                  FROM affiliate_clicks
+                  WHERE created_at >= NOW() - INTERVAL '30 days'
+                  GROUP BY day ORDER BY day`
+      ).rows,
     },
     // Rating mix overall and per occasion — the per-occasion split is what makes
     // a learned rule's effect visible, rather than just a global average.
