@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { SessionProvider, useSession } from "next-auth/react";
-import { savePendingUpload } from "@/lib/flowPersistence";
+import { STUDIO_PHOTO_KEY } from "@/components/SetupPanelV2";
 
 // Admin Input Studio: generate "before" photos to feed the normal design flow,
 // so the admin doesn't have to hunt for usable room/venue photos. Output is 9:16,
@@ -144,17 +144,18 @@ function Studio() {
 
   async function sendToCreate(r: Result) {
     const base64 = await toUploadDataUrl(dataUrl(r));
-    // Replays through the sign-in resume path, which starts the room flow
-    // directly with this photo. Venues need the event setup form, so they
-    // are download-only (see below).
-    await savePendingUpload({
-      base64,
-      mode: "space",
-      eventConfig: null,
-      makeoverConfig: null,
-      noBudget: false,
-    });
-    window.location.href = "/create?resume=1";
+    // Hand the photo to the normal intake form rather than auto-running the
+    // pipeline: rooms land on the details step, venues on the occasion picker,
+    // and the admin submits as usual. ~200–400KB after re-encode, well inside
+    // sessionStorage limits.
+    try {
+      sessionStorage.setItem(STUDIO_PHOTO_KEY, base64);
+    } catch {
+      setError("Could not hand the photo over — use Download instead.");
+      return;
+    }
+    const mode = r.kind === "venue" ? "event" : "space";
+    window.location.href = `/create?mode=${mode}&studio=1`;
   }
 
   const inputCls =
@@ -254,7 +255,7 @@ function Studio() {
               key={r.id}
               r={r}
               src={r.imageBase64 ? dataUrl(r) : null}
-              canUse={r.kind === "room"}
+              canUse
               onRerender={(brief) => rerender(r.id, brief)}
               onUse={() => sendToCreate(r)}
             />
@@ -326,9 +327,6 @@ function ResultCard({
             Re-render this brief
           </button>
         </div>
-        {!canUse && src && (
-          <p className="text-[10px] text-zinc-400">Venues: download, then upload via Event mode.</p>
-        )}
       </div>
     </div>
   );

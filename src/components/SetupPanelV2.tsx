@@ -106,6 +106,9 @@ const PHOTO_TIPS: Record<AppMode, string[]> = {
   ],
 };
 
+/** sessionStorage key the admin Input Studio uses to hand a photo to /create. */
+export const STUDIO_PHOTO_KEY = "noosho-studio-photo";
+
 export default function SetupPanelV2({
   onImageSelected,
   makeoverEnabled = false,
@@ -142,10 +145,30 @@ export default function SetupPanelV2({
   // A ?mode= deep-link from the home tiles already answers the mode question,
   // so skip straight to the photo.
   useEffect(() => {
-    const m = new URLSearchParams(window.location.search).get("mode");
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get("mode");
     if (m === "space" || m === "event" || m === "makeover") {
       setMode(m);
       setStep("photo");
+    }
+    // Admin Input Studio hand-off: the photo is already chosen, so land on the
+    // step AFTER it — the occasion picker for events, details for rooms — and
+    // let the admin submit through the normal form. Only read when the studio
+    // flag is present, so an ordinary visit is unaffected. Deliberately NOT
+    // removed on read: StrictMode runs this effect twice in dev, and a
+    // read-and-delete left the second run resetting to the photo step. It is
+    // cleared on submit instead; the studio overwrites it on every hand-off.
+    if (params.get("studio") === "1" && (m === "space" || m === "event")) {
+      let stashed: string | null = null;
+      try {
+        stashed = sessionStorage.getItem(STUDIO_PHOTO_KEY);
+      } catch {
+        /* storage blocked — fall back to the normal photo step */
+      }
+      if (stashed?.startsWith("data:image/")) {
+        setPhoto(stashed);
+        setStep(m === "event" ? "occasion" : "details");
+      }
     }
     trackFunnel("setup_started", { mode: m || "space" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,6 +280,11 @@ export default function SetupPanelV2({
 
   function submit() {
     if (!photo) return;
+    try {
+      sessionStorage.removeItem(STUDIO_PHOTO_KEY);
+    } catch {
+      /* ignore */
+    }
     onImageSelected(
       photo,
       mode,
