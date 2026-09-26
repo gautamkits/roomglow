@@ -73,6 +73,8 @@ function HomeContent() {
     maxRestyles,
     handleUnlocked,
     reset,
+    catalog,
+    picked,
   } = useRoomFlow();
   const { data: session, status: sessionStatus } = useSession();
   const { designs, eventDates, loading: libraryLoading } = useUserLibrary(
@@ -401,6 +403,8 @@ function HomeContent() {
             statusMessage={statusMessage}
             items={tickerItems}
             findings={findings}
+            catalog={catalog}
+            picked={picked}
           />
         )}
 

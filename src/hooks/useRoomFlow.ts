@@ -32,6 +32,37 @@ import {
 // Soft cap on free restyles per design — each restyle is a paid image generation.
 const MAX_RESTYLES = 5;
 
+/** A product thumbnail for the wait screen's catalog. */
+export type CatalogPreview = { imageUrl: string; title: string; price: string; category: string };
+
+/** Up to 2 candidates per category, interleaved so every category shows early. */
+function catalogFrom(categories: SearchCategory[] | undefined): CatalogPreview[] {
+  if (!categories?.length) return [];
+  const out: CatalogPreview[] = [];
+  for (let round = 0; round < 2; round++) {
+    for (const c of categories) {
+      const cand = (c as { candidates?: { imageUrl?: string; title?: string; price?: string }[] })
+        .candidates?.[round];
+      if (cand?.imageUrl) {
+        out.push({
+          imageUrl: cand.imageUrl,
+          title: cand.title ?? "",
+          price: cand.price ?? "",
+          category: (c as { category?: string }).category ?? "",
+        });
+      }
+    }
+  }
+  return out.slice(0, 12);
+}
+
+function pickedFrom(products: unknown): string[] {
+  if (!Array.isArray(products)) return [];
+  return products
+    .map((pr) => (pr as { amazonProduct?: { imageUrl?: string } | null })?.amazonProduct?.imageUrl)
+    .filter((u): u is string => !!u);
+}
+
 // Named as KEEPs on every empty-room call. `analyzeRoom` only lists LARGE
 // movable pieces, so a mandir shelf or a framed deity picture never appears in
 // removableObjects and would reach the empty pass unnamed. Clearing someone's
@@ -88,6 +119,11 @@ export function useRoomFlow() {
   const [selectedItems, setSelectedItems] = useState<SuggestedProduct[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
+  // Wait-screen eye candy, fed by REAL pipeline data: a few Amazon candidates
+  // per category once search returns, then the image URLs curation picked.
+  // Display only — nothing downstream reads these.
+  const [catalog, setCatalog] = useState<CatalogPreview[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
   const [restyleCount, setRestyleCount] = useState(0);
   const [retryCount, setRetryCount] = useState(0);
   // Items the user chose to remove in the tidy-up step, and the AI-refreshed
@@ -477,6 +513,10 @@ export function useRoomFlow() {
     setStep("generating");
     setError(null);
     setCanRetry(false);
+    // A fresh run starts with an empty catalog; a resumed run (categories
+    // already in the progress buffer) re-derives it below.
+    setCatalog([]);
+    setPicked([]);
     const pipelineT0 = performance.now();
 
     const eventContext = buildEventContext(mode === "event" ? eventConfig : null);
@@ -685,6 +725,8 @@ export function useRoomFlow() {
         p.categories = categories;
       }
 
+      setCatalog(catalogFrom(p.categories as SearchCategory[] | undefined));
+
       // 3. Curate the cohesive set
       if (!p.curatedProducts) {
         setStep("curating");
@@ -711,6 +753,7 @@ export function useRoomFlow() {
             "We couldn't finalize the product selection. Please try again."
           );
         p.curatedProducts = curatedProducts;
+        setPicked(pickedFrom(curatedProducts));
         // For makeover, the stylist's outfitVision (stored in designVision) is
         // the note we want to show — not the room-worded curate narrative.
         p.narrative = isMakeover
@@ -1175,6 +1218,8 @@ export function useRoomFlow() {
 
   return {
     step,
+    catalog,
+    picked,
     awaitingSignIn,
     changePhoto,
     mode,

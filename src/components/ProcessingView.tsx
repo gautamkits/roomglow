@@ -1,34 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  Check,
-  Loader2,
-  Sparkles,
-  Camera,
-  ScanLine,
-  Ruler,
-  Search,
-  Lightbulb,
-  Sofa,
-  Armchair,
-  Lamp,
-  Bed,
-  Flower2,
-  PartyPopper,
-  Gift,
-  Cake,
-  Music,
-  Shirt,
-  Glasses,
-  Watch,
-  Gem,
-  ShoppingBag,
-  ShoppingCart,
-  Store,
-  Tag,
-  type LucideIcon,
-} from "lucide-react";
+import { useState, useEffect, useMemo, type CSSProperties } from "react";
+import { Check, Loader2 } from "lucide-react";
+import Mascot, { type MascotPose } from "./Mascot";
+import type { CatalogPreview } from "@/hooks/useRoomFlow";
 
 interface ProcessingViewProps {
   image: string | null;
@@ -40,7 +15,13 @@ interface ProcessingViewProps {
   items?: { label: string; icon?: string }[];
   /** Real observations from analyzeRoom — room type, palette, furniture seen. */
   findings?: string[];
+  /** Real Amazon candidates, available once product search returns. */
+  catalog?: CatalogPreview[];
+  /** Image URLs curation actually picked, available once curation returns. */
+  picked?: string[];
 }
+
+type Mode = "space" | "event" | "makeover";
 
 /**
  * The item list, driven by the REAL pipeline phase.
@@ -57,11 +38,10 @@ function ItemList({
   phase,
 }: {
   items: { label: string; icon?: string }[];
-  mode: "space" | "event" | "makeover";
+  mode: Mode;
   /** 1 = planning, 2 = sourcing on Amazon, 3 = rendering. */
   phase: number;
 }) {
-  // Sourcing is the phase where these are actually being found.
   const sourcing = phase === 2;
   const placed = phase >= 3;
 
@@ -106,68 +86,165 @@ function ItemList({
           </li>
         ))}
       </ul>
-      <p className="mt-3 text-center text-sm text-orange-700 dark:text-orange-400">
-        {caption}
-      </p>
+      <p className="mt-3 text-center text-sm text-orange-700 dark:text-orange-400">{caption}</p>
     </>
   );
 }
 
-// Themed icons that pop in one-by-one while each pipeline step runs — makes the
-// wait feel alive (sofa → chair → lamp arriving; cart rolling to the store).
-const GENERATING_ICONS: Record<"space" | "event" | "makeover", LucideIcon[]> = {
-  space: [Sofa, Armchair, Lamp, Bed, Flower2],
-  event: [PartyPopper, Gift, Cake, Music, Sparkles],
-  makeover: [Shirt, Glasses, Watch, Gem, ShoppingBag],
+/**
+ * What Noosho says, per real pipeline phase. Playful, but every line is still
+ * true about what is happening at that moment — the phase only advances when a
+ * pipeline step actually completes, so she never claims to be shopping while
+ * the room is still being read.
+ */
+const LINES: Record<number, Record<Mode, string[]>> = {
+  0: {
+    space: [
+      "ok hold on, reading the room 👀",
+      "this space has main character energy fr",
+      "clocking the light, the corners, the vibes ✨",
+      "measuring with my eyes (very scientific) 📏",
+    ],
+    event: [
+      "ooh a party? say less 🎉",
+      "scoping out the venue rn 👀",
+      "finding the spot everyone will take photos at 📸",
+      "clocking the walls, the light, the vibes ✨",
+    ],
+    makeover: ["ok let me look at you 👀", "clocking the whole fit ✨"],
+  },
+  1: {
+    space: [
+      "brainstorming… the ideas are ideating 💭",
+      "manifesting a cozy corner ✨",
+      "moodboard loading… it's giving calm luxury",
+      "picking a vibe. this is the fun part 🎨",
+    ],
+    event: [
+      "planning the glow up 🎈",
+      "moodboard loading… it's giving celebration",
+      "deciding where the balloons go (important) 🎈",
+    ],
+    makeover: ["styling… this is the fun part 🎨", "it's giving main character"],
+  },
+  2: {
+    space: [
+      "raiding amazon rn, brb 🛒",
+      "no bc this one?? obsessed",
+      "adding to cart (emotionally) 🛍️",
+      "only real stuff you can actually buy 💅",
+      "matching everything, it has to go together",
+    ],
+    event: [
+      "raiding amazon for decor rn 🛒",
+      "no bc these?? obsessed 🎈",
+      "only real stuff you can actually order 💅",
+      "matching the colours, trust the process",
+    ],
+    makeover: ["raiding amazon for the fit 🛒", "no bc this?? obsessed"],
+  },
+  3: {
+    space: [
+      "placing everything juuust right 📐",
+      "ok it's giving ✨ almost done",
+      "final touches, don't look yet 🙈",
+      "your room is about to glow up fr",
+    ],
+    event: [
+      "setting up the decor juuust right 🎀",
+      "ok it's giving party ✨ almost done",
+      "final touches, don't look yet 🙈",
+    ],
+    makeover: ["putting the look together ✨", "final touches, don't look yet 🙈"],
+  },
 };
 
-const ANALYZING_ICONS: LucideIcon[] = [Camera, ScanLine, Ruler, Search, Lightbulb];
+const POSE_BY_PHASE: MascotPose[] = ["peek", "idea", "carry", "celebrate"];
 
-function IconParade({
-  step,
-  mode,
-}: {
-  step: "analyzing" | "generating" | "curating";
-  mode: "space" | "event" | "makeover";
-}) {
-  const tile =
-    "w-9 h-9 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-100 dark:border-orange-900/40 flex items-center justify-center text-orange-700 dark:text-orange-400";
-
-  if (step === "curating") {
-    // Shopping scene: bag + tag pop in, the cart rolls up to the store.
-    return (
-      <div className="flex items-center justify-center gap-3 mt-5" aria-hidden>
-        {[Tag, ShoppingBag].map((Icon, i) => (
-          <div
-            key={i}
-            className={`${tile} animate-icon-pop`}
-            style={{ animationDelay: `${i * 0.35}s` }}
-          >
-            <Icon size={18} strokeWidth={1.75} />
-          </div>
-        ))}
-        <div className={`${tile} animate-cart-run`}>
-          <ShoppingCart size={18} strokeWidth={1.75} />
-        </div>
-        <div className={tile}>
-          <Store size={18} strokeWidth={1.75} />
-        </div>
-      </div>
-    );
-  }
-
-  const icons = step === "analyzing" ? ANALYZING_ICONS : GENERATING_ICONS[mode];
+function SpeechBubble({ phase, mode }: { phase: number; mode: Mode }) {
+  const lines = LINES[phase]?.[mode] ?? LINES[phase]?.space ?? [];
+  const [i, setI] = useState(0);
+  // Restart the rotation on each phase change, so the first thing she says in
+  // a new phase is about that phase.
+  useEffect(() => {
+    setI(0);
+    const t = setInterval(() => setI((n) => n + 1), 2800);
+    return () => clearInterval(t);
+  }, [phase, mode]);
+  const line = lines.length ? lines[i % lines.length] : "";
   return (
-    <div className="flex items-center justify-center gap-3 mt-5" aria-hidden>
-      {icons.map((Icon, i) => (
-        <div
-          key={i}
-          className={`${tile} animate-icon-pop`}
-          style={{ animationDelay: `${i * 0.35}s` }}
-        >
-          <Icon size={18} strokeWidth={1.75} />
-        </div>
-      ))}
+    <div className="relative flex-1 min-w-0">
+      <div
+        key={`${phase}-${i}`}
+        className="animate-bubble-pop relative rounded-2xl rounded-bl-md bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm px-4 py-3"
+        aria-live="polite"
+      >
+        <span className="block text-[11px] font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-400">
+          Noosho
+        </span>
+        <span className="block text-[15px] leading-snug text-zinc-900 dark:text-zinc-100">{line}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Real Amazon candidates drop in like stickers while Noosho curates; once
+ * curation returns, her picks get circled and the rest fade back.
+ */
+function Catalog({ catalog, picked }: { catalog: CatalogPreview[]; picked: string[] }) {
+  const pickedSet = useMemo(() => new Set(picked), [picked]);
+  const hasPicks = picked.length > 0;
+  // Picks that weren't among the preview candidates still deserve a slot.
+  const shown = useMemo(() => {
+    const urls = new Set(catalog.map((c) => c.imageUrl));
+    const extra: CatalogPreview[] = picked
+      .filter((u) => !urls.has(u))
+      .map((u) => ({ imageUrl: u, title: "", price: "", category: "" }));
+    return [...catalog, ...extra].slice(0, 12);
+  }, [catalog, picked]);
+
+  if (!shown.length) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {hasPicks ? "Noosho’s picks ✨" : "Noosho’s catalog"}
+        </span>
+        <span className="text-[11px] text-zinc-400">
+          {hasPicks ? `${picked.length} chosen · real & buyable` : `${catalog.length} found on Amazon`}
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-2.5">
+        {shown.map((c, i) => {
+          const isPick = pickedSet.has(c.imageUrl);
+          const faded = hasPicks && !isPick;
+          return (
+            <div
+              key={c.imageUrl + i}
+              className="animate-sticker-drop"
+              style={{ animationDelay: `${i * 0.12}s`, "--tilt": `${i % 2 ? 4 : -5}deg` } as CSSProperties}
+              title={c.title}
+            >
+              <div
+                className={`relative aspect-square rounded-xl bg-white border p-1.5 transition-all duration-500 ${
+                  isPick
+                    ? "border-orange-700 ring-2 ring-orange-700 shadow-md"
+                    : "border-zinc-200 dark:border-zinc-700"
+                } ${faded ? "opacity-25 grayscale scale-90" : ""}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={c.imageUrl} alt="" loading="lazy" className="w-full h-full object-contain" />
+                {isPick && (
+                  <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-orange-700 text-white flex items-center justify-center shadow">
+                    <Check size={11} strokeWidth={3} />
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -180,11 +257,10 @@ export default function ProcessingView({
   statusMessage,
   items,
   findings,
+  catalog = [],
+  picked = [],
 }: ProcessingViewProps) {
-  const activeMode: "space" | "event" | "makeover" =
-    mode ?? (isEvent ? "event" : "space");
-  // Show the item list only once we're past analysis (we have the item list).
-  const showItems = step !== "analyzing" && !!items && items.length > 0;
+  const activeMode: Mode = mode ?? (isEvent ? "event" : "space");
 
   /**
    * The pipeline reuses the "generating" step for two different phases — the
@@ -198,92 +274,56 @@ export default function ProcessingView({
   useEffect(() => {
     setPhase((prev) => {
       const next =
-        step === "analyzing"
-          ? 0
-          : step === "curating"
-            ? 2
-            : prev >= 2
-              ? 3 // "generating" again, after curation → the render
-              : 1;
+        step === "analyzing" ? 0 : step === "curating" ? 2 : prev >= 2 ? 3 : 1;
       return Math.max(prev, next);
     });
   }, [step]);
-  const loadingIndex = phase;
 
-  const headline =
-    phase === 0
-      ? activeMode === "event"
-        ? "Studying your venue"
-        : activeMode === "makeover"
-          ? "Studying your photo"
-          : "Studying your space"
-      : phase === 1
-        ? activeMode === "event"
-          ? "Designing the decorations"
-          : activeMode === "makeover"
-            ? "Styling your new look"
-            : "Designing your room"
-        : phase === 2
-          ? "Hand-picking the products"
-          : activeMode === "event"
-            ? "Staging your venue"
-            : activeMode === "makeover"
-              ? "Rendering your new look"
-              : "Rendering your room";
+  const hasCatalog = catalog.length > 0 || picked.length > 0;
+  // The item list stands in before real products exist; once the catalog has
+  // real thumbnails it takes over.
+  const showItems = step !== "analyzing" && !!items && items.length > 0 && !hasCatalog;
 
   const labels =
     activeMode === "event"
-      ? ["Understanding", "Planning", "Sourcing", "Staging"]
+      ? ["Vibe check", "Planning", "Shopping", "Staging"]
       : activeMode === "makeover"
-        ? ["Understanding", "Styling", "Sourcing", "Rendering"]
-        : ["Understanding", "Designing", "Sourcing", "Rendering"];
+        ? ["Vibe check", "Styling", "Shopping", "Rendering"]
+        : ["Vibe check", "Designing", "Shopping", "Glow up"];
 
   return (
-    <div className="flex flex-col items-center justify-center py-10 sm:py-16 px-1">
+    <div className="flex flex-col items-center justify-center py-8 sm:py-14 px-1">
       <div className="w-full max-w-md">
-        {/* Scanning image */}
+        {/* The user's own photo, being "read" */}
         <div className="relative rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-lg aspect-[4/3] bg-zinc-100 dark:bg-zinc-900">
           {image ? (
-            <img
-              src={image}
-              alt="Your uploaded room"
-              className="w-full h-full object-cover"
-            />
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={image} alt="Your uploaded photo" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full" />
           )}
-
-          {/* dark veil */}
-          <div className="absolute inset-0 bg-zinc-900/30" />
-
-          {/* scan line sweep */}
+          <div className="absolute inset-0 bg-zinc-900/20" />
           <div className="absolute inset-0 scan-sweep" />
-
-          {/* grid shimmer */}
           <div className="absolute inset-0 scan-grid opacity-40" />
-
-          {/* center badge */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm shadow-lg">
-              <Sparkles size={15} className="text-orange-700 animate-pulse" />
-              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                {headline}
-              </span>
-            </div>
-          </div>
+          <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-white/90 dark:bg-zinc-900/90 text-[11px] font-semibold text-zinc-900 dark:text-zinc-100 shadow">
+            {labels[phase]}…
+          </span>
         </div>
 
-        {/* themed icon parade */}
-        <IconParade step={step} mode={activeMode} />
+        {/* Noosho + what she's up to */}
+        <div className="mt-4 flex items-end gap-3">
+          <div className="shrink-0 -mb-1">
+            <Mascot pose={POSE_BY_PHASE[phase]} size={112} title="Noosho" />
+          </div>
+          <SpeechBubble phase={phase} mode={activeMode} />
+        </div>
 
-        {/* progress bar */}
-        <div className="relative h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden progress-bar mt-5 mb-5" />
-
-        {/* stepper */}
+        {/* progress + stepper */}
+        <div className="relative h-1 rounded-full bg-zinc-200 dark:bg-zinc-800 overflow-hidden progress-bar mt-4 mb-4" />
         <div className="flex items-center justify-between">
           {labels.map((label, i) => {
-            const done = i < loadingIndex;
-            const active = i === loadingIndex;
+            const done = i < phase;
+            const active = i === phase;
             return (
               <div key={label} className="flex flex-col items-center gap-1.5">
                 <div
@@ -295,15 +335,15 @@ export default function ProcessingView({
                         : "bg-zinc-200 dark:bg-zinc-800 text-zinc-400"
                   }`}
                 >
-                  {done ? <Check size={12} strokeWidth={3} /> : i + 1}
+                  {done ? (
+                    <Check size={12} strokeWidth={3} />
+                  ) : active ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    i + 1
+                  )}
                 </div>
-                <span
-                  className={`text-[11px] ${
-                    active
-                      ? "text-zinc-900 dark:text-zinc-100 font-medium"
-                      : "text-zinc-400"
-                  }`}
-                >
+                <span className={`text-[11px] ${active ? "text-zinc-900 dark:text-zinc-100 font-medium" : "text-zinc-400"}`}>
                   {label}
                 </span>
               </div>
@@ -311,9 +351,8 @@ export default function ProcessingView({
           })}
         </div>
 
-        {/* What the AI actually read off the photo. Free to show — the parent
-            already holds the analysis — and far more engaging than a spinner,
-            because it's about the user's own room. */}
+        {/* What the AI actually read off the photo — about the user's own room,
+            so far more engaging than a spinner. */}
         {findings && findings.length > 0 && (
           <div className="mt-5 flex flex-wrap justify-center gap-1.5 animate-fade-up">
             {findings.slice(0, 5).map((f) => (
@@ -328,17 +367,12 @@ export default function ProcessingView({
           </div>
         )}
 
-        {showItems && (
-          <ItemList items={items!} mode={activeMode} phase={phase} />
-        )}
+        {hasCatalog && <Catalog catalog={catalog} picked={picked} />}
 
-        {/* Always shown now. It used to be suppressed whenever the ticker was
-            visible, which hid the only honest per-step copy we had. */}
-        {statusMessage && (
-          <p className="text-sm text-zinc-500 text-center mt-6">
-            {statusMessage}
-          </p>
-        )}
+        {showItems && <ItemList items={items!} mode={activeMode} phase={phase} />}
+
+        {/* The literal status line stays — the bubble is the fun layer on top. */}
+        {statusMessage && <p className="text-xs text-zinc-400 text-center mt-5">{statusMessage}</p>}
       </div>
     </div>
   );

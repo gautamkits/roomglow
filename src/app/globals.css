@@ -151,6 +151,34 @@ button, [role="button"], a {
   }
 }
 
+/* Wait screen: real Amazon products drop into Noosho's catalog like stickers. */
+@keyframes sticker-drop {
+  0% { opacity: 0; transform: translateY(-46px) rotate(var(--tilt, -6deg)) scale(0.6); }
+  60% { opacity: 1; transform: translateY(4px) rotate(var(--tilt, -6deg)) scale(1.06); }
+  80% { transform: translateY(-2px) rotate(var(--tilt, -6deg)) scale(0.98); }
+  100% { opacity: 1; transform: translateY(0) rotate(var(--tilt, -6deg)) scale(1); }
+}
+.animate-sticker-drop {
+  animation: sticker-drop 0.55s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+/* Speech bubble swaps lines with a quick pop. */
+@keyframes bubble-pop {
+  0% { opacity: 0; transform: translateY(6px) scale(0.92); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.animate-bubble-pop {
+  animation: bubble-pop 0.3s cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sticker-drop,
+  .animate-bubble-pop {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+
 @keyframes progress-indeterminate {
   0% { left: -40%; }
   100% { left: 100%; }
