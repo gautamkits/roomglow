@@ -224,7 +224,7 @@ function HomeContent() {
               </div>
             )}
             <NooshoSays pose="wave" className="justify-center mb-4">
-              got your photo! sign in so i can save your design 💛
+              got your photo 💛 one quick step and i start designing
             </NooshoSays>
             <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 mb-2">
               Sign in to see your design

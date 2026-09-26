@@ -302,21 +302,22 @@ export default function SetupPanelV2({
     (mode !== "event" || (!!event && !!subTheme && !!colorScheme)) &&
     (mode !== "makeover" || !!makeoverStyleId);
 
-  // What Noosho says at each step — short, warm, and about the step itself.
+  // What Noosho says at each step. Never restates the heading under her —
+  // she adds personality, a useful tip, or what happens next.
   const guide: { pose: MascotPose; line: string } =
     step === "mode"
-      ? { pose: "wave", line: "hi, i’m Noosho 👋 what are we making today?" }
+      ? { pose: "wave", line: "hi, i’m Noosho 👋 pick one and i’ll do the rest" }
       : step === "photo"
         ? mode === "event"
-          ? { pose: "peek", line: "show me the venue! one photo, i’ll take it from there 📸" }
+          ? { pose: "peek", line: "tip: get the wall you want decorated in frame 🎈" }
           : mode === "makeover"
-            ? { pose: "peek", line: "show me you! one clear photo is perfect 📸" }
-            : { pose: "peek", line: "show me the room! any angle works 📸" }
+            ? { pose: "peek", line: "tip: good light = my best work ✨" }
+            : { pose: "peek", line: "tip: stand in a corner so i can see the whole room 📸" }
         : step === "occasion"
-          ? { pose: "celebrate", line: "ooh a party? what’s the occasion? 🎉" }
+          ? { pose: "celebrate", line: "ooh, a party! i love a good celebration 🎉" }
           : mode === "event"
-            ? { pose: "idea", line: "love it. pick the vibe and i’ll start decorating ✨" }
-            : { pose: "idea", line: "last bit! then i go shopping for real pieces 🛒" };
+            ? { pose: "idea", line: "after this i’ll hunt down real decor you can order 🛒" }
+            : { pose: "idea", line: "after this i go shopping for real pieces 🛒" };
 
   const back = () => {
     if (step === "details") setStep(mode === "event" ? "occasion" : "photo");
