@@ -1,5 +1,7 @@
 "use client";
 
+import Mascot from "./Mascot";
+
 import { useEffect, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { trackMeta } from "@/lib/metaClient";
@@ -339,6 +341,14 @@ export default function PaywallOverlay({
         <div className="w-full max-w-3xl grid gap-y-6 gap-x-12 sm:grid-cols-2 sm:items-center">
           {/* ── Left: the dream ── */}
           <div>
+            {/* Noosho kept it safe for them — warmth at the decision point,
+                kept small so it never competes with the price or the button. */}
+            <div className="flex items-end gap-2 mb-3">
+              <Mascot pose="carry" size={64} title="Noosho" />
+              <span className="mb-2 text-xs text-zinc-600 dark:text-zinc-300 bg-white/90 dark:bg-zinc-900/90 border border-zinc-200 dark:border-zinc-800 rounded-2xl rounded-bl-md px-3 py-1.5 shadow-sm">
+                I saved your design for you 💛
+              </span>
+            </div>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-orange-800 dark:text-orange-300 bg-orange-50/90 dark:bg-orange-950/50 px-2.5 py-1 rounded-full mb-3">
               <Lock size={11} /> {isEvent ? "Event design locked" : "Design locked"}
             </span>

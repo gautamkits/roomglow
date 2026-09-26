@@ -25,6 +25,7 @@ import GallerySearch from "@/components/GallerySearch";
 import AdminDeleteButton from "@/components/AdminDeleteButton";
 import Footer from "@/components/Footer";
 import TiltCard from "@/components/TiltCard";
+import NooshoPeekaboo from "@/components/NooshoPeekaboo";
 import ExitIntentModal from "@/components/ExitIntentModal";
 
 export const metadata: Metadata = {
@@ -320,6 +321,8 @@ export default async function Home({
             </Link>
           </div>
         ) : (
+          <div className="relative">
+          <NooshoPeekaboo />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 -mx-3 sm:mx-0">
             {/* On a phone the grid bleeds out of the page's px-5 to an 8px
                 margin with an 8px gutter — the spacing Myntra's product grid
@@ -332,6 +335,7 @@ export default async function Home({
                 style={{ animationDelay: `${Math.min(i, 11) * 45}ms` }}
               >
               <article
+                data-noosho-spot
                 className="group rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-orange-200 dark:hover:border-orange-900/50 hover:shadow-xl hover:shadow-orange-900/5 transition-all duration-200"
               >
                 <div className="relative">
@@ -426,6 +430,7 @@ export default async function Home({
               </article>
               </TiltCard>
             ))}
+          </div>
           </div>
         )}
 

@@ -179,6 +179,18 @@ button, [role="button"], a {
   }
 }
 
+/* Noosho's once-a-visit dash across the bottom of the screen. */
+@keyframes noosho-run {
+  0% { transform: translateX(-120px); }
+  100% { transform: translateX(calc(100vw + 40px)); }
+}
+.noosho-run {
+  animation: noosho-run 5s linear both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .noosho-run { display: none; }
+}
+
 @keyframes progress-indeterminate {
   0% { left: -40%; }
   100% { left: 100%; }

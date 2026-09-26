@@ -1,9 +1,11 @@
 "use client";
 
+import Mascot from "@/components/Mascot";
+
 import { useEffect } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import { useUserLibrary } from "@/lib/useUserLibrary";
 import UpcomingEvents from "@/components/dashboard/UpcomingEvents";
@@ -79,10 +81,14 @@ function ProfileContent() {
 
         {designs.length === 0 ? (
           <div className="text-center py-20 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700">
-            <Sparkles size={32} className="text-zinc-300 mx-auto mb-3" />
-            <p className="text-zinc-500 mb-1">No designs yet</p>
+            <div className="flex justify-center mb-2">
+              <Mascot pose="sleep" size={120} title="Noosho, napping" />
+            </div>
+            <p className="text-zinc-700 dark:text-zinc-300 font-medium mb-1">
+              Noosho&rsquo;s napping&hellip; wake her up?
+            </p>
             <p className="text-sm text-zinc-400 mb-5">
-              Upload a room photo and let our AI design it for you.
+              Send her a photo of any room and she&rsquo;ll design it and find every piece.
             </p>
             <button
               onClick={() => router.push("/")}
