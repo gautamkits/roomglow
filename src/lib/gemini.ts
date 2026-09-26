@@ -1829,3 +1829,115 @@ Suggest 6-8 products the user could ADD, as a fresh checklist. IMPORTANT:
 
   return response.text ?? "";
 }
+
+// ─── Admin input studio ────────────────────────────────────────────────────
+// Admin-only tooling to generate "before" photos for demos, reels and gallery
+// seeding. Two steps so variety is cheap: a text model writes a fresh, specific
+// scene brief (≈₹1–2), then an image model draws it. Nothing here is reachable
+// from a user route, and none of it touches the design pipeline above.
+
+/** Image model for generated inputs. One constant so it is a one-line swap. */
+export const INPUT_IMAGE_MODEL = "gemini-2.5-flash-image";
+
+export type InputBriefRequest = {
+  kind: "room" | "venue";
+  preset: string;
+  state: "empty" | "lived-in" | "cluttered";
+  light: "daylight" | "evening";
+  extra?: string;
+  /** Recent briefs from this session, so consecutive clicks don't repeat. */
+  avoid?: string[];
+};
+
+const inputBriefSchema = {
+  type: Type.OBJECT,
+  properties: {
+    brief: {
+      type: Type.STRING,
+      description:
+        "One paragraph, 60-110 words, describing exactly what the phone camera sees.",
+    },
+  },
+  required: ["brief"],
+};
+
+/** Write a new, specific scene description for one generated input photo. */
+export async function writeInputBrief(req: InputBriefRequest): Promise<string> {
+  const avoid = (req.avoid ?? []).slice(-10);
+  const prompt = `You write scene descriptions for photos of real, ordinary ${
+    req.kind === "venue" ? "event venues" : "homes"
+  }. Each description is for a single vertical smartphone photo.
+
+Space: ${req.preset}
+Condition: ${
+    req.state === "empty"
+      ? "completely empty — no furniture or decor, bare floor and walls, as if just after moving in"
+      : req.state === "lived-in"
+        ? "lightly lived-in — a few basic, plain, mismatched items; nothing styled"
+        : "cluttered — everyday mess, mismatched old furniture, things on surfaces"
+  }
+Light: ${req.light === "daylight" ? "natural daylight" : "warm evening, lights on, a bit dim"}
+${req.extra ? `Must include: ${req.extra}\n` : ""}
+Invent ONE specific, believable space. Choose concrete details and vary them from
+the examples below: the city or region it is in, flooring material, wall colour and
+finish, number and position of windows or doors, ceiling (fan, false ceiling, beams),
+switchboards, AC unit, radiator or none, the room's shape and depth, and where the
+photographer stands. Keep it realistic and a little imperfect — this is a real
+place, not a showroom. No people, no pets, no text, no brand names.
+${
+    avoid.length
+      ? `\nThese were already used. Your description must differ clearly in layout, materials AND viewpoint:\n${avoid
+          .map((a, i) => `${i + 1}. ${a}`)
+          .join("\n")}\n`
+      : ""
+  }`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: inputBriefSchema,
+      // Variety is the whole point of this step.
+      temperature: 1.2,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+  return parseJson<{ brief: string }>(response.text, "Input brief").brief.trim();
+}
+
+/** Draw one 9:16 input photo from a brief. Returns base64 PNG/JPEG data. */
+export async function generateInputPhoto(
+  brief: string
+): Promise<{ data: string; mimeType: string }> {
+  const prompt = `An ordinary vertical photo taken on a smartphone, held at eye height.
+
+${brief}
+
+Style: a real, unedited phone snapshot — natural perspective with slight wide-angle
+lens distortion, true-to-life colours, realistic uneven lighting, visible everyday
+details. It must NOT look like a 3D render, architectural visualisation, or
+magazine shoot. No people, no pets, no text, no logos, no watermark.`;
+
+  const response = await ai.models.generateContent({
+    model: INPUT_IMAGE_MODEL,
+    contents: [{ role: "user", parts: [{ text: prompt }] }],
+    config: {
+      responseModalities: ["TEXT", "IMAGE"],
+      imageConfig: { aspectRatio: "9:16" },
+    },
+  });
+
+  const candidate = response.candidates?.[0];
+  for (const part of candidate?.content?.parts ?? []) {
+    if (part.inlineData?.data) {
+      return {
+        data: part.inlineData.data,
+        mimeType: part.inlineData.mimeType || "image/png",
+      };
+    }
+  }
+  throw new Error(
+    `Input photo produced no image (finishReason: ${candidate?.finishReason ?? "unknown"})`
+  );
+}

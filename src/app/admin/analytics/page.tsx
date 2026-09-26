@@ -34,7 +34,7 @@ interface AnalyticsData {
     users_30d: string;
   };
   imageGen: {
-    daily: { day: string; total: string; design: string; restyle: string; empty: string; makeover?: string }[];
+    daily: { day: string; total: string; design: string; restyle: string; empty: string; makeover?: string; admin_input?: string }[];
     totals: { total: string; calls_7d: string; calls_30d: string; empty_30d: string };
   };
   affiliate?: {
@@ -342,6 +342,7 @@ function AnalyticsContent() {
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-400 inline-block" />Restyle</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-zinc-400 inline-block" />Empty-room</span>
                     <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-pink-500 inline-block" />Makeover</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-sky-500 inline-block" />Admin input</span>
                     <span className="ml-auto">calls · est. ₹</span>
                   </div>
                   {daily.map((d) => {
@@ -350,6 +351,7 @@ function AnalyticsContent() {
                     const restyle = Number(d.restyle);
                     const empty = Number(d.empty);
                     const makeover = Number(d.makeover || 0);
+                    const adminInput = Number(d.admin_input || 0);
                     const w = (n: number) => `${(n / maxDay) * 100}%`;
                     return (
                       <div key={d.day} className="flex items-center gap-3">
@@ -359,6 +361,7 @@ function AnalyticsContent() {
                           <div className="h-full bg-orange-400" style={{ width: w(restyle) }} />
                           <div className="h-full bg-zinc-400" style={{ width: w(empty) }} />
                           <div className="h-full bg-pink-500" style={{ width: w(makeover) }} />
+                          <div className="h-full bg-sky-500" style={{ width: w(adminInput) }} />
                         </div>
                         <span className="text-xs text-zinc-500 w-8 text-right tabular-nums">{total}</span>
                         <span className="text-xs text-zinc-400 w-16 text-right tabular-nums">{inr(total * ratePerGen)}</span>

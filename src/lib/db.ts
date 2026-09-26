@@ -1271,7 +1271,8 @@ export async function getAnalyticsStats() {
         COUNT(*) FILTER (WHERE kind = 'restyle') AS restyle,
         COUNT(*) FILTER (WHERE kind = 'empty') AS empty,
         COUNT(*) FILTER (WHERE kind = 'makeover') AS makeover,
-        COUNT(*) FILTER (WHERE kind = 'edit') AS edit
+        COUNT(*) FILTER (WHERE kind = 'edit') AS edit,
+        COUNT(*) FILTER (WHERE kind = 'admin-input') AS admin_input
       FROM image_gen_events
       WHERE created_at >= NOW() - INTERVAL '14 days'
       GROUP BY 1

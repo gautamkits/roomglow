@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { SessionProvider, useSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Check, X, BarChart2, Tag, Sparkles, Gift, Wand2, Trash2 } from "lucide-react";
+import { Check, X, BarChart2, ImagePlus, Tag, Sparkles, Gift, Wand2, Trash2 } from "lucide-react";
 import SiteHeader from "@/components/SiteHeader";
 import RevealExport, { type RevealDesign } from "@/components/RevealExport";
 
@@ -739,6 +739,13 @@ function AdminContent() {
             >
               <BarChart2 size={14} />
               <span className="hidden sm:inline">Analytics</span>
+            </button>
+            <button
+              onClick={() => router.push("/admin/input-studio")}
+              className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors"
+            >
+              <ImagePlus size={14} />
+              <span className="hidden sm:inline">Input Studio</span>
             </button>
           </div>
         }
