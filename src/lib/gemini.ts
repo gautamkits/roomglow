@@ -1881,9 +1881,24 @@ ${req.extra ? `Must include: ${req.extra}\n` : ""}
 Invent ONE specific, believable space. Choose concrete details and vary them from
 the examples below: the city or region it is in, flooring material, wall colour and
 finish, number and position of windows or doors, ceiling (fan, false ceiling, beams),
-switchboards, AC unit, radiator or none, the room's shape and depth, and where the
-photographer stands. Keep it realistic and a little imperfect — this is a real
-place, not a showroom. No people, no pets, no text, no brand names.
+switchboards, AC unit, radiator or none, and the room's proportions.
+
+Viewpoint — this matters most. The photographer stands IN A CORNER of the room (or
+against a side wall), looking DIAGONALLY across it, so TWO walls meet in the frame
+and the room's full width and floor area are visible. Say which corner and which
+two walls are seen. NEVER stand in or behind a doorway, NEVER look straight down
+the length of the room, and never describe a long, narrow, corridor-like space.
+The room should read as spacious and roomy.${
+    req.state === "empty"
+      ? ""
+      : `
+It is NOT empty: describe the specific ${
+          req.state === "cluttered" ? "clutter and old furniture" : "few plain items"
+        } you can see, per the Condition above.`
+  }
+
+Keep it realistic and a little imperfect — this is a real place, not a showroom.
+No people, no pets, no text, no brand names.
 ${
     avoid.length
       ? `\nThese were already used. Your description must differ clearly in layout, materials AND viewpoint:\n${avoid
@@ -1910,14 +1925,19 @@ ${
 export async function generateInputPhoto(
   brief: string
 ): Promise<{ data: string; mimeType: string }> {
-  const prompt = `An ordinary vertical photo taken on a smartphone, held at eye height.
+  const prompt = `An ordinary vertical photo of a room taken on a smartphone, held at chest height.
 
 ${brief}
 
-Style: a real, unedited phone snapshot — natural perspective with slight wide-angle
-lens distortion, true-to-life colours, realistic uneven lighting, visible everyday
-details. It must NOT look like a 3D render, architectural visualisation, or
-magazine shoot. No people, no pets, no text, no logos, no watermark.`;
+Composition: shot from a corner looking diagonally across the room — two walls
+visible, generous open floor, the room's full width in frame. Natural, undistorted
+perspective at a normal focal length (no fisheye, no ultra-wide stretch). NOT a
+view straight down a long room, NOT framed through a doorway, NOT corridor-like.
+
+Style: a real, unedited phone snapshot — true-to-life colours, realistic uneven
+lighting, visible everyday details. It must NOT look like a 3D render,
+architectural visualisation, or magazine shoot. No people, no pets, no text, no
+logos, no watermark.`;
 
   const response = await ai.models.generateContent({
     model: INPUT_IMAGE_MODEL,
