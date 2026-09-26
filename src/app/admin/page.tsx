@@ -515,6 +515,46 @@ function AbandonedCard({ i, onGifted }: { i: AbandonedIntent; onGifted: () => vo
   );
 }
 
+/**
+ * Video export for ANY design, published or not — the admin may want a reel
+ * without putting the design on the home page. The All-designs list is loaded
+ * without products/hotspots (60 cards of product JSON would be heavy), so the
+ * full record is fetched only when the admin asks for an export. /api/design
+ * returns the entitled payload to admins regardless of gallery status.
+ */
+function LazyRevealExport({ designId }: { designId: string }) {
+  const [design, setDesign] = useState<RevealDesign | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (design) return <RevealExport design={design} />;
+
+  return (
+    <div className="mt-2">
+      <button
+        disabled={loading}
+        onClick={async () => {
+          setLoading(true);
+          setError(null);
+          try {
+            const res = await fetch(`/api/design/${designId}`);
+            if (!res.ok) throw new Error(`Could not load design (${res.status})`);
+            setDesign((await res.json()) as RevealDesign);
+          } catch (e) {
+            setError(e instanceof Error ? e.message : "Failed");
+          } finally {
+            setLoading(false);
+          }
+        }}
+        className="w-full py-2 rounded-lg border border-zinc-200 dark:border-zinc-800 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 disabled:opacity-50"
+      >
+        {loading ? "Loading…" : "Export video"}
+      </button>
+      {error && <p className="text-[11px] text-red-600 mt-1">{error}</p>}
+    </div>
+  );
+}
+
 function AdminContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -1082,6 +1122,7 @@ function AdminContent() {
                         }
                       />
                       <RegenerateSend design={d} />
+                      <LazyRevealExport designId={d.id} />
                     </div>
                   </div>
                 ))}

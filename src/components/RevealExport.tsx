@@ -70,6 +70,8 @@ export interface RevealDesign {
   products?: unknown;
   hotspots?: unknown;
   selected_items?: unknown;
+  /** When set and not "approved", the design page is private — see `link`. */
+  gallery_status?: string | null;
 }
 
 function slugify(s: string): string {
@@ -107,7 +109,13 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const supported = isRevealVideoSupported();
   const title = designTitle(design);
   const description = designDescription(design);
-  const link = `${SITE_URL}/design/${design.id}`;
+  // An unpublished design's page is private: a viewer tapping the caption link
+  // from Instagram would hit the access gate. Point those at the homepage
+  // instead. Absent status (older callers) keeps the design link, so published
+  // exports are unchanged.
+  const isPublic = design.gallery_status == null || design.gallery_status === "approved";
+  const link = isPublic ? `${SITE_URL}/design/${design.id}` : SITE_URL;
+  const linkLead = isPublic ? "✨ See it & shop the look" : "✨ Redesign your own room";
   const tags = designItems(design)
     .slice(0, 4)
     .map((t) => "#" + t.toLowerCase().replace(/[^a-z0-9]+/g, ""))
@@ -116,7 +124,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   // but the caption is where viewers are actually told to leave one — so both
   // surfaces have to carry the same ask or the video's CTA goes unexplained.
   const captionCta = ctaLine.trim() ? `\n\n${ctaLine.trim()}` : "";
-  const caption = `${title}\n\n${description}${captionCta}\n\n✨ See it & shop the look: ${link}\n\n${[
+  const caption = `${title}\n\n${description}${captionCta}\n\n${linkLead}: ${link}\n\n${[
     "#noosho",
     "#interiordesign",
     "#homedecor",
