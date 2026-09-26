@@ -73,6 +73,18 @@ function Viewer({
   const router = useRouter();
   const { data: session, status } = useSession();
   const [design] = useState<DesignData | null>(initial);
+  // True only on the first arrival straight from /create. The flag is read
+  // once and stripped from the URL, so a refresh or a later visit from the
+  // profile gets the revisit line instead of another "ta-da".
+  const [justMade, setJustMade] = useState(false);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("new") === "1") {
+      setJustMade(true);
+      url.searchParams.delete("new");
+      window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  }, []);
   const [isUnlocked, setIsUnlocked] = useState(
     approved || initial?.is_unlocked || false
   );
@@ -237,9 +249,19 @@ function Viewer({
           </h2>
           {/* Noosho at the finish line. Locked designs get her on the paywall. */}
           {isUnlocked && isOwner ? (
-            <NooshoSays pose="celebrate" size={56} className="mt-3">
-              ta-da! 🎉 tap any piece to shop it
-            </NooshoSays>
+            justMade ? (
+              <NooshoSays pose="celebrate" size={56} className="mt-3">
+                ta-da! 🎉 tap any piece to shop it
+              </NooshoSays>
+            ) : approved ? (
+              <NooshoSays pose="idle" size={56} className="mt-3">
+                this one’s live in the gallery 🌟 others can shop it too
+              </NooshoSays>
+            ) : (
+              <NooshoSays pose="wave" size={56} className="mt-3">
+                welcome back! got another room for me? ✨
+              </NooshoSays>
+            )
           ) : approved && !isOwner ? (
             <NooshoSays pose="wave" size={56} className="mt-3">
               like this? send me your room and i’ll design yours ✨

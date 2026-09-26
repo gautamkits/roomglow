@@ -128,7 +128,8 @@ function HomeContent() {
   useEffect(() => {
     if (step === "results" && designId) {
       clearFlowSnapshot();
-      router.replace(`/design/${designId}`);
+      // ?new=1 tells the design page this is the reveal moment (Noosho's ta-da).
+      router.replace(`/design/${designId}?new=1`);
     }
   }, [step, designId, router]);
 
