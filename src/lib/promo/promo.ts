@@ -78,6 +78,8 @@ export type Win = [number, number];
 export type Timeline = {
   intro: Win; montage: Win; photo: Win; scan: Win; shop: Win; reveal: Win; pins: Win; outro: Win;
   lines: Seg[];
+  /** Caption text per line; defaults to PROMO_LINES. */
+  captions?: readonly string[];
   duration: number;
 };
 
@@ -746,7 +748,7 @@ export function drawCaption(ctx: CanvasRenderingContext2D, t: number, tl: Timeli
   const out = 1 - clamp((t - e - 0.1) / 0.2);
   ctx.save();
   ctx.font = `700 ${size}px ${SORA}`;
-  const lines = wrap(ctx, PROMO_LINES[i], 880);
+  const lines = wrap(ctx, (tl.captions ?? PROMO_LINES)[i] ?? "", 880);
   const lh = Math.round(size * 1.23);
   const boxW = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 90;
   const boxH = lines.length * lh + 50;

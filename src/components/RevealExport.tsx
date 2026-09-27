@@ -13,7 +13,13 @@ import { generateSimpleRevealVideo } from "@/lib/simpleRevealVideo";
 import { designTotal } from "@/lib/price";
 import type { ProductResult } from "@/lib/types";
 
-type RevealVariant = "full" | "simple";
+type RevealVariant = "full" | "simple" | "explain";
+
+type ExplainScript = {
+  lines: string[];
+  palette: { name: string; hex: string }[];
+  products: { title: string; price: string; imageUrl: string }[];
+};
 
 interface ParsedProduct {
   amazonProduct?: { title?: string; price?: string; imageUrl?: string } | null;
@@ -91,6 +97,11 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [variant, setVariant] = useState<RevealVariant>("full");
   const [outro, setOutro] = useState(true);
   const [noosho, setNoosho] = useState(true);
+  // "Noosho explains": per-design script (editable) + TTS voice.
+  const [script, setScript] = useState<ExplainScript | null>(null);
+  const [scriptText, setScriptText] = useState("");
+  const [voice, setVoice] = useState<"Laomedeia" | "Leda">("Laomedeia");
+  const [stage, setStage] = useState<string | null>(null);
   const allProducts = buyableProducts(design);
   // Deliberately NOT from `allProducts` — that list is filtered to products with
   // an image AND price and then sliced to 2 for the shop cards, so totalling it
@@ -132,6 +143,77 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     ...tags,
   ].join(" ")}`;
 
+  const writeScript = async () => {
+    setBusy(true);
+    setError(null);
+    setStage("Noosho is writing her lines…");
+    try {
+      const r = await fetch("/api/admin/noosho-explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "script", designId: design.id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || "Couldn't write the script.");
+      setScript(d);
+      setScriptText(d.lines.join("\n"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't write the script.");
+    } finally {
+      setBusy(false);
+      setStage(null);
+    }
+  };
+
+  const renderExplain = async (): Promise<Blob> => {
+    if (!script) throw new Error("Write the script first.");
+    const lines = scriptText.split("\n").map((l) => l.trim()).filter(Boolean);
+    // Scenes are keyed by line position: hello, before, after, one per product, outro.
+    const expected = 4 + script.products.length;
+    if (lines.length !== expected) {
+      throw new Error(
+        `Keep ${expected} lines (hello, before, after, ${script.products.length} product line(s), outro) — edit the words, not the count.`
+      );
+    }
+    setStage("Recording Noosho's voice…");
+    const r = await fetch("/api/admin/noosho-explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "voice", designId: design.id, lines, voice }),
+    });
+    const vo = await r.json();
+    if (!r.ok) throw new Error(vo.error || "Voice generation failed.");
+
+    setStage("Getting Noosho ready…");
+    const [promo, style, rv] = await Promise.all([
+      import("@/lib/promo/promo"),
+      import("@/lib/promo/styles/explain"),
+      import("@/lib/revealVideo"),
+    ]);
+    const [kit, envelope, before, after, products] = await Promise.all([
+      promo.loadNooshoKit(),
+      promo.loadVoiceEnvelope(vo.url),
+      rv.loadImage(`/api/image/${design.id}/before?inline=1`),
+      rv.loadImage(`/api/image/${design.id}/after?inline=1`),
+      Promise.all(
+        script.products.map(async (p) => ({
+          img: await rv.loadImage(`/api/proxy-image?url=${encodeURIComponent(p.imageUrl)}`),
+          title: p.title,
+          price: p.price,
+        }))
+      ),
+    ]);
+    if (!kit) throw new Error("Couldn't draw Noosho.");
+    const assets = { ...kit, envelope, before, after, cards: [], products: [], gallery: [] };
+    const tl = style.explainTimeline(vo.segments, lines);
+    setStage(null);
+    return promo.generatePromoVideo(assets, tl, {
+      voiceUrl: vo.url,
+      render: style.makeExplainRender({ products, palette: script.palette }),
+      onProgress: (f) => setPct(Math.round(f * 100)),
+    });
+  };
+
   const exportVideo = async () => {
     setBusy(true);
     setError(null);
@@ -141,7 +223,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       const afterUrl = `/api/image/${design.id}/after?inline=1`;
 
       let blob: Blob;
-      if (variant === "simple") {
+      if (variant === "explain") {
+        blob = await renderExplain();
+      } else if (variant === "simple") {
         // Original before→after wipe — no products / hotspots needed.
         blob = await generateSimpleRevealVideo(
           {
@@ -183,7 +267,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
         );
       }
 
-      const suffix = variant === "simple" ? "beforeafter" : "reveal";
+      const suffix = variant === "simple" ? "beforeafter" : variant === "explain" ? "explains" : "reveal";
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -196,6 +280,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       setError(e instanceof Error ? e.message : "Export failed.");
     } finally {
       setBusy(false);
+      setStage(null);
     }
   };
 
@@ -224,6 +309,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               {([
                 { id: "full", label: "Full commercial" },
                 { id: "simple", label: "Before/after" },
+                { id: "explain", label: "Noosho explains" },
               ] as const).map((v) => (
                 <button
                   key={v.id}
@@ -308,7 +394,61 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               <span className="text-[11px] text-zinc-500">Noosho slides it</span>
             </label>
           )}
+          {variant === "explain" && (
+            <div className="mb-2 space-y-1.5">
+              {!script ? (
+                <button
+                  onClick={writeScript}
+                  disabled={busy}
+                  className="w-full py-1.5 rounded-lg border border-orange-700 text-orange-700 text-xs font-medium hover:bg-orange-50 dark:hover:bg-zinc-900 disabled:opacity-60"
+                >
+                  {busy ? stage : "Write Noosho's script"}
+                </button>
+              ) : (
+                <>
+                  <span className="text-[11px] text-zinc-400">
+                    Script: one line per scene (edit the words, keep the line count)
+                  </span>
+                  <textarea
+                    value={scriptText}
+                    onChange={(e) => setScriptText(e.target.value)}
+                    disabled={busy}
+                    rows={Math.min(9, script.lines.length + 1)}
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 outline-none focus:border-orange-700 disabled:opacity-60"
+                  />
+                  <div className="flex items-center gap-2">
+                    {script.palette.map((c) => (
+                      <span key={c.hex} className="flex items-center gap-1 text-[10px] text-zinc-500">
+                        <span className="w-3 h-3 rounded-full border border-zinc-300" style={{ background: c.hex }} />
+                        {c.name}
+                      </span>
+                    ))}
+                    <button
+                      onClick={writeScript}
+                      disabled={busy}
+                      className="ml-auto text-[11px] text-orange-700 hover:underline disabled:opacity-60"
+                    >
+                      Rewrite
+                    </button>
+                  </div>
+                  <label className="flex items-center gap-2 text-[11px] text-zinc-500">
+                    Voice
+                    <select
+                      value={voice}
+                      onChange={(e) => setVoice(e.target.value as "Laomedeia" | "Leda")}
+                      disabled={busy}
+                      className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                    >
+                      <option value="Laomedeia">Laomedeia (Indian accent)</option>
+                      <option value="Leda">Leda</option>
+                    </select>
+                  </label>
+                </>
+              )}
+            </div>
+          )}
           {/* Pre-rendered brand outro clip (carries its own CTA), appended last. */}
+          {variant !== "explain" && (
           <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -321,20 +461,25 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               Append brand outro <span className="text-zinc-400">(+2.9s, with CTA)</span>
             </span>
           </label>
+          )}
           <button
             onClick={exportVideo}
-            disabled={busy}
+            disabled={busy || (variant === "explain" && !script)}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-orange-700 hover:bg-orange-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
           >
             <Film size={15} />
-            {prepping
+            {stage && script
+              ? stage
+              : prepping
               ? "Detecting product spots…"
               : busy
                 ? `Rendering… ${pct}%`
                 : "Export reveal MP4"}
           </button>
           <p className="mt-1.5 text-[11px] text-zinc-400">
-            {variant === "simple"
+            {variant === "explain"
+              ? "Noosho says hello, shows the before, the new look and its colours, then each product with its price. Voice + captions."
+              : variant === "simple"
               ? "Before → after wipe with the noosho watermark. Ready for Reels/Shorts."
               : "Logo intro → upload → style → reveal → shop → noosho.com. Ready for Reels/Shorts."}
           </p>
