@@ -196,7 +196,9 @@ export function hostX(side: Side) {
 
 export function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, side: Side = "left", hx = hostX(side)) {
   const mouth = { x: hx + (side === "left" ? 130 : -130), y: HOST.foot - HOST.h * 0.58 };
-  const BUBBLE = side === "left" ? { x: hx + 185, right: 1000 } : { x: 60, right: hx - 185 };
+  // bubble bounds from where she is heading, not mid-slide (else width < 0)
+  const home = hostX(side);
+  const BUBBLE = side === "left" ? { x: home + 185, right: 1000 } : { x: 60, right: home - 185 };
   const i = tl.lines.findIndex(([s, e]) => t >= s - 0.1 && t <= e + 0.35);
   if (i < 0) return;
   const [s, e] = tl.lines[i];
