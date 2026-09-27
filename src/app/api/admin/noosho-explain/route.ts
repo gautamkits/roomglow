@@ -37,6 +37,14 @@ function parseJsonish<T>(raw: unknown): T | null {
 
 type Prod = { amazonProduct?: { title?: string; price?: string; imageUrl?: string } | null };
 
+/** "$129.56" → "$130", "₹4,499.00" → "₹4,499": whole numbers read cleanly aloud. */
+function roundPrice(price: string): string {
+  return price.replace(/([\d,]+)\.(\d+)/, (_, whole: string, frac: string) => {
+    const n = Math.ceil(parseFloat(`${whole.replace(/,/g, "")}.${frac}`));
+    return n.toLocaleString(/₹|Rs|INR/i.test(price) ? "en-IN" : "en-US");
+  });
+}
+
 async function buildScript(designId: string) {
   // Hotspots let the video pin each price onto the design itself.
   try {
@@ -119,7 +127,7 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
   const productLines = products.map((p, i) => {
     const name = (out.productNames[i] || "this piece").replace(/[.!]+$/, "");
     const cap = name.charAt(0).toUpperCase() + name.slice(1);
-    return `${cap}, just ${p.price}!`;
+    return `${cap}, just ${roundPrice(p.price!)}!`;
   });
   return {
     lines: [
@@ -131,7 +139,7 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
     ],
     products: products.map((p) => ({
       title: p.title || "Featured product",
-      price: p.price!,
+      price: roundPrice(p.price!),
       imageUrl: p.imageUrl!,
       x: p.spot?.x,
       y: p.spot?.y,
