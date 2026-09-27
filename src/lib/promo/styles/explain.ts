@@ -44,22 +44,24 @@ export function explainTimeline(segments: Seg[], captions: string[]): Timeline {
     intro: z, montage: z, photo: z, scan: z, shop: z, reveal: z, pins: z, outro: z,
     lines: segments,
     captions,
-    duration: segments[segments.length - 1][1] + 1.6,
+    duration: segments[segments.length - 1][1] + 1.0,
   };
 }
 
-const SORA = "Sora, system-ui, sans-serif";
+export const SORA = "Sora, system-ui, sans-serif";
 
 // ── Layout (1080×1920) ──────────────────────────────────────────────────────
-const CARD: Rect = { x: 48, y: 150, w: 984, h: 1230 };
-const HOST = { x: 235, foot: 1590, h: 600 }; // Noosho, in front of the card's bottom-left
-const BUBBLE = { x: 430, right: 940, bottom: 1600, mouth: { x: 380, y: 1300 } };
-const RADIUS = 44;
+export const CARD: Rect = { x: 48, y: 150, w: 984, h: 1230 };
+// Noosho stands in front of whichever bottom corner of the card is calmer.
+export const HOST = { left: 225, right: 845, foot: 1600, h: 450 };
+export type Side = "left" | "right";
+const BUBBLE_BOTTOM = 1610;
+export const RADIUS = 44;
 
 let bgCache: { src: HTMLImageElement; canvas: HTMLCanvasElement } | null = null;
 
 /** Blurred, slightly darkened copy of the design — the frame's backdrop. Built once. */
-function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+export function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
   if (bgCache?.src !== img) {
     const c = document.createElement("canvas");
     c.width = W / 4;
@@ -75,7 +77,7 @@ function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
   ctx.drawImage(bgCache.canvas, 0, 0, W, H);
 }
 
-function cardFrame(ctx: CanvasRenderingContext2D) {
+export function cardFrame(ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.45)";
   ctx.shadowBlur = 60;
@@ -87,7 +89,7 @@ function cardFrame(ctx: CanvasRenderingContext2D) {
 }
 
 /** Draw `img` into the card, optionally pushed in toward (fx, fy). */
-function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom = 1, fx = CARD.x + CARD.w / 2, fy = CARD.y + CARD.h / 2) {
+export function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom = 1, fx = CARD.x + CARD.w / 2, fy = CARD.y + CARD.h / 2) {
   ctx.save();
   roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, RADIUS);
   ctx.clip();
@@ -99,13 +101,13 @@ function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom = 
 }
 
 /** Where the cover-fitted image lands in the card (so hotspot %s map to pixels). */
-function coverRect(img: HTMLImageElement): Rect {
+export function coverRect(img: HTMLImageElement): Rect {
   const s = Math.max(CARD.w / img.width, CARD.h / img.height);
   const w = img.width * s, h = img.height * s;
   return { x: CARD.x + (CARD.w - w) / 2, y: CARD.y + (CARD.h - h) / 2, w, h };
 }
 
-function tag(ctx: CanvasRenderingContext2D, text: string, bg: string, k = 1) {
+export function tag(ctx: CanvasRenderingContext2D, text: string, bg: string, k = 1) {
   if (k <= 0) return;
   ctx.save();
   ctx.font = `800 40px ${SORA}`;
@@ -135,19 +137,19 @@ function hostHop(t: number, L: number[]): { jump: number; squash: number } {
   return { jump, squash };
 }
 
-function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: MascotPose, t: number, L: number[], o: { h?: number; x?: number; foot?: number; extraJump?: number; mouth?: "o" } = {}) {
+export function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: MascotPose, t: number, L: number[], o: { h?: number; x?: number; foot?: number; extraJump?: number; mouth?: "o"; flip?: boolean } = {}) {
   const { jump, squash } = hostHop(t, L);
   // soft ground shadow so she reads as standing in front of the card
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.28)";
   ctx.beginPath();
-  const sx = o.x ?? HOST.x, sy = (o.foot ?? HOST.foot) - 6;
+  const sx = o.x ?? HOST.left, sy = (o.foot ?? HOST.foot) - 6;
   const ss = 1 - (jump + (o.extraJump ?? 0)) / 260;
-  ctx.ellipse(sx, sy, 150 * ss, 26 * ss, 0, 0, Math.PI * 2);
+  ctx.ellipse(sx, sy, 120 * ss, 22 * ss, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
   drawNoosho(ctx, a, pose, sx, o.foot ?? HOST.foot, o.h ?? HOST.h, {
-    t, bob: 6, jump: jump + (o.extraJump ?? 0), squash, mouth: o.mouth,
+    t, bob: 6, jump: jump + (o.extraJump ?? 0), squash, mouth: o.mouth, flip: o.flip,
   });
 }
 
@@ -155,7 +157,46 @@ function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: MascotPose, t
 
 const HOT = /^(ta-da!?|noosho\.com!?|noosho!?|frends!?|[$₹][\d,.]+!?)$/i;
 
-function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = BUBBLE.mouth) {
+/** Busyness of the photo's bottom corners → the side with more free space. */
+const sideCache = new WeakMap<HTMLImageElement, Side>();
+export function calmerSide(img: HTMLImageElement): Side {
+  const hit = sideCache.get(img);
+  if (hit) return hit;
+  const w = 64, h = 80; // card aspect
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d")!;
+  drawCover(g, img, 0, 0, w, h);
+  let side: Side = "left";
+  try {
+    const d = g.getImageData(0, 0, w, h).data;
+    const lum = (x: number, y: number) => {
+      const i = (y * w + x) * 4;
+      return 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    };
+    // the area she covers: bottom ~30% of the card, outer ~40% on each side
+    const score = (x0: number, x1: number) => {
+      let e = 0;
+      for (let y = 56; y < h - 1; y++)
+        for (let x = x0; x < x1 - 1; x++) e += Math.abs(lum(x + 1, y) - lum(x, y)) + Math.abs(lum(x, y + 1) - lum(x, y));
+      return e;
+    };
+    side = score(0, 26) <= score(38, 64) ? "left" : "right";
+  } catch {
+    /* tainted or unsupported: keep left */
+  }
+  sideCache.set(img, side);
+  return side;
+}
+
+export function hostX(side: Side) {
+  return side === "left" ? HOST.left : HOST.right;
+}
+
+export function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, side: Side = "left", hx = hostX(side)) {
+  const mouth = { x: hx + (side === "left" ? 130 : -130), y: HOST.foot - HOST.h * 0.58 };
+  const BUBBLE = side === "left" ? { x: hx + 185, right: 1000 } : { x: 60, right: hx - 185 };
   const i = tl.lines.findIndex(([s, e]) => t >= s - 0.1 && t <= e + 0.35);
   if (i < 0) return;
   const [s, e] = tl.lines[i];
@@ -172,7 +213,7 @@ function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = 
   const lh = Math.round(size * 1.18);
   const bw = Math.min(BUBBLE.right - BUBBLE.x, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 64);
   const bh = lines.length * lh + 48;
-  const bx = BUBBLE.x, by = BUBBLE.bottom - bh;
+  const bx = side === "left" ? BUBBLE.x : BUBBLE.right - bw, by = BUBBLE_BOTTOM - bh;
 
   // grow out of Noosho's mouth
   ctx.globalAlpha *= out;
@@ -187,10 +228,11 @@ function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = 
   roundRect(ctx, bx, by, bw, bh, 40);
   ctx.fill();
   // tail toward her mouth
+  const ex = side === "left" ? bx + 30 : bx + bw - 30;
   ctx.beginPath();
-  ctx.moveTo(bx + 30, by + bh * 0.35);
+  ctx.moveTo(ex, by + bh * 0.35);
   ctx.lineTo(mouth.x, mouth.y);
-  ctx.lineTo(bx + 30, by + bh * 0.35 + 70);
+  ctx.lineTo(ex, by + bh * 0.35 + 70);
   ctx.closePath();
   ctx.fill();
   ctx.shadowColor = "transparent";
@@ -211,7 +253,7 @@ function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = 
 
 // ── Product callouts ────────────────────────────────────────────────────────
 
-function pinDot(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: number) {
+export function pinDot(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: number) {
   if (k <= 0) return;
   const s = easeOutBack(clamp(k));
   const ring = (t * 1.2) % 1;
@@ -283,43 +325,61 @@ function priceTag(ctx: CanvasRenderingContext2D, p: ExplainProduct, px: number, 
 export function makeExplainRender(x: ExplainExtras): PromoRender {
   return (ctx: CanvasRenderingContext2D, t: number, a: PromoAssets, tl: Timeline) => {
     const L = tl.lines.map(([s]) => s);
-    const at = (i: number) => Math.max(0, L[i] - 0.25);
+    const at = (i: number) => Math.max(0, L[i] - 0.15);
     const n = x.products.length;
     const last = L.length - 1;
     backdrop(ctx, a.after);
 
+    // Where Noosho stands in each scene (scene i = line i): the calmer corner
+    // of what's on screen; in product scenes, away from that product.
+    const cr0 = coverRect(a.after);
+    const sides: Side[] = L.map((_, i) => {
+      if (i === 1) return calmerSide(a.before);
+      if (i >= 3 && i < 3 + n) {
+        const p = x.products[i - 3];
+        if (p.x != null) return cr0.x + (p.x / 100) * cr0.w < CARD.x + CARD.w / 2 ? "right" : "left";
+      }
+      return calmerSide(a.after);
+    });
+    let scene = 0;
+    for (let i = 0; i < L.length; i++) if (t >= at(i)) scene = i;
+    const side = sides[scene];
+    const slide = easeInOutCubic(clamp((t - at(scene)) / 0.35));
+    const hx = lerp(hostX(sides[Math.max(0, scene - 1)]), hostX(side), scene === 0 ? 1 : slide);
+    const flip = side === "right";
+
     if (t < at(1)) {
       // HOOK: open on the finished design; Noosho bursts in, big, waving.
-      const zoom = 1.12 - 0.12 * easeOutCubic(clamp(t / 2.5));
+      const zoom = 1.12 - 0.12 * easeOutCubic(clamp(t / 1.8));
       cardFrame(ctx);
       cardImage(ctx, a.after, zoom);
-      const p = easeOutBack(clamp((t - 0.1) / 0.55));
-      host(ctx, a, "wave", t, [], { h: HOST.h * 1.25 * p, x: 300, foot: 1600 });
+      const p = easeOutBack(clamp((t - 0.05) / 0.4));
+      host(ctx, a, "wave", t, [], { h: 520 * p, x: hx, flip });
       for (let i = 0; i < 8; i++) {
         const sp = clamp((t - 0.3 - i * 0.07) / 0.7);
         if (sp <= 0 || sp >= 1) continue;
         const ang = (i / 8) * Math.PI * 2;
         ctx.save();
         ctx.globalAlpha = Math.sin(sp * Math.PI);
-        star(ctx, 300 + Math.cos(ang) * 360 * sp, 1250 + Math.sin(ang) * 300 * sp, 26, i % 2 ? CLAY : "#ffe1c4");
+        star(ctx, hx + Math.cos(ang) * 300 * sp, 1330 + Math.sin(ang) * 240 * sp, 24, i % 2 ? CLAY : "#ffe1c4");
         ctx.restore();
       }
-      speech(ctx, t, tl, { x: 420, y: 1230 });
+      speech(ctx, t, tl, side, hx);
       return;
     }
 
     if (t < at(2)) {
       // BEFORE: flip to how it looked; Noosho is unimpressed.
       const lt = t - at(1);
-      const flip = easeInOutCubic(clamp(lt / 0.5));
+      const turn = easeInOutCubic(clamp(lt / 0.35));
       cardFrame(ctx);
       ctx.save();
       ctx.translate(W / 2, 0);
-      ctx.scale(Math.abs(1 - 2 * flip) || 0.001, 1);
+      ctx.scale(Math.abs(1 - 2 * turn) || 0.001, 1);
       ctx.translate(-W / 2, 0);
-      cardImage(ctx, flip < 0.5 ? a.after : a.before);
+      cardImage(ctx, turn < 0.5 ? a.after : a.before);
       ctx.restore();
-      if (flip >= 1) {
+      if (turn >= 1) {
         // desaturate a touch — it's the "meh" version
         ctx.save();
         roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, RADIUS);
@@ -328,16 +388,16 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
         ctx.fillRect(CARD.x, CARD.y, CARD.w, CARD.h);
         ctx.restore();
       }
-      tag(ctx, "BEFORE", "rgba(24,20,16,0.8)", (lt - 0.5) / 0.3);
-      host(ctx, a, "idle", t, L);
-      speech(ctx, t, tl);
+      tag(ctx, "BEFORE", "rgba(24,20,16,0.8)", (lt - 0.35) / 0.25);
+      host(ctx, a, "idle", t, L, { x: hx, flip });
+      speech(ctx, t, tl, side, hx);
       return;
     }
 
     if (t < at(3)) {
       // TA-DA: wipe to the new look; colours stack in, top-left.
       const lt = t - at(2);
-      const wipe = easeInOutCubic(clamp(lt / 1));
+      const wipe = easeInOutCubic(clamp(lt / 0.6));
       cardFrame(ctx);
       cardImage(ctx, a.before);
       ctx.save();
@@ -352,10 +412,10 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
         star(ctx, sx, CARD.y + CARD.h * 0.3, 34, "#fff");
         star(ctx, sx, CARD.y + CARD.h * 0.7, 24, "#ffe1c4");
       }
-      tag(ctx, "AFTER", CLAY, (lt - 1) / 0.3);
-      const dur = Math.max(1.6, at(3) - at(2));
+      tag(ctx, "AFTER", CLAY, (lt - 0.6) / 0.25);
+      const dur = Math.max(1.1, at(3) - at(2));
       x.palette.forEach((c, i) => {
-        const k = easeOutBack(clamp((lt - 1.2 - (i * (dur - 1.6)) / Math.max(1, x.palette.length)) / 0.4));
+        const k = easeOutBack(clamp((lt - 0.7 - (i * (dur - 1.1)) / Math.max(1, x.palette.length)) / 0.3));
         if (k <= 0) return;
         ctx.save();
         ctx.font = `700 40px ${SORA}`;
@@ -379,12 +439,14 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
         ctx.fillText(name, 76, 2);
         ctx.restore();
       });
-      const cheer = lt > 0.8 && lt < 2.4;
+      const cheer = lt > 0.5 && lt < 1.7;
       host(ctx, a, cheer ? "celebrate" : "idea", t, L, {
-        extraJump: cheer ? Math.abs(Math.sin((lt - 0.8) * 6)) * 45 : 0,
-        mouth: lt > 0.3 && lt < 0.8 ? "o" : undefined,
+        x: hx,
+        flip,
+        extraJump: cheer ? Math.abs(Math.sin((lt - 0.5) * 7)) * 40 : 0,
+        mouth: lt > 0.15 && lt < 0.5 ? "o" : undefined,
       });
-      speech(ctx, t, tl);
+      speech(ctx, t, tl, side, hx);
       return;
     }
 
@@ -405,7 +467,8 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       const Z = 1.3;
       const camFor = (s: { x: number; y: number; real: boolean }): Cam => {
         if (!s.real) return { z: 1, ox: 0, oy: 0 };
-        const tx = CARD.x + CARD.w * 0.6, ty = CARD.y + CARD.h * 0.4;
+        const away = s.x < CARD.x + CARD.w / 2 ? 0.38 : 0.62;
+        const tx = CARD.x + CARD.w * away, ty = CARD.y + CARD.h * 0.4;
         const ox = clamp(tx - s.x * Z, CARD.x + CARD.w - (cr.x + cr.w) * Z, CARD.x - cr.x * Z);
         const oy = clamp(ty - s.y * Z, CARD.y + CARD.h - (cr.y + cr.h) * Z, CARD.y - cr.y * Z);
         return { z: Z, ox, oy };
@@ -413,7 +476,7 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       const cur = spot(x.products[idx]);
       const from = idx > 0 ? camFor(spot(x.products[idx - 1])) : { z: 1, ox: 0, oy: 0 };
       const to = camFor(cur);
-      const m = easeInOutCubic(clamp(lt / 0.8));
+      const m = easeInOutCubic(clamp(lt / 0.5));
       const cam: Cam = { z: lerp(from.z, to.z, m), ox: lerp(from.ox, to.ox, m), oy: lerp(from.oy, to.oy, m) };
       cardFrame(ctx);
       ctx.save();
@@ -437,12 +500,12 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
         pill(ctx, x.products[d].price, o.x, o.y, 30, "rgba(255,255,255,0.95)", CLAY);
       }
       const c = onScreen(cur);
-      if (cur.real) pinDot(ctx, c.x, c.y, t, (lt - 0.3) / 0.3);
-      priceTag(ctx, x.products[idx], c.x, c.y, (lt - 0.5) / 0.4);
+      if (cur.real) pinDot(ctx, c.x, c.y, t, (lt - 0.15) / 0.25);
+      priceTag(ctx, x.products[idx], c.x, c.y, (lt - 0.25) / 0.3);
       ctx.restore();
       tag(ctx, "SHOP THE LOOK", CLAY);
-      host(ctx, a, "idea", t, L);
-      speech(ctx, t, tl);
+      host(ctx, a, "idea", t, L, { x: hx, flip });
+      speech(ctx, t, tl, side, hx);
       return;
     }
 
@@ -459,7 +522,7 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
     ctx.fillStyle = g;
     ctx.fillRect(CARD.x, CARD.y, CARD.w, CARD.h);
     ctx.restore();
-    const p = easeOutBack(clamp((ot - 0.2) / 0.5));
+    const p = easeOutBack(clamp((ot - 0.1) / 0.4));
     if (p > 0) {
       ctx.save();
       ctx.translate(W / 2, CARD.y + 190);
@@ -471,7 +534,7 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       pill(ctx, "noosho.com", 0, 70, 50, CLAY, "#fff");
       ctx.restore();
     }
-    host(ctx, a, "celebrate", t, L, { extraJump: Math.abs(Math.sin(ot * 4)) * 30 });
-    speech(ctx, t, tl);
+    host(ctx, a, "celebrate", t, L, { x: hx, flip, extraJump: Math.abs(Math.sin(ot * 4)) * 30 });
+    speech(ctx, t, tl, side, hx);
   };
 }
