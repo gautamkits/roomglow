@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { del, head, put } from "@vercel/blob";
 import { spawn } from "child_process";
 import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
@@ -13,16 +13,17 @@ import { getDesign } from "@/lib/db";
 import { ensureHotspots } from "@/lib/hotspots";
 import { designTotal } from "@/lib/price";
 import type { ProductResult } from "@/lib/types";
+import { mixSfx } from "@/lib/promo/explainSfx";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-// Admin: the "Noosho explains" reel. Two actions:
-//   script — Noosho's lines for one design (before → new colours → products with
-//            real prices → CTA). Prices are pasted in from the design, never
-//            written by the model.
-//   voice  — Gemini TTS, one call per line, stitched into one WAV so each line's
-//            [start,end] is exact. Cached in Blob by the script's hash.
+// Admin: the "Noosho explains" reel ("blank canvas" script, picked 2026-09-27).
+//   script — the fixed five lines for one design, with its space word, plus the
+//            products/prices the video pins (prices come from the design only).
+//   voice  — one Gemini TTS take, cut into lines at its pauses, tightened, sped
+//            up 15%, with synthesised sound effects mixed in. Cached in Blob.
+//   mux    — phones: adds that voice to a silent render as AAC.
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 const blobToken = process.env.newblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -69,77 +70,29 @@ async function buildScript(designId: string) {
   const withSpot = (parseJsonish<Prod[]>(design.products) ?? [])
     .map((p, i) => ({ ...p.amazonProduct, spot: hot.get(i) }))
     .filter((p) => !!p.imageUrl && !!p.price);
-  // Prefer products we can point at on the design.
-  withSpot.sort((a, b) => (b.spot ? 1 : 0) - (a.spot ? 1 : 0));
+  // Prefer products we can point at, then the priciest (the video shows 2–3).
+  const amt = (p: { price?: string }) => Number((p.price || "").replace(/[^\d.]/g, "")) || 0;
+  withSpot.sort((a, b) => (b.spot ? 1 : 0) - (a.spot ? 1 : 0) || amt(b) - amt(a));
   const products = withSpot.slice(0, 6);
 
-  const context = [
+  // The space she names: "living room", "hallway", or "birthday setup".
+  const space =
     design.mode === "event"
-      ? `Event decoration: ${ec.subTheme ?? ""} ${ec.eventLabel ?? "event"}`
-      : `Room: ${ra.roomType ?? "room"}, current style ${ra.currentStyle ?? "unknown"}`,
-    `Before-photo colours: ${(ra.colorPalette as string[] | undefined)?.join(", ") || "unknown"}`,
-    `Existing furniture: ${(ra.existingFurniture as string[] | undefined)?.join(", ") || "unknown"}`,
-    `New design: ${design.design_narrative || "a fresh redesign"}`,
-    `Products: ${products.map((p, i) => `${i}. ${p.title}`).join(" | ")}`,
-  ].join("\n");
+      ? `${String(ec.eventLabel || "party").toLowerCase()} setup`
+      : String(ra.roomType || "room").toLowerCase();
 
-  const res = await ai.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `You write lines for Noosho, a bubbly, warm Indian cartoon interior designer, for a short Instagram reel.
-${context}
-
-Return:
-- beforeLine: one short, kind, playful line about the room as it was (max 8 words), e.g. "This was the room — so plain, na?"
-- afterLine: one short line revealing the new look and naming 2-3 main colours (max 10 words), starting with "And ta-da!", e.g. "And ta-da! Warm sand, oak and walnut!"
-- palette: the 3 main colours of the NEW design, each {name, hex}
-Simple English with a light Indian flavour. No emojis, no prices.`,
-          },
-        ],
-      },
-    ],
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          beforeLine: { type: Type.STRING },
-          afterLine: { type: Type.STRING },
-          palette: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: { name: { type: Type.STRING }, hex: { type: Type.STRING } },
-              required: ["name", "hex"],
-            },
-          },
-        },
-        required: ["beforeLine", "afterLine", "palette"],
-      },
-    },
-  });
-  const out = JSON.parse(res.text ?? "{}") as {
-    beforeLine: string;
-    afterLine: string;
-    palette: { name: string; hex: string }[];
-  };
-
-  // After the reveal she wraps up with the whole basket — the real total,
-  // rounded ("from" when some products have no price) — then the CTA.
+  // The total shows on screen (badge), not in her line — the long number made
+  // the reel drag. "from" when some products have no price.
   const basket = designTotal(parseJsonish<ProductResult[]>(design.products) ?? []);
   const price = basket ? roundPrice(basket.formatted) : null;
   const lead = basket?.partial ? "from" : "for";
   return {
     lines: [
-      "Hello frends! I'm Noosho!",
-      out.beforeLine,
-      out.afterLine,
-      ...(price ? [`Buy everything ${lead} just ${price}!`] : []),
-      "Design yours at noosho.com!",
+      `Hello frends! Look at this ${space}…`,
+      "So plain — like a blank canvas, na?",
+      "So I gave it some love… ta-da!",
+      "And every piece is real — ready to shop!",
+      "Let's design yours at noosho.com!",
     ],
     total: price ? `Buy everything ${lead} ${price}` : null,
     products: products.map((p) => ({
@@ -149,7 +102,6 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
       x: p.spot?.x,
       y: p.spot?.y,
     })),
-    palette: (out.palette ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c.hex)).slice(0, 3),
   };
 }
 
@@ -159,7 +111,7 @@ const DIRECTION =
   "Read this as Noosho, a tiny, super cute cartoon mascot, in a warm, natural " +
   "Indian English accent — like a sweet, bubbly little Indian girl cartoon " +
   "character. Very energetic and happy, a big smile in the voice, bouncy. Punch " +
-  "the greeting 'Hello frends!', and a delighted burst on 'Ta-da!'. Leave a clear " +
+  "the greeting, and a delighted burst on 'Ta-da!'. Leave a clear " +
   "short pause between lines. Clear words, upbeat pace. Pronounce 'Noosho' as NOO-shoh:";
 
 /** How a line is *spoken* — captions keep the written form. Currency is spelled
@@ -195,7 +147,7 @@ async function tts(text: string, voice: string): Promise<Buffer> {
  * (the same method used for the promo VOs). Null if the take doesn't have
  * enough clear pauses — the caller then re-records.
  */
-function splitTake(pcm: Buffer, n: number): [number, number][] | null {
+function splitTake(pcm: Buffer, n: number, weights?: number[]): [number, number][] | null {
   const hop = Math.round(RATE * 0.01); // 10 ms frames
   const frames = Math.floor(pcm.length / 2 / hop);
   const loud: boolean[] = [];
@@ -215,7 +167,26 @@ function splitTake(pcm: Buffer, n: number): [number, number][] | null {
     if (f - s >= 12) gaps.push({ s, e: f }); // ≥120 ms
   }
   if (gaps.length < n - 1) return null;
-  const cuts = gaps.sort((a, b) => b.e - b.s - (a.e - a.s)).slice(0, n - 1).sort((a, b) => a.s - b.s);
+  // Pick each line break near where it should fall (by the lines' lengths),
+  // favouring longer pauses — a dramatic pause inside a line ("frends!… Look")
+  // can outlast a real gap between lines, so "the n-1 longest" misaligns.
+  const total = weights?.reduce((a, b) => a + b, 0) || 0;
+  const span = last - first;
+  const cuts: { s: number; e: number }[] = [];
+  let acc = 0, from = 0;
+  for (let k = 0; k < n - 1; k++) {
+    acc += weights?.[k] ?? 1;
+    const want = first + span * (total ? acc / total : (k + 1) / n);
+    let best = -1, bestScore = Infinity;
+    for (let g = from; g < gaps.length - (n - 2 - k); g++) {
+      const mid = (gaps[g].s + gaps[g].e) / 2;
+      const score = Math.abs(mid - want) - 2.5 * (gaps[g].e - gaps[g].s);
+      if (score < bestScore) { bestScore = score; best = g; }
+    }
+    if (best < 0) return null;
+    cuts.push(gaps[best]);
+    from = best + 1;
+  }
   const t = (f: number) => +((f * hop) / RATE).toFixed(3);
   const segs: [number, number][] = [];
   let start = first;
@@ -231,19 +202,25 @@ function splitTake(pcm: Buffer, n: number): [number, number][] | null {
  * Rebuild the take with every between-line pause cut to one short beat — the
  * model leaves 0.5–1s between lines, which is most of what made the reel long.
  */
-function tighten(pcm: Buffer, segs: [number, number][]): { pcm: Buffer; segments: [number, number][] } {
-  const PAD = 0.06, BEAT = 0.3, LEAD = 0.2;
+function tighten(
+  pcm: Buffer,
+  segs: [number, number][],
+  holdAfter = -1,
+  hold = 0
+): { pcm: Buffer; segments: [number, number][] } {
+  const PAD = 0.05, BEAT = 0.22, LEAD = 0.15;
   const parts: Buffer[] = [Buffer.alloc(Math.round(LEAD * RATE) * 2)];
   const out: [number, number][] = [];
   let t = LEAD;
-  for (const [s, e] of segs) {
+  for (const [i, [s, e]] of segs.entries()) {
+    const beat = BEAT + (i === holdAfter ? hold : 0);
     const a = Math.max(0, Math.round((s - PAD) * RATE)) * 2;
     const b = Math.min(pcm.length, Math.round((e + PAD) * RATE) * 2);
     const clip = pcm.subarray(a, b);
     const d = clip.length / 2 / RATE;
     out.push([+(t + PAD).toFixed(3), +(t + d - PAD).toFixed(3)]);
-    parts.push(clip, Buffer.alloc(Math.round(BEAT * RATE) * 2));
-    t += d + BEAT;
+    parts.push(clip, Buffer.alloc(Math.round(beat * RATE) * 2));
+    t += d + beat;
   }
   return { pcm: Buffer.concat(parts), segments: out };
 }
@@ -265,8 +242,26 @@ function wav(pcm: Buffer): Buffer {
   return Buffer.concat([h, pcm]);
 }
 
-async function buildVoice(designId: string, lines: string[], voice: string) {
-  const hash = createHash("sha1").update(JSON.stringify({ v: 5, lines, voice })).digest("hex").slice(0, 12);
+/** Speed up without changing pitch (ffmpeg atempo). */
+async function speedUp(pcm: Buffer, tempo: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      ffmpegPath as unknown as string,
+      ["-f", "s16le", "-ar", String(RATE), "-ac", "1", "-i", "pipe:0", "-filter:a", `atempo=${tempo}`, "-f", "s16le", "-ar", String(RATE), "-ac", "1", "pipe:1"],
+      { stdio: ["pipe", "pipe", "ignore"] }
+    );
+    const chunks: Buffer[] = [];
+    proc.stdout.on("data", (c) => chunks.push(c));
+    proc.on("error", reject);
+    proc.on("close", (code) => (code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(`atempo exited ${code}`))));
+    proc.stdin.end(pcm);
+  });
+}
+
+const TEMPO = 1.15; // punchier read, accent intact
+
+async function buildVoice(designId: string, lines: string[], voice: string, fx: { prices: number; total: boolean }) {
+  const hash = createHash("sha1").update(JSON.stringify({ v: 6, lines, voice, fx })).digest("hex").slice(0, 12);
   const key = `promo-vo/${designId}-${hash}.json`;
   try {
     const existing = await head(key, { token: blobToken });
@@ -282,10 +277,14 @@ async function buildVoice(designId: string, lines: string[], voice: string) {
   let segments: [number, number][] | null = null;
   for (let take = 0; take < 3 && !segments; take++) {
     pcm = await tts(script, voice);
-    segments = splitTake(pcm, lines.length);
+    segments = splitTake(pcm, lines.length, lines.map((l) => spoken(l).length));
   }
   if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
-  ({ pcm, segments } = tighten(pcm, segments));
+  // hold the real-products beat a moment so the prices can land
+  ({ pcm, segments } = tighten(pcm, segments, 3, 0.2));
+  pcm = await speedUp(pcm, TEMPO);
+  segments = segments.map(([s, e]) => [+(s / TEMPO).toFixed(3), +(e / TEMPO).toFixed(3)] as [number, number]);
+  pcm = mixSfx(pcm, RATE, segments, fx);
   const audio = await put(`promo-vo/${designId}-${hash}.wav`, wav(pcm), {
     access: "public",
     contentType: "audio/wav",
@@ -373,7 +372,8 @@ export async function POST(request: Request) {
         .slice(0, 10);
       if (!lines.length) return NextResponse.json({ error: "No lines" }, { status: 400 });
       const voice = VOICES.includes(body.voice) ? body.voice : VOICES[0];
-      return NextResponse.json(await buildVoice(designId, lines, voice));
+      const fx = { prices: Math.max(0, Math.min(3, Number(body.prices) || 0)), total: !!body.total };
+      return NextResponse.json(await buildVoice(designId, lines, voice, fx));
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {

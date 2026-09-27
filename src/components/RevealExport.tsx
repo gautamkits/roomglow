@@ -17,7 +17,6 @@ type RevealVariant = "full" | "simple" | "explain";
 
 type ExplainScript = {
   lines: string[];
-  palette: { name: string; hex: string }[];
   products: { title: string; price: string; imageUrl: string; x?: number; y?: number }[];
   /** "Buy everything for ₹12,400" — null when no product has a price. */
   total?: string | null;
@@ -172,17 +171,24 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     const lines = scriptText.split("\n").map((l) => l.trim()).filter(Boolean);
     // Scenes are keyed by line position: hello, before, after, one per product, outro.
     // hello, before, ta-da, [buy everything], outro
-    const expected = script.total ? 5 : 4;
-    if (lines.length !== expected) {
-      throw new Error(
-        `Keep ${expected} lines (hello, before, ta-da, ${script.total ? "buy everything, " : ""}outro) — edit the words, not the count.`
-      );
+    // hello, before, ta-da, real products, outro — scenes are keyed by position
+    if (lines.length !== 5) {
+      throw new Error("Keep 5 lines (hello, before, ta-da, real products, outro) — edit the words, not the count.");
     }
+    const { pickPrices } = await import("@/lib/promo/explainPrices");
     setStage("Recording Noosho's voice…");
     const r = await fetch("/api/admin/noosho-explain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "voice", designId: design.id, lines, voice }),
+      // one "pop" per price the video pins, a chime if the total badge shows
+      body: JSON.stringify({
+        action: "voice",
+        designId: design.id,
+        lines,
+        voice,
+        prices: pickPrices(script.products).length,
+        total: !!script.total,
+      }),
     });
     const vo = await r.json();
     if (!r.ok) throw new Error(vo.error || "Voice generation failed.");
@@ -212,7 +218,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     const assets = { ...kit, envelope, before, after, cards: [], products: [], gallery: [] };
     const tl = style.explainTimeline(vo.segments, lines);
     setStage(null);
-    const render = style.makeExplainRender({ products, palette: script.palette, total: script.total });
+    const render = style.makeExplainRender({ products, total: script.total });
     const onProgress = (f: number) => setPct(Math.round(f * 100));
 
     if (await promo.canEncodeAac()) {
@@ -445,12 +451,6 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                     className="w-full px-2.5 py-1.5 rounded-lg text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 outline-none focus:border-orange-700 disabled:opacity-60"
                   />
                   <div className="flex items-center gap-2">
-                    {script.palette.map((c) => (
-                      <span key={c.hex} className="flex items-center gap-1 text-[10px] text-zinc-500">
-                        <span className="w-3 h-3 rounded-full border border-zinc-300" style={{ background: c.hex }} />
-                        {c.name}
-                      </span>
-                    ))}
                     <button
                       onClick={writeScript}
                       disabled={busy}

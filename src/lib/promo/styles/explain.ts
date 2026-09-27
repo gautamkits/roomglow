@@ -17,11 +17,11 @@ import {
   easeOutCubic,
   easeInOutCubic,
   REEL_W as W,
-  INK,
   CLAY,
   type Rect,
 } from "@/lib/revealVideo";
-import { drawNoosho, drawCaption, pill, star, photoCard, CARD, type PromoAssets, type PromoRender, type Timeline, type Seg } from "../promo";
+import { pickPrices, PRICE_POP, TOTAL_POP } from "../explainPrices";
+import { drawNoosho, drawCaption, pill, star, photoCard, sceneOutro, CARD, type PromoAssets, type PromoRender, type Timeline, type Seg } from "../promo";
 
 /** x/y: the product's hotspot on the design, in % of the image. */
 export type ExplainProduct = { img: HTMLImageElement; title: string; price: string; x?: number; y?: number };
@@ -29,7 +29,6 @@ export type ExplainExtras = {
   products: ExplainProduct[];
   /** "Buy everything for ₹12,400" — shown big in the buy-everything scene. */
   total?: string | null;
-  palette: { name: string; hex: string }[];
 };
 
 /** Timeline from the voice route's per-line segments. */
@@ -124,8 +123,11 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
     const at = (i: number) => Math.max(0, L[i] - 0.25);
     const n = x.products.length;
     const last = L.length - 1;
+    // The room appears midway through the greeting ("…look at this living room"),
+    // not after it — so she is looking at something when she says it.
+    const roomIn = Math.min(at(1), tl.lines[0][0] + (tl.lines[0][1] - tl.lines[0][0]) * 0.45);
 
-    if (t < at(1)) {
+    if (t < roomIn) {
       // Hello frends! — she hops in and waves
       const p = easeOutBack(clamp(t / 0.7));
       drawLockup(ctx, 330, 90, clamp((t - 0.3) / 1), clamp((t - 0.7) / 0.8));
@@ -141,7 +143,7 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       }
     } else if (t < at(2)) {
       // the room as it was
-      const lt = t - at(1);
+      const lt = t - roomIn;
       const p = easeOutCubic(clamp(lt / 0.6));
       ctx.save();
       ctx.globalAlpha = p;
@@ -164,31 +166,6 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
         ctx.fillRect(CARD.x + CARD.w * wipe - 4, CARD.y, 8, CARD.h);
       }
       if (wipe >= 1) label(ctx, "AFTER", CARD.x + 30, CARD.y + 30, CLAY, "#fff");
-      const segDur = Math.max(1.5, (at(3) - at(2)) - 0.4);
-      x.palette.forEach((c, i) => {
-        const k = easeOutBack(clamp((lt - 1 - (i * segDur * 0.6) / Math.max(1, x.palette.length)) / 0.45));
-        if (k <= 0) return;
-        const cx = 290 + i * 250, cy = CARD.y + CARD.h - 20;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(k, k);
-        ctx.shadowColor = "rgba(0,0,0,0.25)";
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(0, 0, 80, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowColor = "transparent";
-        ctx.fillStyle = c.hex;
-        ctx.beginPath();
-        ctx.arc(0, 0, 66, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = INK;
-        ctx.font = `600 30px ${SORA}`;
-        ctx.textAlign = "center";
-        ctx.fillText(c.name.length > 14 ? c.name.slice(0, 13) + "…" : c.name, 0, 125);
-        ctx.restore();
-      });
       const cheer = lt > 0.9 && lt < 2.2;
       drawNoosho(ctx, a, cheer ? "celebrate" : "idea", 900, 1450, 360, {
         t, bob: 4, jump: cheer ? Math.abs(Math.sin(lt * 6)) * 40 : 0,
@@ -203,8 +180,9 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, 36);
       ctx.clip();
       let loose = 0;
-      x.products.forEach((p, i) => {
-        const k = (lt - 0.15 - i * 0.22) / 0.3;
+      const shown = pickPrices(x.products);
+      shown.forEach((p, i) => {
+        const k = (lt - PRICE_POP.first - i * PRICE_POP.step) / 0.3;
         if (k <= 0) return;
         const s = easeOutBack(clamp(k));
         const real = p.x != null && p.y != null;
@@ -219,26 +197,20 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       });
       ctx.restore();
       if (x.total) {
-        const k = easeOutBack(clamp((lt - 0.2 - x.products.length * 0.22) / 0.4));
+        const k = easeOutBack(clamp((lt - TOTAL_POP - shown.length * PRICE_POP.step) / 0.4));
         if (k > 0) {
           ctx.save();
-          ctx.translate(W / 2, CARD.y + CARD.h - 90);
+          ctx.translate(W / 2 - 70, CARD.y + CARD.h - 90); // clear of Noosho, bottom-right
           ctx.scale(k, k);
-          pill(ctx, x.total, 0, 0, 52, CLAY, '#fff');
+          pill(ctx, x.total, 0, 0, 44, CLAY, '#fff');
           ctx.restore();
         }
       }
-      label(ctx, 'SHOP THE LOOK', CARD.x + 30, CARD.y + 30, CLAY, '#fff');
+      label(ctx, 'REAL PRODUCTS', CARD.x + 30, CARD.y + 30, CLAY, '#fff');
       drawNoosho(ctx, a, 'celebrate', 900, 1450, 330, { t, bob: 4, jump: Math.abs(Math.sin(lt * 5)) * 20 });
     } else {
-      // outro: shop it at noosho.com
-      const ot = t - at(last);
-      drawLockup(ctx, 480, 110, clamp(ot / 1), clamp((ot - 0.4) / 0.8));
-      const p = easeOutCubic(clamp((ot - 0.8) / 0.6));
-      ctx.globalAlpha = p;
-      pill(ctx, "noosho.com", W / 2, 680, 46, CLAY, "#fff");
-      ctx.globalAlpha = 1;
-      drawNoosho(ctx, a, "celebrate", W / 2, 1360, 600, { t: ot, bob: 6, jump: Math.abs(Math.sin(ot * 4)) * 24 });
+      // outro: the promo's own ending ("Let's design yours at noosho.com!")
+      sceneOutro(ctx, a, t - at(last));
     }
     drawCaption(ctx, t, tl);
   };

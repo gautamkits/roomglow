@@ -705,7 +705,7 @@ function scenePins(ctx: CanvasRenderingContext2D, a: PromoAssets, lt: number) {
   drawNoosho(ctx, a, "wave", 900, 1420, 400, { t: lt, bob: 6 });
 }
 
-function sceneOutro(ctx: CanvasRenderingContext2D, a: PromoAssets, lt: number) {
+export function sceneOutro(ctx: CanvasRenderingContext2D, a: PromoAssets, lt: number) {
   drawLockup(ctx, 420, 120, clamp(lt / 0.7), clamp((lt - 0.3) / 0.6));
   const p = easeOutBack(clamp((lt - 0.5) / 0.4));
   if (p > 0) {

@@ -173,7 +173,9 @@ function drawImageCard(
 function drawTwinRings(ctx: CanvasRenderingContext2D, leftX: number, cy: number, height: number, draw: number, swVB = 4) {
   const scale = height / 28, r = 11 * scale, sw = swVB * scale;
   const c1x = leftX + (13 - 2) * scale, c2x = leftX + (27 - 2) * scale;
-  const start = -Math.PI / 2, sweep = clamp(draw) * Math.PI * 2;
+  // just under a full turn: an exact 2π sweep can normalise to zero length
+  // in some canvas engines, and the finished rings vanish
+  const start = -Math.PI / 2, sweep = Math.min(clamp(draw) * Math.PI * 2, Math.PI * 2 - 1e-3);
   ctx.save();
   ctx.lineWidth = sw;
   ctx.lineCap = "round";
