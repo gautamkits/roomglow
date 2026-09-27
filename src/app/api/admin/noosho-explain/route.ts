@@ -124,23 +124,32 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
   };
 }
 
+/** How the line should be *spoken* — the caption keeps the written form. The
+ *  TTS model intermittently returns no audio for text with a URL in it. */
+function spoken(text: string): string {
+  return text.replace(/\.com\b/gi, " dot com");
+}
+
 async function ttsLine(text: string, voice: string): Promise<Buffer> {
-  const res = await ai.models.generateContent({
-    model: TTS_MODEL,
-    contents: [
-      {
-        role: "user",
-        parts: [{ text: `Say in a cheerful, bubbly, energetic Indian English accent: ${text}` }],
+  // The preview TTS model sometimes returns an empty (text-only) candidate; retry.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await ai.models.generateContent({
+      model: TTS_MODEL,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `Say in a cheerful, bubbly, energetic Indian English accent: ${spoken(text)}` }],
+        },
+      ],
+      config: {
+        responseModalities: ["AUDIO"],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
       },
-    ],
-    config: {
-      responseModalities: ["AUDIO"],
-      speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
-    },
-  });
-  const data = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
-  if (!data) throw new Error(`No audio for line: ${text}`);
-  return trimSilence(Buffer.from(data, "base64"));
+    });
+    const data = res.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
+    if (data) return trimSilence(Buffer.from(data, "base64"));
+  }
+  throw new Error(`No audio for line: ${text}`);
 }
 
 /** Drop leading/trailing near-silence so the gaps we add are the real gaps. */
