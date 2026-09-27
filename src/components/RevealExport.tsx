@@ -18,7 +18,7 @@ type RevealVariant = "full" | "simple" | "explain";
 type ExplainScript = {
   lines: string[];
   palette: { name: string; hex: string }[];
-  products: { title: string; price: string; imageUrl: string }[];
+  products: { title: string; price: string; imageUrl: string; x?: number; y?: number }[];
 };
 
 interface ParsedProduct {
@@ -200,6 +200,8 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
           img: await rv.loadImage(`/api/proxy-image?url=${encodeURIComponent(p.imageUrl)}`),
           title: p.title,
           price: p.price,
+          x: p.x,
+          y: p.y,
         }))
       ),
     ]);

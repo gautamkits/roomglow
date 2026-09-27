@@ -24,7 +24,8 @@ import {
 } from "@/lib/revealVideo";
 import { drawNoosho, drawCaption, pill, star, photoCard, CARD, type PromoAssets, type PromoRender, type Timeline, type Seg } from "../promo";
 
-export type ExplainProduct = { img: HTMLImageElement; title: string; price: string };
+/** x/y: the product's hotspot on the design, in % of the image. */
+export type ExplainProduct = { img: HTMLImageElement; title: string; price: string; x?: number; y?: number };
 export type ExplainExtras = {
   products: ExplainProduct[];
   palette: { name: string; hex: string }[];
@@ -56,38 +57,106 @@ function label(ctx: CanvasRenderingContext2D, text: string, x: number, y: number
   ctx.restore();
 }
 
-function productCard(ctx: CanvasRenderingContext2D, p: ExplainProduct, k: number) {
-  const r: Rect = { x: 170, y: 250, w: 740, h: 900 };
+/** Where the cover-fitted image lands in `r` (so hotspot %s map to pixels). */
+function coverRect(img: HTMLImageElement, r: Rect): Rect {
+  const s = Math.max(r.w / img.width, r.h / img.height);
+  const w = img.width * s, h = img.height * s;
+  return { x: r.x + (r.w - w) / 2, y: r.y + (r.h - h) / 2, w, h };
+}
+
+/** The finished design, with an optional gentle push-in toward (fx, fy). */
+function designView(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom: number, fx: number, fy: number) {
+  shadowlessCard(ctx);
+  ctx.save();
+  roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, 36);
+  ctx.clip();
+  ctx.translate(fx, fy);
+  ctx.scale(zoom, zoom);
+  ctx.translate(-fx, -fy);
+  drawCover(ctx, img, CARD.x, CARD.y, CARD.w, CARD.h);
+  ctx.restore();
+}
+
+function shadowlessCard(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  ctx.shadowColor = "rgba(24,20,16,0.22)";
+  ctx.shadowBlur = 50;
+  ctx.shadowOffsetY = 16;
+  ctx.fillStyle = "#fff";
+  roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, 36);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Pulsing pin on the product in the design. */
+function pin(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: number) {
   ctx.save();
   ctx.globalAlpha *= clamp(k);
-  ctx.translate(W / 2, r.y + r.h / 2);
-  const s = 0.8 + 0.2 * easeOutBack(clamp(k));
-  ctx.scale(s, s);
-  ctx.translate(-W / 2, -(r.y + r.h / 2));
-  ctx.shadowColor = "rgba(24,20,16,0.2)";
-  ctx.shadowBlur = 50;
-  ctx.shadowOffsetY = 18;
+  const ring = (t * 1.2) % 1;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 5;
+  ctx.globalAlpha *= 1 - ring;
+  ctx.beginPath();
+  ctx.arc(x, y, 22 + ring * 40, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  ctx.save();
+  ctx.globalAlpha *= clamp(k);
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 12;
   ctx.fillStyle = "#fff";
-  roundRect(ctx, r.x, r.y, r.w, r.h, 44);
+  ctx.beginPath();
+  ctx.arc(x, y, 22 * easeOutBack(clamp(k)), 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowColor = "transparent";
-  const box = fitContain(p.img, r.x + 60, r.y + 60, r.w - 120, 560);
-  ctx.drawImage(p.img, box.x, box.y, box.w, box.h);
-  ctx.fillStyle = INK;
-  ctx.font = `600 38px ${SORA}`;
-  ctx.textAlign = "center";
-  const title = p.title.length > 34 ? p.title.slice(0, 33).trimEnd() + "…" : p.title;
-  ctx.fillText(title, W / 2, r.y + 700);
+  ctx.fillStyle = CLAY;
+  ctx.beginPath();
+  ctx.arc(x, y, 12 * easeOutBack(clamp(k)), 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
-  // price bursts in a beat after the card
-  const pk = easeOutBack(clamp((k - 0.6) / 0.6));
-  if (pk > 0) {
-    ctx.save();
-    ctx.translate(W / 2, r.y + 800);
-    ctx.scale(pk, pk);
-    pill(ctx, p.price, 0, 0, 58, CLAY, "#fff");
-    ctx.restore();
-  }
+}
+
+/** Price tag: product thumbnail + price + short name, pointing at the pin. */
+function priceTag(ctx: CanvasRenderingContext2D, p: ExplainProduct, px: number, py: number, k: number) {
+  const w = 480, h = 140;
+  // sit above the pin if there's room, else below; keep inside the card
+  const above = py - 60 - h > CARD.y + 20;
+  const tx = clamp(px - w / 2, CARD.x + 20, CARD.x + CARD.w - 20 - w) as number;
+  const ty = above ? py - 60 - h : Math.min(py + 60, CARD.y + CARD.h - 20 - h);
+  const s = easeOutBack(clamp(k));
+  if (s <= 0) return;
+  ctx.save();
+  ctx.globalAlpha *= clamp(k * 1.5);
+  ctx.translate(px, py);
+  ctx.scale(s, s);
+  ctx.translate(-px, -py);
+  // stem
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(clamp(px, tx + 40, tx + w - 40) as number, above ? ty + h : ty);
+  ctx.stroke();
+  // card
+  ctx.shadowColor = "rgba(24,20,16,0.3)";
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 10;
+  ctx.fillStyle = "#fff";
+  roundRect(ctx, tx, ty, w, h, 28);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  const thumb = fitContain(p.img, tx + 18, ty + 18, h - 36, h - 36);
+  ctx.drawImage(p.img, thumb.x, thumb.y, thumb.w, thumb.h);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = CLAY;
+  ctx.font = `800 54px ${SORA}`;
+  ctx.fillText(p.price, tx + h + 6, ty + 74);
+  ctx.fillStyle = INK;
+  ctx.font = `500 24px ${SORA}`;
+  const title = p.title.length > 26 ? p.title.slice(0, 25).trimEnd() + "…" : p.title;
+  ctx.fillText(title, tx + h + 6, ty + 112);
+  ctx.restore();
 }
 
 export function makeExplainRender(x: ExplainExtras): PromoRender {
@@ -171,20 +240,39 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       let idx = 0;
       while (idx < n - 1 && t >= at(4 + idx)) idx++;
       const lt = t - at(3 + idx);
-      // the finished room stays softly behind
+      // The design stays the hero: the camera eases toward each product and its
+      // price pins onto it; earlier prices stay as small tags.
+      const cr = coverRect(a.after, CARD);
+      const spot = (p: ExplainProduct) =>
+        p.x != null && p.y != null
+          ? { x: cr.x + (p.x / 100) * cr.w, y: cr.y + (p.y / 100) * cr.h, real: true }
+          : { x: CARD.x + CARD.w / 2, y: CARD.y + CARD.h - 40, real: false };
+      const cur = spot(x.products[idx]);
+      const prev = idx > 0 ? spot(x.products[idx - 1]) : { x: CARD.x + CARD.w / 2, y: CARD.y + CARD.h / 2 };
+      const move = easeInOutCubic(clamp(lt / 0.7));
+      const fx = lerp(prev.x, cur.real ? cur.x : CARD.x + CARD.w / 2, move);
+      const fy = lerp(prev.y, cur.real ? cur.y : CARD.y + CARD.h / 2, move);
+      const zoom = cur.real ? 1 + 0.16 * easeInOutCubic(clamp(lt / 0.9)) : 1;
+      designView(ctx, a.after, zoom, fx, fy);
+      const onScreen = (s: { x: number; y: number }) => ({
+        x: clamp(fx + (s.x - fx) * zoom, CARD.x + 30, CARD.x + CARD.w - 30) as number,
+        y: clamp(fy + (s.y - fy) * zoom, CARD.y + 30, CARD.y + CARD.h - 30) as number,
+      });
       ctx.save();
-      ctx.globalAlpha = 0.25;
-      drawCover(ctx, a.after, 0, 0, W, 1920);
-      ctx.restore();
-      productCard(ctx, x.products[idx], lt / 0.5);
-      // progress dots
-      for (let d = 0; d < n; d++) {
-        ctx.fillStyle = d === idx ? CLAY : "rgba(24,20,16,0.2)";
-        ctx.beginPath();
-        ctx.arc(W / 2 + (d - (n - 1) / 2) * 40, 1200, d === idx ? 12 : 9, 0, Math.PI * 2);
-        ctx.fill();
+      roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, 36);
+      ctx.clip();
+      for (let d = 0; d < idx; d++) {
+        const s = spot(x.products[d]);
+        if (!s.real) continue;
+        const o = onScreen(s);
+        pill(ctx, x.products[d].price, o.x, o.y, 30, "rgba(255,255,255,0.95)", CLAY);
       }
-      drawNoosho(ctx, a, "carry", 180, 1460, 360, { t, bob: 5, flip: idx % 2 === 1 });
+      const c = onScreen(cur);
+      if (cur.real) pin(ctx, c.x, c.y, t, (lt - 0.3) / 0.3);
+      priceTag(ctx, x.products[idx], c.x, c.y, (lt - 0.5) / 0.45);
+      ctx.restore();
+      label(ctx, "SHOP THE LOOK", CARD.x + 30, CARD.y + 30, CLAY, "#fff");
+      drawNoosho(ctx, a, "idea", 900, 1450, 330, { t, bob: 4 });
     } else {
       // outro: shop it at noosho.com
       const ot = t - at(last);
