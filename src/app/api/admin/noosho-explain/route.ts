@@ -83,15 +83,15 @@ async function buildScript(designId: string) {
         role: "user",
         parts: [
           {
-            text: `You write lines for Noosho, a bubbly, warm Indian cartoon interior designer, for a fast 15-second Instagram reel. Keep every line punchy.
+            text: `You write lines for Noosho, a bubbly, warm Indian cartoon interior designer, for a short Instagram reel.
 ${context}
 
 Return:
-- beforeLine: one short, kind, playful line about the room as it was (max 8 words), e.g. "This was the room — so plain, na?"
-- afterLine: one short line revealing the new look and naming 2-3 main colours (max 10 words), starting with "Ta-da!", e.g. "Ta-da! Warm sand, oak and walnut!"
+- beforeLine: one short, kind, playful line about the room as it was (max 12 words), e.g. "This was the room — a bit plain, na?"
+- afterLine: one short line revealing the new look and naming 2-3 main colours (max 16 words), starting with "And ta-da!"
 - palette: the 3 main colours of the NEW design, each {name, hex}
-- productNames: for each product in order, a short spoken name (2-3 words, e.g. "rattan lamp")
-Simple English with a light Indian flavour. No emojis, no prices.`,
+- productLines: for each product in order, one short, warm line about that piece and what it adds to the space (max 12 words), naming it, e.g. "This rattan lamp gives such a cosy glow!"
+Simple English with a light Indian flavour. No emojis. NEVER mention prices, numbers or money — the price is shown on screen.`,
           },
         ],
       },
@@ -111,9 +111,9 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
               required: ["name", "hex"],
             },
           },
-          productNames: { type: Type.ARRAY, items: { type: Type.STRING } },
+          productLines: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ["beforeLine", "afterLine", "palette", "productNames"],
+        required: ["beforeLine", "afterLine", "palette", "productLines"],
       },
     },
   });
@@ -121,21 +121,21 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
     beforeLine: string;
     afterLine: string;
     palette: { name: string; hex: string }[];
-    productNames: string[];
+    productLines: string[];
   };
 
+  // No prices in her lines — the pin + price tag carry the number on screen.
   const productLines = products.map((p, i) => {
-    const name = (out.productNames[i] || "this piece").replace(/[.!]+$/, "");
-    const cap = name.charAt(0).toUpperCase() + name.slice(1);
-    return `${cap}, ${roundPrice(p.price!)}!`;
+    const line = (out.productLines?.[i] || "").trim();
+    return line && !/[$₹\d]/.test(line) ? line : "I just love this piece!";
   });
   return {
     lines: [
-      "Hi frends, I'm Noosho!",
+      "Hello frends! I'm Noosho!",
       out.beforeLine,
       out.afterLine,
       ...productLines,
-      "Design yours at noosho.com!",
+      "Everything's ready to shop. Design yours at noosho.com!",
     ],
     products: products.map((p) => ({
       title: p.title || "Featured product",
@@ -154,9 +154,8 @@ const DIRECTION =
   "Read this as Noosho, a tiny, super cute cartoon mascot, in a warm, natural " +
   "Indian English accent — like a sweet, bubbly little Indian girl cartoon " +
   "character. Very energetic and happy, a big smile in the voice, bouncy. Punch " +
-  "the greeting, and a delighted burst on 'Ta-da!'. Fast, brisk, excited delivery — " +
-  "quick like a reels creator, with only a short pause between lines. Clear words. " +
-  "Pronounce 'Noosho' as NOO-shoh:";
+  "the greeting 'Hello frends!', and a delighted burst on 'Ta-da!'. Leave a clear " +
+  "short pause between lines. Clear words, upbeat pace. Pronounce 'Noosho' as NOO-shoh:";
 
 /** How a line is *spoken* — captions keep the written form. Currency is spelled
  *  out so a $ price is never read as rupees, and the URL as "dot com". */
@@ -223,27 +222,6 @@ function splitTake(pcm: Buffer, n: number): [number, number][] | null {
   return segs;
 }
 
-/**
- * Rebuild the take with every between-line pause cut to a fixed short beat —
- * the model's pauses run 0.5–1s each, which is what made the reel drag.
- */
-function tighten(pcm: Buffer, segs: [number, number][]): { pcm: Buffer; segments: [number, number][] } {
-  const PAD = 0.06, BEAT = 0.22, LEAD = 0.15;
-  const parts: Buffer[] = [Buffer.alloc(Math.round(LEAD * RATE) * 2)];
-  const out: [number, number][] = [];
-  let t = LEAD;
-  for (const [s, e] of segs) {
-    const a = Math.max(0, Math.round((s - PAD) * RATE)) * 2;
-    const b = Math.min(pcm.length, Math.round((e + PAD) * RATE) * 2);
-    const clip = pcm.subarray(a, b);
-    const d = clip.length / 2 / RATE;
-    out.push([+(t + PAD).toFixed(3), +(t + d - PAD).toFixed(3)]);
-    parts.push(clip, Buffer.alloc(Math.round(BEAT * RATE) * 2));
-    t += d + BEAT;
-  }
-  return { pcm: Buffer.concat(parts), segments: out };
-}
-
 function wav(pcm: Buffer): Buffer {
   const h = Buffer.alloc(44);
   h.write("RIFF", 0);
@@ -262,7 +240,7 @@ function wav(pcm: Buffer): Buffer {
 }
 
 async function buildVoice(designId: string, lines: string[], voice: string) {
-  const hash = createHash("sha1").update(JSON.stringify({ v: 3, lines, voice })).digest("hex").slice(0, 12);
+  const hash = createHash("sha1").update(JSON.stringify({ v: 4, lines, voice })).digest("hex").slice(0, 12);
   const key = `promo-vo/${designId}-${hash}.json`;
   try {
     const existing = await head(key, { token: blobToken });
@@ -281,7 +259,6 @@ async function buildVoice(designId: string, lines: string[], voice: string) {
     segments = splitTake(pcm, lines.length);
   }
   if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
-  ({ pcm, segments } = tighten(pcm, segments));
   const audio = await put(`promo-vo/${designId}-${hash}.wav`, wav(pcm), {
     access: "public",
     contentType: "audio/wav",
