@@ -11,6 +11,8 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getDesign } from "@/lib/db";
 import { ensureHotspots } from "@/lib/hotspots";
+import { designTotal } from "@/lib/price";
+import type { ProductResult } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -69,7 +71,7 @@ async function buildScript(designId: string) {
     .filter((p) => !!p.imageUrl && !!p.price);
   // Prefer products we can point at on the design.
   withSpot.sort((a, b) => (b.spot ? 1 : 0) - (a.spot ? 1 : 0));
-  const products = withSpot.slice(0, 3);
+  const products = withSpot.slice(0, 6);
 
   const context = [
     design.mode === "event"
@@ -95,8 +97,7 @@ Return:
 - beforeLine: one short, kind, playful line about the room as it was (max 8 words), e.g. "This was the room — so plain, na?"
 - afterLine: one short line revealing the new look and naming 2-3 main colours (max 10 words), starting with "And ta-da!", e.g. "And ta-da! Warm sand, oak and walnut!"
 - palette: the 3 main colours of the NEW design, each {name, hex}
-- productLines: for each product in order, one short, warm line about that piece (max 8 words), naming it, e.g. "This rattan lamp is so cosy!"
-Simple English with a light Indian flavour. No emojis. NEVER mention prices, numbers or money — the price is shown on screen.`,
+Simple English with a light Indian flavour. No emojis, no prices.`,
           },
         ],
       },
@@ -116,9 +117,8 @@ Simple English with a light Indian flavour. No emojis. NEVER mention prices, num
               required: ["name", "hex"],
             },
           },
-          productLines: { type: Type.ARRAY, items: { type: Type.STRING } },
         },
-        required: ["beforeLine", "afterLine", "palette", "productLines"],
+        required: ["beforeLine", "afterLine", "palette"],
       },
     },
   });
@@ -126,22 +126,22 @@ Simple English with a light Indian flavour. No emojis. NEVER mention prices, num
     beforeLine: string;
     afterLine: string;
     palette: { name: string; hex: string }[];
-    productLines: string[];
   };
 
-  // No prices in her lines — the pin + price tag carry the number on screen.
-  const productLines = products.map((p, i) => {
-    const line = (out.productLines?.[i] || "").trim();
-    return line && !/[$₹\d]/.test(line) ? line : "I just love this piece!";
-  });
+  // After the reveal she wraps up with the whole basket — the real total,
+  // rounded ("from" when some products have no price) — then the CTA.
+  const basket = designTotal(parseJsonish<ProductResult[]>(design.products) ?? []);
+  const price = basket ? roundPrice(basket.formatted) : null;
+  const lead = basket?.partial ? "from" : "for";
   return {
     lines: [
       "Hello frends! I'm Noosho!",
       out.beforeLine,
       out.afterLine,
-      ...productLines,
+      ...(price ? [`Buy everything ${lead} just ${price}!`] : []),
       "Design yours at noosho.com!",
     ],
+    total: price ? `Buy everything ${lead} ${price}` : null,
     products: products.map((p) => ({
       title: p.title || "Featured product",
       price: roundPrice(p.price!),

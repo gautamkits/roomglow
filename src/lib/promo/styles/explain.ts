@@ -11,7 +11,6 @@ import {
   roundRect,
   drawLockup,
   drawBackdrop,
-  fitContain,
   clamp,
   lerp,
   easeOutBack,
@@ -28,6 +27,8 @@ import { drawNoosho, drawCaption, pill, star, photoCard, CARD, type PromoAssets,
 export type ExplainProduct = { img: HTMLImageElement; title: string; price: string; x?: number; y?: number };
 export type ExplainExtras = {
   products: ExplainProduct[];
+  /** "Buy everything for ₹12,400" — shown big in the buy-everything scene. */
+  total?: string | null;
   palette: { name: string; hex: string }[];
 };
 
@@ -116,49 +117,6 @@ function pin(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: 
   ctx.restore();
 }
 
-/** Price tag: product thumbnail + price + short name, pointing at the pin. */
-function priceTag(ctx: CanvasRenderingContext2D, p: ExplainProduct, px: number, py: number, k: number) {
-  const w = 480, h = 140;
-  // sit above the pin if there's room, else below; keep inside the card
-  const above = py - 60 - h > CARD.y + 20;
-  const tx = clamp(px - w / 2, CARD.x + 20, CARD.x + CARD.w - 20 - w) as number;
-  const ty = above ? py - 60 - h : Math.min(py + 60, CARD.y + CARD.h - 20 - h);
-  const s = easeOutBack(clamp(k));
-  if (s <= 0) return;
-  ctx.save();
-  ctx.globalAlpha *= clamp(k * 1.5);
-  ctx.translate(px, py);
-  ctx.scale(s, s);
-  ctx.translate(-px, -py);
-  // stem
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(px, py);
-  ctx.lineTo(clamp(px, tx + 40, tx + w - 40) as number, above ? ty + h : ty);
-  ctx.stroke();
-  // card
-  ctx.shadowColor = "rgba(24,20,16,0.3)";
-  ctx.shadowBlur = 30;
-  ctx.shadowOffsetY = 10;
-  ctx.fillStyle = "#fff";
-  roundRect(ctx, tx, ty, w, h, 28);
-  ctx.fill();
-  ctx.shadowColor = "transparent";
-  const thumb = fitContain(p.img, tx + 18, ty + 18, h - 36, h - 36);
-  ctx.drawImage(p.img, thumb.x, thumb.y, thumb.w, thumb.h);
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = CLAY;
-  ctx.font = `800 54px ${SORA}`;
-  ctx.fillText(p.price, tx + h + 6, ty + 74);
-  ctx.fillStyle = INK;
-  ctx.font = `500 24px ${SORA}`;
-  const title = p.title.length > 26 ? p.title.slice(0, 25).trimEnd() + "…" : p.title;
-  ctx.fillText(title, tx + h + 6, ty + 112);
-  ctx.restore();
-}
-
 export function makeExplainRender(x: ExplainExtras): PromoRender {
   return (ctx: CanvasRenderingContext2D, t: number, a: PromoAssets, tl: Timeline) => {
     drawBackdrop(ctx, t);
@@ -235,44 +193,43 @@ export function makeExplainRender(x: ExplainExtras): PromoRender {
       drawNoosho(ctx, a, cheer ? "celebrate" : "idea", 900, 1450, 360, {
         t, bob: 4, jump: cheer ? Math.abs(Math.sin(lt * 6)) * 40 : 0,
       });
-    } else if (n > 0 && t < at(last)) {
-      // products, one per line, each with its real price
-      let idx = 0;
-      while (idx < n - 1 && t >= at(4 + idx)) idx++;
-      const lt = t - at(3 + idx);
-      // The design stays the hero: the camera eases toward each product and its
-      // price pins onto it; earlier prices stay as small tags.
+    } else if (last === 4 && t < at(last)) {
+      // BUY EVERYTHING: the finished design with every price popping on in
+      // quick succession, and the total big across the bottom.
+      const lt = t - at(3);
+      designView(ctx, a.after, 1, W / 2, 960);
       const cr = coverRect(a.after, CARD);
-      const spot = (p: ExplainProduct) =>
-        p.x != null && p.y != null
-          ? { x: cr.x + (p.x / 100) * cr.w, y: cr.y + (p.y / 100) * cr.h, real: true }
-          : { x: CARD.x + CARD.w / 2, y: CARD.y + CARD.h - 40, real: false };
-      const cur = spot(x.products[idx]);
-      const prev = idx > 0 ? spot(x.products[idx - 1]) : { x: CARD.x + CARD.w / 2, y: CARD.y + CARD.h / 2 };
-      const move = easeInOutCubic(clamp(lt / 0.7));
-      const fx = lerp(prev.x, cur.real ? cur.x : CARD.x + CARD.w / 2, move);
-      const fy = lerp(prev.y, cur.real ? cur.y : CARD.y + CARD.h / 2, move);
-      const zoom = cur.real ? 1 + 0.16 * easeInOutCubic(clamp(lt / 0.9)) : 1;
-      designView(ctx, a.after, zoom, fx, fy);
-      const onScreen = (s: { x: number; y: number }) => ({
-        x: clamp(fx + (s.x - fx) * zoom, CARD.x + 30, CARD.x + CARD.w - 30) as number,
-        y: clamp(fy + (s.y - fy) * zoom, CARD.y + 30, CARD.y + CARD.h - 30) as number,
-      });
       ctx.save();
       roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, 36);
       ctx.clip();
-      for (let d = 0; d < idx; d++) {
-        const s = spot(x.products[d]);
-        if (!s.real) continue;
-        const o = onScreen(s);
-        pill(ctx, x.products[d].price, o.x, o.y, 30, "rgba(255,255,255,0.95)", CLAY);
-      }
-      const c = onScreen(cur);
-      if (cur.real) pin(ctx, c.x, c.y, t, (lt - 0.3) / 0.3);
-      priceTag(ctx, x.products[idx], c.x, c.y, (lt - 0.5) / 0.45);
+      let loose = 0;
+      x.products.forEach((p, i) => {
+        const k = (lt - 0.15 - i * 0.22) / 0.3;
+        if (k <= 0) return;
+        const s = easeOutBack(clamp(k));
+        const real = p.x != null && p.y != null;
+        const px = real ? clamp(cr.x + (p.x! / 100) * cr.w, CARD.x + 80, CARD.x + CARD.w - 80) : CARD.x + CARD.w - 120;
+        const py = real ? clamp(cr.y + (p.y! / 100) * cr.h, CARD.y + 190, CARD.y + CARD.h - 200) : CARD.y + 190 + loose++ * 90;
+        if (real) pin(ctx, px, py, t, k);
+        ctx.save();
+        ctx.translate(px, real ? py - 60 : py);
+        ctx.scale(s, s);
+        pill(ctx, p.price, 0, 0, 34, '#fff', CLAY);
+        ctx.restore();
+      });
       ctx.restore();
-      label(ctx, "SHOP THE LOOK", CARD.x + 30, CARD.y + 30, CLAY, "#fff");
-      drawNoosho(ctx, a, "idea", 900, 1450, 330, { t, bob: 4 });
+      if (x.total) {
+        const k = easeOutBack(clamp((lt - 0.2 - x.products.length * 0.22) / 0.4));
+        if (k > 0) {
+          ctx.save();
+          ctx.translate(W / 2, CARD.y + CARD.h - 90);
+          ctx.scale(k, k);
+          pill(ctx, x.total, 0, 0, 52, CLAY, '#fff');
+          ctx.restore();
+        }
+      }
+      label(ctx, 'SHOP THE LOOK', CARD.x + 30, CARD.y + 30, CLAY, '#fff');
+      drawNoosho(ctx, a, 'celebrate', 900, 1450, 330, { t, bob: 4, jump: Math.abs(Math.sin(lt * 5)) * 20 });
     } else {
       // outro: shop it at noosho.com
       const ot = t - at(last);

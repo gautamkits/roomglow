@@ -19,6 +19,8 @@ type ExplainScript = {
   lines: string[];
   palette: { name: string; hex: string }[];
   products: { title: string; price: string; imageUrl: string; x?: number; y?: number }[];
+  /** "Buy everything for ₹12,400" — null when no product has a price. */
+  total?: string | null;
 };
 
 interface ParsedProduct {
@@ -169,10 +171,11 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     if (!script) throw new Error("Write the script first.");
     const lines = scriptText.split("\n").map((l) => l.trim()).filter(Boolean);
     // Scenes are keyed by line position: hello, before, after, one per product, outro.
-    const expected = 4 + script.products.length;
+    // hello, before, ta-da, [buy everything], outro
+    const expected = script.total ? 5 : 4;
     if (lines.length !== expected) {
       throw new Error(
-        `Keep ${expected} lines (hello, before, after, ${script.products.length} product line(s), outro) — edit the words, not the count.`
+        `Keep ${expected} lines (hello, before, ta-da, ${script.total ? "buy everything, " : ""}outro) — edit the words, not the count.`
       );
     }
     setStage("Recording Noosho's voice…");
@@ -209,7 +212,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     const assets = { ...kit, envelope, before, after, cards: [], products: [], gallery: [] };
     const tl = style.explainTimeline(vo.segments, lines);
     setStage(null);
-    const render = style.makeExplainRender({ products, palette: script.palette });
+    const render = style.makeExplainRender({ products, palette: script.palette, total: script.total });
     const onProgress = (f: number) => setPct(Math.round(f * 100));
 
     if (await promo.canEncodeAac()) {
