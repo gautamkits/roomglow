@@ -6,8 +6,6 @@ import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getDesign } from "@/lib/db";
 import { ensureHotspots } from "@/lib/hotspots";
-import { designTotal } from "@/lib/price";
-import type { ProductResult } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -47,7 +45,7 @@ function roundPrice(price: string): string {
   });
 }
 
-async function buildScript(designId: string, quick = false) {
+async function buildScript(designId: string) {
   // Hotspots let the video pin each price onto the design itself.
   try {
     await ensureHotspots(designId);
@@ -66,7 +64,7 @@ async function buildScript(designId: string, quick = false) {
     .filter((p) => !!p.imageUrl && !!p.price);
   // Prefer products we can point at on the design.
   withSpot.sort((a, b) => (b.spot ? 1 : 0) - (a.spot ? 1 : 0));
-  const products = withSpot.slice(0, quick ? 6 : 3);
+  const products = withSpot.slice(0, 3);
 
   const context = [
     design.mode === "event"
@@ -131,32 +129,6 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
     const cap = name.charAt(0).toUpperCase() + name.slice(1);
     return `${cap}, just ${roundPrice(p.price!)}!`;
   });
-  const palette = (out.palette ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c.hex)).slice(0, 3);
-  const productOut = products.map((p) => ({
-    title: p.title || "Featured product",
-    price: roundPrice(p.price!),
-    imageUrl: p.imageUrl!,
-    x: p.spot?.x,
-    y: p.spot?.y,
-  }));
-
-  if (quick) {
-    // ~12s cut: Noosho speaks only the hook, the before, "ta-da" and the CTA;
-    // the prices show on screen, silently, and add up to the whole-look total.
-    const basket = designTotal(parseJsonish<ProductResult[]>(design.products) ?? []);
-    return {
-      lines: [
-        design.mode === "event" ? "Guess what this whole setup cost?" : "Guess what this whole room cost?",
-        out.beforeLine,
-        "Ta-da!",
-        "Design yours at noosho.com!",
-      ],
-      products: productOut,
-      palette,
-      total: basket ? { text: roundPrice(basket.formatted), partial: basket.partial } : null,
-    };
-  }
-
   return {
     lines: [
       "Hello frends! I'm Noosho!",
@@ -165,8 +137,14 @@ Simple English with a light Indian flavour. No emojis, no prices.`,
       ...productLines,
       "Everything's ready to shop. Design yours at noosho.com!",
     ],
-    products: productOut,
-    palette,
+    products: products.map((p) => ({
+      title: p.title || "Featured product",
+      price: roundPrice(p.price!),
+      imageUrl: p.imageUrl!,
+      x: p.spot?.x,
+      y: p.spot?.y,
+    })),
+    palette: (out.palette ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c.hex)).slice(0, 3),
   };
 }
 
@@ -261,12 +239,8 @@ function wav(pcm: Buffer): Buffer {
   return Buffer.concat([h, pcm]);
 }
 
-/**
- * @param gap optional silence inserted before line `gap.index` — the quick cut
- *   uses it for the silent price section, so one WAV still carries the timing.
- */
-async function buildVoice(designId: string, lines: string[], voice: string, gap?: { index: number; seconds: number }) {
-  const hash = createHash("sha1").update(JSON.stringify({ v: 2, lines, voice, gap })).digest("hex").slice(0, 12);
+async function buildVoice(designId: string, lines: string[], voice: string) {
+  const hash = createHash("sha1").update(JSON.stringify({ v: 2, lines, voice })).digest("hex").slice(0, 12);
   const key = `promo-vo/${designId}-${hash}.json`;
   try {
     const existing = await head(key, { token: blobToken });
@@ -285,14 +259,6 @@ async function buildVoice(designId: string, lines: string[], voice: string, gap?
     segments = splitTake(pcm, lines.length);
   }
   if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
-  if (gap && gap.index > 0 && gap.index < segments.length && gap.seconds > 0) {
-    // cut in the middle of the pause before that line
-    const cutT = (segments[gap.index - 1][1] + segments[gap.index][0]) / 2;
-    const at = Math.round(cutT * RATE) * 2;
-    const secs = Math.min(15, gap.seconds);
-    pcm = Buffer.concat([pcm.subarray(0, at), Buffer.alloc(Math.round(secs * RATE) * 2), pcm.subarray(at)]);
-    segments = segments.map(([s, e], i) => (i >= gap.index ? [+(s + secs).toFixed(3), +(e + secs).toFixed(3)] : [s, e]));
-  }
   const audio = await put(`promo-vo/${designId}-${hash}.wav`, wav(pcm), {
     access: "public",
     contentType: "audio/wav",
@@ -322,7 +288,7 @@ export async function POST(request: Request) {
     if (!designId) return NextResponse.json({ error: "Missing designId" }, { status: 400 });
 
     if (body.action === "script") {
-      return NextResponse.json(await buildScript(designId, body.format === "quick"));
+      return NextResponse.json(await buildScript(designId));
     }
     if (body.action === "voice") {
       const lines = (Array.isArray(body.lines) ? body.lines : [])
@@ -331,11 +297,7 @@ export async function POST(request: Request) {
         .slice(0, 10);
       if (!lines.length) return NextResponse.json({ error: "No lines" }, { status: 400 });
       const voice = VOICES.includes(body.voice) ? body.voice : VOICES[0];
-      const gap =
-        body.gap && Number.isInteger(body.gap.index) && Number.isFinite(body.gap.seconds)
-          ? { index: body.gap.index as number, seconds: body.gap.seconds as number }
-          : undefined;
-      return NextResponse.json(await buildVoice(designId, lines, voice, gap));
+      return NextResponse.json(await buildVoice(designId, lines, voice));
     }
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (e) {

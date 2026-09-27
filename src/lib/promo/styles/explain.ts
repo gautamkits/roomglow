@@ -48,18 +48,18 @@ export function explainTimeline(segments: Seg[], captions: string[]): Timeline {
   };
 }
 
-export const SORA = "Sora, system-ui, sans-serif";
+const SORA = "Sora, system-ui, sans-serif";
 
 // ── Layout (1080×1920) ──────────────────────────────────────────────────────
-export const CARD: Rect = { x: 48, y: 150, w: 984, h: 1230 };
-export const HOST = { x: 235, foot: 1590, h: 600 }; // Noosho, in front of the card's bottom-left
-export const BUBBLE = { x: 430, right: 940, bottom: 1600, mouth: { x: 380, y: 1300 } };
-export const RADIUS = 44;
+const CARD: Rect = { x: 48, y: 150, w: 984, h: 1230 };
+const HOST = { x: 235, foot: 1590, h: 600 }; // Noosho, in front of the card's bottom-left
+const BUBBLE = { x: 430, right: 940, bottom: 1600, mouth: { x: 380, y: 1300 } };
+const RADIUS = 44;
 
 let bgCache: { src: HTMLImageElement; canvas: HTMLCanvasElement } | null = null;
 
 /** Blurred, slightly darkened copy of the design — the frame's backdrop. Built once. */
-export function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
   if (bgCache?.src !== img) {
     const c = document.createElement("canvas");
     c.width = W / 4;
@@ -75,7 +75,7 @@ export function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
   ctx.drawImage(bgCache.canvas, 0, 0, W, H);
 }
 
-export function cardFrame(ctx: CanvasRenderingContext2D) {
+function cardFrame(ctx: CanvasRenderingContext2D) {
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.45)";
   ctx.shadowBlur = 60;
@@ -87,7 +87,7 @@ export function cardFrame(ctx: CanvasRenderingContext2D) {
 }
 
 /** Draw `img` into the card, optionally pushed in toward (fx, fy). */
-export function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom = 1, fx = CARD.x + CARD.w / 2, fy = CARD.y + CARD.h / 2) {
+function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, zoom = 1, fx = CARD.x + CARD.w / 2, fy = CARD.y + CARD.h / 2) {
   ctx.save();
   roundRect(ctx, CARD.x, CARD.y, CARD.w, CARD.h, RADIUS);
   ctx.clip();
@@ -99,13 +99,13 @@ export function cardImage(ctx: CanvasRenderingContext2D, img: HTMLImageElement, 
 }
 
 /** Where the cover-fitted image lands in the card (so hotspot %s map to pixels). */
-export function coverRect(img: HTMLImageElement): Rect {
+function coverRect(img: HTMLImageElement): Rect {
   const s = Math.max(CARD.w / img.width, CARD.h / img.height);
   const w = img.width * s, h = img.height * s;
   return { x: CARD.x + (CARD.w - w) / 2, y: CARD.y + (CARD.h - h) / 2, w, h };
 }
 
-export function tag(ctx: CanvasRenderingContext2D, text: string, bg: string, k = 1) {
+function tag(ctx: CanvasRenderingContext2D, text: string, bg: string, k = 1) {
   if (k <= 0) return;
   ctx.save();
   ctx.font = `800 40px ${SORA}`;
@@ -135,7 +135,7 @@ function hostHop(t: number, L: number[]): { jump: number; squash: number } {
   return { jump, squash };
 }
 
-export function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: MascotPose, t: number, L: number[], o: { h?: number; x?: number; foot?: number; extraJump?: number; mouth?: "o" } = {}) {
+function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: MascotPose, t: number, L: number[], o: { h?: number; x?: number; foot?: number; extraJump?: number; mouth?: "o" } = {}) {
   const { jump, squash } = hostHop(t, L);
   // soft ground shadow so she reads as standing in front of the card
   ctx.save();
@@ -155,7 +155,7 @@ export function host(ctx: CanvasRenderingContext2D, a: PromoAssets, pose: Mascot
 
 const HOT = /^(ta-da!?|noosho\.com!?|noosho!?|frends!?|[$₹][\d,.]+!?)$/i;
 
-export function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = BUBBLE.mouth) {
+function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, mouth = BUBBLE.mouth) {
   const i = tl.lines.findIndex(([s, e]) => t >= s - 0.1 && t <= e + 0.35);
   if (i < 0) return;
   const [s, e] = tl.lines[i];
@@ -211,7 +211,7 @@ export function speech(ctx: CanvasRenderingContext2D, t: number, tl: Timeline, m
 
 // ── Product callouts ────────────────────────────────────────────────────────
 
-export function pinDot(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: number) {
+function pinDot(ctx: CanvasRenderingContext2D, x: number, y: number, t: number, k: number) {
   if (k <= 0) return;
   const s = easeOutBack(clamp(k));
   const ring = (t * 1.2) % 1;
