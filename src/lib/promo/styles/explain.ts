@@ -38,7 +38,7 @@ export function explainTimeline(segments: Seg[], captions: string[]): Timeline {
     intro: z, montage: z, photo: z, scan: z, shop: z, reveal: z, pins: z, outro: z,
     lines: segments,
     captions,
-    duration: segments[segments.length - 1][1] + 1.6,
+    duration: segments[segments.length - 1][1] + 1.0,
   };
 }
 

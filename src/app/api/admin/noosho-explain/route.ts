@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
 import { GoogleGenAI, Type } from "@google/genai";
-import { head, put } from "@vercel/blob";
+import { del, head, put } from "@vercel/blob";
+import { spawn } from "child_process";
+import { mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { tmpdir } from "os";
+import path from "path";
+import ffmpegPath from "ffmpeg-static";
 import { auth } from "@/auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getDesign } from "@/lib/db";
@@ -87,10 +92,10 @@ async function buildScript(designId: string) {
 ${context}
 
 Return:
-- beforeLine: one short, kind, playful line about the room as it was (max 12 words), e.g. "This was the room — a bit plain, na?"
-- afterLine: one short line revealing the new look and naming 2-3 main colours (max 16 words), starting with "And ta-da!"
+- beforeLine: one short, kind, playful line about the room as it was (max 8 words), e.g. "This was the room — so plain, na?"
+- afterLine: one short line revealing the new look and naming 2-3 main colours (max 10 words), starting with "And ta-da!", e.g. "And ta-da! Warm sand, oak and walnut!"
 - palette: the 3 main colours of the NEW design, each {name, hex}
-- productLines: for each product in order, one short, warm line about that piece and what it adds to the space (max 12 words), naming it, e.g. "This rattan lamp gives such a cosy glow!"
+- productLines: for each product in order, one short, warm line about that piece (max 8 words), naming it, e.g. "This rattan lamp is so cosy!"
 Simple English with a light Indian flavour. No emojis. NEVER mention prices, numbers or money — the price is shown on screen.`,
           },
         ],
@@ -135,7 +140,7 @@ Simple English with a light Indian flavour. No emojis. NEVER mention prices, num
       out.beforeLine,
       out.afterLine,
       ...productLines,
-      "Everything's ready to shop. Design yours at noosho.com!",
+      "Design yours at noosho.com!",
     ],
     products: products.map((p) => ({
       title: p.title || "Featured product",
@@ -222,6 +227,27 @@ function splitTake(pcm: Buffer, n: number): [number, number][] | null {
   return segs;
 }
 
+/**
+ * Rebuild the take with every between-line pause cut to one short beat — the
+ * model leaves 0.5–1s between lines, which is most of what made the reel long.
+ */
+function tighten(pcm: Buffer, segs: [number, number][]): { pcm: Buffer; segments: [number, number][] } {
+  const PAD = 0.06, BEAT = 0.3, LEAD = 0.2;
+  const parts: Buffer[] = [Buffer.alloc(Math.round(LEAD * RATE) * 2)];
+  const out: [number, number][] = [];
+  let t = LEAD;
+  for (const [s, e] of segs) {
+    const a = Math.max(0, Math.round((s - PAD) * RATE)) * 2;
+    const b = Math.min(pcm.length, Math.round((e + PAD) * RATE) * 2);
+    const clip = pcm.subarray(a, b);
+    const d = clip.length / 2 / RATE;
+    out.push([+(t + PAD).toFixed(3), +(t + d - PAD).toFixed(3)]);
+    parts.push(clip, Buffer.alloc(Math.round(BEAT * RATE) * 2));
+    t += d + BEAT;
+  }
+  return { pcm: Buffer.concat(parts), segments: out };
+}
+
 function wav(pcm: Buffer): Buffer {
   const h = Buffer.alloc(44);
   h.write("RIFF", 0);
@@ -240,7 +266,7 @@ function wav(pcm: Buffer): Buffer {
 }
 
 async function buildVoice(designId: string, lines: string[], voice: string) {
-  const hash = createHash("sha1").update(JSON.stringify({ v: 4, lines, voice })).digest("hex").slice(0, 12);
+  const hash = createHash("sha1").update(JSON.stringify({ v: 5, lines, voice })).digest("hex").slice(0, 12);
   const key = `promo-vo/${designId}-${hash}.json`;
   try {
     const existing = await head(key, { token: blobToken });
@@ -259,6 +285,7 @@ async function buildVoice(designId: string, lines: string[], voice: string) {
     segments = splitTake(pcm, lines.length);
   }
   if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
+  ({ pcm, segments } = tighten(pcm, segments));
   const audio = await put(`promo-vo/${designId}-${hash}.wav`, wav(pcm), {
     access: "public",
     contentType: "audio/wav",
@@ -277,6 +304,52 @@ async function buildVoice(designId: string, lines: string[], voice: string) {
   return { ...meta, cached: false };
 }
 
+function ffmpeg(args: string[]) {
+  return new Promise<void>((resolve, reject) => {
+    const proc = spawn(ffmpegPath as unknown as string, args, { stdio: ["ignore", "ignore", "pipe"] });
+    let err = "";
+    proc.stderr.on("data", (d) => (err = (err + d).slice(-4000)));
+    proc.on("error", reject);
+    proc.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exited ${code}: ${err}`))));
+  });
+}
+
+const BLOB_HOST = /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\//;
+
+/** Phones can't encode AAC in the browser, so they upload a silent render and
+ *  we add the voice here: video copied as-is, audio encoded to AAC. */
+async function mux(designId: string, videoUrl: string, audioUrl: string) {
+  if (!BLOB_HOST.test(videoUrl) || !BLOB_HOST.test(audioUrl)) throw new Error("Bad media URL");
+  const dir = await mkdtemp(path.join(tmpdir(), "noosho-mux-"));
+  try {
+    const [v, a] = await Promise.all(
+      [videoUrl, audioUrl].map(async (u) => {
+        const r = await fetch(u);
+        if (!r.ok) throw new Error(`Download failed (${r.status})`);
+        return Buffer.from(await r.arrayBuffer());
+      })
+    );
+    const vin = path.join(dir, "in.mp4"), ain = path.join(dir, "voice.wav"), out = path.join(dir, "out.mp4");
+    await Promise.all([writeFile(vin, v), writeFile(ain, a)]);
+    await ffmpeg([
+      "-y", "-i", vin, "-i", ain,
+      "-map", "0:v:0", "-map", "1:a:0",
+      "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
+      "-movflags", "+faststart", out,
+    ]);
+    const blob = await put(`promo-out/${designId}-${Date.now()}.mp4`, await readFile(out), {
+      access: "public",
+      contentType: "video/mp4",
+      addRandomSuffix: true,
+      token: blobToken,
+    });
+    await del(videoUrl, { token: blobToken }).catch(() => {});
+    return { url: blob.url };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!isAdminEmail(session?.user?.email)) {
@@ -289,6 +362,9 @@ export async function POST(request: Request) {
 
     if (body.action === "script") {
       return NextResponse.json(await buildScript(designId));
+    }
+    if (body.action === "mux") {
+      return NextResponse.json(await mux(designId, String(body.videoUrl || ""), String(body.audioUrl || "")));
     }
     if (body.action === "voice") {
       const lines = (Array.isArray(body.lines) ? body.lines : [])

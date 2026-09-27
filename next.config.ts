@@ -25,6 +25,8 @@ const nextConfig: NextConfig = {
       "./assets/fonts/**",
       "./public/outro/**",
     ],
+    // "Noosho explains" muxes the voice in as AAC for phone exports.
+    "/api/admin/noosho-explain": ["./node_modules/ffmpeg-static/**"],
   },
   serverExternalPackages: ["@napi-rs/canvas", "ffmpeg-static"],
   images: {

@@ -826,7 +826,22 @@ async function loadVoice(url: string, duration: number): Promise<Float32Array> {
   return (await off.startRendering()).getChannelData(0);
 }
 
-export type PromoRender = (ctx: CanvasRenderingContext2D, t: number, a: PromoAssets, tl: Timeline) => void;
+/**
+ * Whether this browser can put AAC audio in the MP4. Phone browsers usually
+ * can't, and fall back to Opus — which phone galleries and Instagram play as
+ * silence — so callers route those exports through server-side muxing.
+ */
+export async function canEncodeAac(): Promise<boolean> {
+  try {
+    if (typeof AudioEncoder === "undefined") return false;
+    const cfg = { codec: "mp4a.40.2", sampleRate: AUDIO_RATE, numberOfChannels: 1, bitrate: 128_000 };
+    return !!(await AudioEncoder.isConfigSupported(cfg)).supported;
+  } catch {
+    return false;
+  }
+}
+
+export type PromoRender =(ctx: CanvasRenderingContext2D, t: number, a: PromoAssets, tl: Timeline) => void;
 
 export async function generatePromoVideo(
   assets: PromoAssets,

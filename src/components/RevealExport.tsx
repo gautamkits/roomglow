@@ -209,11 +209,34 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     const assets = { ...kit, envelope, before, after, cards: [], products: [], gallery: [] };
     const tl = style.explainTimeline(vo.segments, lines);
     setStage(null);
-    return promo.generatePromoVideo(assets, tl, {
-      voiceUrl: vo.url,
-      render: style.makeExplainRender({ products, palette: script.palette }),
-      onProgress: (f) => setPct(Math.round(f * 100)),
+    const render = style.makeExplainRender({ products, palette: script.palette });
+    const onProgress = (f: number) => setPct(Math.round(f * 100));
+
+    if (await promo.canEncodeAac()) {
+      return promo.generatePromoVideo(assets, tl, { voiceUrl: vo.url, render, onProgress });
+    }
+    // Phones: no AAC encoder in the browser, and an Opus track plays silent in
+    // galleries and Instagram. Render silently (lip-sync still runs off the
+    // voice), then the server adds the voice as AAC.
+    const silent = await promo.generatePromoVideo(assets, tl, { voice: false, render, onProgress });
+    setStage("Adding Noosho's voice…");
+    const { upload } = await import("@vercel/blob/client");
+    const up = await upload(`promo-tmp/${design.id}.mp4`, silent, {
+      access: "public",
+      handleUploadUrl: "/api/admin/noosho-explain/upload",
+      contentType: "video/mp4",
     });
+    const m = await fetch("/api/admin/noosho-explain", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "mux", designId: design.id, videoUrl: up.url, audioUrl: vo.url }),
+    });
+    const mx = await m.json();
+    if (!m.ok) throw new Error(mx.error || "Couldn't add the voice.");
+    const out = await fetch(mx.url);
+    if (!out.ok) throw new Error("Couldn't download the finished video.");
+    setStage(null);
+    return out.blob();
   };
 
   const exportVideo = async () => {
