@@ -45,14 +45,17 @@ const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 function fallbacks(inp: ScriptInput): [string, string, string] {
   if (inp.mode === "event") {
     const ev = (inp.eventLabel || "Party").trim();
-    return [`Hi frends! ${ev} coming up?`, "Just plain walls — a blank canvas, na?", "So I made it a party… ta-da!"];
+    return [`Hi frends! ${ev} coming up?`, "Just plain walls — a blank canvas!", "So I made it a party… ta-da!"];
   }
   return [
     `Hello frends! Look at this ${(inp.roomType || "room").toLowerCase()}…`,
-    "So plain — like a blank canvas, na?",
+    "So plain — like a blank canvas!",
     "So I gave it some love… ta-da!",
   ];
 }
+
+/** Drop a trailing "na" tag ("…walls, na?" → "…walls?"): US viewers don't know it. */
+const noNa = (s: string) => s.replace(/,?\s*\bna\b\s*([?!.]*)/gi, (_, p: string) => (p ? "!" : "")).replace(/\s+([?!.,])/g, "$1").trim();
 
 /** Keep a model line only if it follows the rules. */
 function valid(line: unknown, max: number, extra?: (s: string) => boolean): line is string {
@@ -87,19 +90,19 @@ export async function writeExplainLines(ai: GoogleGenAI, inp: ScriptInput): Prom
             { text: "AFTER photo:" },
             { inlineData: inp.after },
             {
-              text: `You write the first three spoken lines of a short Instagram reel for Noosho — a tiny, bubbly, warm Indian cartoon designer who speaks light Indian English ("na?", "frends").
+              text: `You write the first three spoken lines of a short Instagram reel for Noosho — a tiny, bubbly, warm Indian cartoon designer who says "frends". Use simple, friendly English that viewers in India AND the US understand — never "na", "yaar" or other regional tags.
 This reel is ${what}
 ${inp.narrative ? `Design notes: ${inp.narrative}` : ""}
 ${inp.productNames?.length ? `Pieces added: ${inp.productNames.slice(0, 6).join("; ")}` : ""}
 
 Style — "blank canvas": Noosho greets, notices how plain the space was, then reveals what she did.
 - line1: greeting + hook about THIS space or occasion. Start with "Hello frends!" or "Hi frends!". Max 9 words. Examples: "Hello frends! Look at this sleepy little hallway…", "Hi frends! Birthday coming up?"
-- line2: one playful, KIND observation of the BEFORE photo, specific to what you actually see. Max 9 words. Examples: "One lonely bench and bare walls, na?", "Just plain walls — waiting for a party!"
+- line2: one playful, KIND observation of the BEFORE photo, specific to what you actually see. Max 9 words. Examples: "One lonely bench and bare walls!", "Just plain walls — waiting for a party!"
 - line3: what she did, specific to the AFTER photo, ending with "… ta-da!". Max 9 words. Examples: "So I added warm wood and soft light… ta-da!", "So I brought the balloons… ta-da!"
 
 This take's angle: ${angle}
 ${avoid.length ? `Already used — do NOT reuse these lines or their key words/openings:\n- ${avoid.join("\n- ")}\n` : ""}
-Rules: only mention things visible in the photos. Never insult the home (plain/sleepy/empty are fine; never ugly/messy/dirty). No numbers, no prices, no emojis. Make it feel fresh — don't just copy the examples.`,
+Rules: only mention things visible in the photos. line2 describes ONLY the BEFORE photo — anything that appears only in the AFTER photo (decor, pets/figurines, plants, furniture) was added by Noosho and must not be mentioned in line2. Never insult the home (plain/sleepy/empty are fine; never ugly/messy/dirty). No numbers, no prices, no emojis. Make it feel fresh — don't just copy the examples.`,
             },
           ],
         },
@@ -119,6 +122,7 @@ Rules: only mention things visible in the photos. Never insult the home (plain/s
     /* model unavailable: all fallbacks */
   }
 
+  for (const k of ["line1", "line2", "line3"] as const) if (typeof out[k] === "string") out[k] = noNa(out[k]!);
   const l1 = valid(out.line1, 9, (s) => /^(hello|hi)\s+frends/i.test(s)) ? out.line1.trim() : fb[0];
   const l2 = valid(out.line2, 9) ? out.line2.trim() : fb[1];
   // any "ta-da" ending counts ("Ta-da!!", "ta-da."), tidied to "ta-da!"

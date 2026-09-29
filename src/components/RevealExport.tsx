@@ -224,7 +224,12 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
     const render = style.makeExplainRender({ products, total: script.total });
     const onProgress = (f: number) => setPct(Math.round(f * 100));
 
-    if (await promo.canEncodeAac()) {
+    // Only desktop Chromium's AAC output is trustworthy in the MP4 — Safari (and
+    // every iOS browser, all WebKit) reports AAC support but its track plays
+    // silent. Everyone else renders silently and the server adds the voice.
+    const ua = navigator.userAgent;
+    const desktopChromium = /Chrome\/\d+/.test(ua) && !/iPhone|iPad|iPod|Android|CriOS|FxiOS|EdgiOS/.test(ua);
+    if (desktopChromium && (await promo.canEncodeAac())) {
       return promo.generatePromoVideo(assets, tl, { voiceUrl: vo.url, render, onProgress });
     }
     // Phones: no AAC encoder in the browser, and an Opus track plays silent in
