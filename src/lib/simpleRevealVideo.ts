@@ -2,6 +2,7 @@ import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { isRevealVideoSupported, type RevealVideoInput } from "./revealVideo";
 import { loadOutroClip, appendOutro } from "./outroClip";
 import { loadNooshoKit, drawNoosho, setFrameTime, type NooshoKit } from "./promo/promo";
+import { amountOf } from "./promo/explainPrices";
 
 // The original "before → after" reveal: a simple horizontal wipe with a drag
 // handle, Before/After pills, and a noosho watermark. No logo intro, phone
@@ -19,6 +20,10 @@ const WIPE = 90; // ~3.0s
 // has to cover a fade-in plus dwell time on two lines.
 const HOLD_AFTER = 96; // ~3.2s
 export const TOTAL = HOLD_BEFORE + WIPE + HOLD_AFTER;
+/** Extra beat after the wipe for the price tags to pop in before the caption. */
+const TAG_BEAT = 36; // ~1.2s
+/** When tag `i` starts popping, in seconds after the wipe ends. */
+const TAG_POP = { first: 0.15, step: 0.3, dur: 0.3 };
 /** Fade the offer caption in over this many frames once the wipe finishes. */
 const OFFER_FADE = 12; // ~0.4s
 
@@ -198,6 +203,101 @@ function drawOffer(
   ctx.restore();
 }
 
+/** A product's price and its hotspot on the design, in % of the image. */
+export type PriceTag = { price: string; x: number; y: number };
+/** A price tag laid out in frame pixels: `px/py` is the pin, the pill sits above. */
+export type PlacedTag = { price: string; px: number; py: number };
+
+const TAG_SIZE = 34; // pill font size — the pill is 2× this tall
+const TAG_LIFT = 62; // pin → pill centre
+
+/**
+ * Up to three price tags on the finished design, priciest first.
+ *
+ * A tag is dropped rather than moved when its product sits somewhere it would
+ * be hidden: under the Before/After pills at the top, in the caption band at
+ * the bottom, or where Noosho lands to celebrate (bottom-left). Moving it
+ * would put the price on the wrong product. Tags whose pills would overlap an
+ * already-placed one are dropped too.
+ */
+export function layoutPriceTags(
+  tags: PriceTag[],
+  rect: Rect,
+  noosho: boolean
+): PlacedTag[] {
+  const placed: PlacedTag[] = [];
+  const sorted = [...tags].sort((a, b) => amountOf(b.price) - amountOf(a.price));
+  for (const t of sorted) {
+    if (placed.length >= 3) break;
+    const px = rect.x + (t.x / 100) * rect.w;
+    const py = rect.y + (t.y / 100) * rect.h;
+    if (px < 120 || px > W - 120) continue; // cropped by Reels on tall phones
+    if (py < 430 || py > 1380) continue; // Before/After pills · caption band
+    if (noosho && px < 430 && py > 1040) continue; // Noosho's celebrate spot
+    if (placed.some((q) => Math.abs(q.px - px) < 250 && Math.abs(q.py - py) < 90)) continue;
+    placed.push({ price: t.price, px, py });
+  }
+  return placed;
+}
+
+/** Pins + price pills popping in one by one. `since` = seconds since the wipe ended. */
+function drawPriceTags(ctx: CanvasRenderingContext2D, tags: PlacedTag[], since: number) {
+  tags.forEach((tag, i) => {
+    const k = (since - TAG_POP.first - i * TAG_POP.step) / TAG_POP.dur;
+    if (k <= 0) return;
+    const s = easeOutBack(Math.min(1, k));
+    // pulse ring
+    const ring = ((since - TAG_POP.first - i * TAG_POP.step) * 1.2) % 1;
+    ctx.save();
+    ctx.globalAlpha = 1 - ring;
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.arc(tag.px, tag.py, 20 + ring * 36, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+    // pin
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.35)";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(tag.px, tag.py, 20 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = "#bd6a43";
+    ctx.beginPath();
+    ctx.arc(tag.px, tag.py, 11 * s, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    // price pill above the pin, kept inside the side safe zone
+    ctx.save();
+    ctx.font = `700 ${TAG_SIZE}px Sora, system-ui, sans-serif`;
+    const pw = ctx.measureText(tag.price).width + TAG_SIZE * 1.4;
+    const ph = TAG_SIZE * 2;
+    const cx = Math.max(100 + pw / 2, Math.min(W - 100 - pw / 2, tag.px));
+    ctx.translate(cx, tag.py - TAG_LIFT);
+    ctx.scale(s, s);
+    ctx.shadowColor = "rgba(0,0,0,0.3)";
+    ctx.shadowBlur = 14;
+    roundRect(ctx, -pw / 2, -ph / 2, pw, ph, ph / 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.fillStyle = "#a04525";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(tag.price, 0, 1);
+    ctx.restore();
+  });
+}
+
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
 /** Composite one before→after wipe frame. `revealX` = fraction [0..1] of the
  *  rect still showing "before" from the left. Exposed for visual verification. */
 export function renderSimpleRevealFrame(
@@ -209,7 +309,9 @@ export function renderSimpleRevealFrame(
   offer?: OfferCaption,
   offerAlpha = 0,
   /** Noosho pushing the divider. `sinceReveal` is seconds since the wipe ended (<0 before). */
-  noosho?: { kit: NooshoKit; t: number; sinceReveal: number }
+  noosho?: { kit: NooshoKit; t: number; sinceReveal: number },
+  /** Price tags on the finished design, with seconds since the wipe ended. */
+  tags?: { placed: PlacedTag[]; since: number }
 ) {
   // 1. Solid neutral backdrop — never the design, so the letterbox bands above
   //    and below the photo stay clean and never expose the final design.
@@ -268,6 +370,9 @@ export function renderSimpleRevealFrame(
     drawPill(ctx, "Before", Math.max(rect.x + 70, SAFE_SIDE), pillY, "rgba(255,255,255,0.92)", "#1c1917");
   }
   drawPill(ctx, "After", Math.min(rect.x + rect.w - 60, W - SAFE_SIDE), pillY, "#a04525", "#ffffff");
+
+  // 5b. Price tags pop on once the design is fully revealed.
+  if (tags && tags.placed.length && tags.since >= 0) drawPriceTags(ctx, tags.placed, tags.since);
 
   // 6. Offer caption — before the watermark so the scrim can't cover it.
   if (offer) drawOffer(ctx, offer, offerAlpha);
@@ -331,7 +436,15 @@ function drawSliderNoosho(
   }
 }
 
-export function simpleRevealFrameState(i: number): { revealX: number; offerAlpha: number } {
+/** Main-timeline frame count; a design with price tags gets an extra beat for them. */
+export function simpleTotalFrames(hasTags: boolean): number {
+  return TOTAL + (hasTags ? TAG_BEAT : 0);
+}
+
+export function simpleRevealFrameState(
+  i: number,
+  hasTags = false
+): { revealX: number; offerAlpha: number } {
   let revealX = 1;
   if (i >= HOLD_BEFORE && i < HOLD_BEFORE + WIPE) {
     revealX = 1 - smoothstep((i - HOLD_BEFORE) / WIPE);
@@ -341,13 +454,15 @@ export function simpleRevealFrameState(i: number): { revealX: number; offerAlpha
   // Fade the caption in only once the design is fully revealed, so it never
   // sits over the "before" photo or competes with the wipe.
   const wipeEnd = HOLD_BEFORE + WIPE;
-  const offerAlpha = i < wipeEnd ? 0 : smoothstep((i - wipeEnd) / OFFER_FADE);
+  // With price tags, the caption waits for them to land first.
+  const offerAt = wipeEnd + (hasTags ? TAG_BEAT : 0);
+  const offerAlpha = i < offerAt ? 0 : smoothstep((i - offerAt) / OFFER_FADE);
   return { revealX, offerAlpha };
 }
 
 /** Render the original before→after wipe as a 9:16 H.264 MP4, entirely in-browser. */
 export async function generateSimpleRevealVideo(
-  { beforeUrl, afterUrl, outro = true, offer, noosho = true }: RevealVideoInput,
+  { beforeUrl, afterUrl, outro = true, offer, noosho = true, priceTags = [] }: RevealVideoInput,
   onProgress?: (fraction: number) => void
 ): Promise<Blob> {
   if (!isRevealVideoSupported()) {
@@ -361,7 +476,7 @@ export async function generateSimpleRevealVideo(
     // null on any failure → the export falls back to the plain grip
     noosho ? loadNooshoKit() : Promise.resolve(null),
   ]);
-  const ALL_FRAMES = TOTAL + (outroClip?.frameCount ?? 0);
+
 
   // Ensure the Sora wordmark is available so the watermark renders in-brand.
   try { if (document.fonts?.ready) await document.fonts.ready; } catch { /* non-fatal */ }
@@ -374,6 +489,9 @@ export async function generateSimpleRevealVideo(
 
   // Both images share one contain rect so the wipe lines up.
   const rect = containRect(after.width, after.height, W, H);
+  const placed = layoutPriceTags(priceTags, rect, !!kit);
+  const MAIN = simpleTotalFrames(placed.length > 0);
+  const ALL_FRAMES = MAIN + (outroClip?.frameCount ?? 0);
 
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -402,13 +520,15 @@ export async function generateSimpleRevealVideo(
   encoder.configure(config);
 
   const frameDur = 1_000_000 / FPS; // microseconds
-  for (let i = 0; i < TOTAL; i++) {
-    const { revealX, offerAlpha } = simpleRevealFrameState(i);
+  for (let i = 0; i < MAIN; i++) {
+    const { revealX, offerAlpha } = simpleRevealFrameState(i, placed.length > 0);
+    const sinceReveal = (i - (HOLD_BEFORE + WIPE)) / FPS;
     const t = i / FPS;
     setFrameTime(t);
     renderSimpleRevealFrame(
       ctx, before, after, rect, revealX, offer, offerAlpha,
-      kit ? { kit, t, sinceReveal: (i - (HOLD_BEFORE + WIPE)) / FPS } : undefined
+      kit ? { kit, t, sinceReveal } : undefined,
+      { placed, since: sinceReveal }
     );
 
     const frame = new VideoFrame(canvas, {
@@ -433,7 +553,7 @@ export async function generateSimpleRevealVideo(
         ctx,
         canvas,
         clip: outroClip,
-        startIndex: TOTAL,
+        startIndex: MAIN,
         fps: FPS,
         onFrame: (abs) => onProgress?.((abs + 1) / ALL_FRAMES),
       });

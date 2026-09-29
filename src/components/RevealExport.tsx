@@ -68,6 +68,26 @@ function buyableProducts(
   return buyable.slice(0, 2);
 }
 
+/**
+ * Every priced product that has a hotspot, for the before/after price tags.
+ * Unlike `buyableProducts` this doesn't need a product image or cap at two —
+ * the renderer picks the (up to three) tags that fit.
+ */
+function pricedSpots(
+  design: RevealDesign,
+  hotspotsOverride?: unknown
+): { price: string; x: number; y: number }[] {
+  const prods = parseJsonish<ParsedProduct>(design.products);
+  const hotspots = parseJsonish<{ productIndex: number; x: number; y: number }>(
+    hotspotsOverride !== undefined ? hotspotsOverride : design.hotspots
+  );
+  return prods.flatMap((p, i) => {
+    const price = p.amazonProduct?.price;
+    const hs = hotspots.find((h) => h.productIndex === i);
+    return price && hs ? [{ price, x: hs.x, y: hs.y }] : [];
+  });
+}
+
 export interface RevealDesign {
   id: string;
   mode?: string;
@@ -98,6 +118,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [variant, setVariant] = useState<RevealVariant>("full");
   const [outro, setOutro] = useState(true);
   const [noosho, setNoosho] = useState(true);
+  const [priceTags, setPriceTags] = useState(true);
   // "Noosho explains": per-design script (editable) + TTS voice.
   const [script, setScript] = useState<ExplainScript | null>(null);
   const [scriptText, setScriptText] = useState("");
@@ -268,7 +289,25 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       if (variant === "explain") {
         blob = await renderExplain();
       } else if (variant === "simple") {
-        // Original before→after wipe — no products / hotspots needed.
+        // Price tags need hotspots, which are computed lazily — older/gallery
+        // designs may have none, so generate them on demand (same as the full
+        // commercial). Without any, the export is the plain wipe.
+        let tags = priceTags ? pricedSpots(design) : [];
+        if (priceTags && tags.length === 0 && basket) {
+          setPrepping(true);
+          try {
+            const r = await fetch("/api/admin/ensure-hotspots", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ designId: design.id }),
+            });
+            if (r.ok) tags = pricedSpots(design, (await r.json()).hotspots);
+          } catch {
+            /* export without tags */
+          } finally {
+            setPrepping(false);
+          }
+        }
         blob = await generateSimpleRevealVideo(
           {
             beforeUrl,
@@ -276,6 +315,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             outro,
             noosho,
             offer: { priceLine, ctaLine },
+            priceTags: tags,
           },
           (f) => setPct(Math.round(f * 100))
         );
@@ -434,6 +474,20 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                 className="accent-orange-700"
               />
               <span className="text-[11px] text-zinc-500">Noosho slides it</span>
+            </label>
+          )}
+          {variant === "simple" && basket && (
+            <label className="flex items-center gap-2 mb-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={priceTags}
+                onChange={(e) => setPriceTags(e.target.checked)}
+                disabled={busy}
+                className="accent-orange-700"
+              />
+              <span className="text-[11px] text-zinc-500">
+                Price tags on products <span className="text-zinc-400">(up to 3, +1.2s)</span>
+              </span>
             </label>
           )}
           {variant === "explain" && (
