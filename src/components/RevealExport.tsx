@@ -103,6 +103,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   const [scriptText, setScriptText] = useState("");
   const [voice, setVoice] = useState<"Laomedeia" | "Leda">("Laomedeia");
   const [stage, setStage] = useState<string | null>(null);
+  const [seenLines, setSeenLines] = useState<string[]>([]);
   const allProducts = buyableProducts(design);
   // Deliberately NOT from `allProducts` — that list is filtered to products with
   // an image AND price and then sliced to 2 for the shop cards, so totalling it
@@ -152,12 +153,14 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       const r = await fetch("/api/admin/noosho-explain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "script", designId: design.id }),
+        // earlier takes' first three lines, so a Rewrite says something new
+        body: JSON.stringify({ action: "script", designId: design.id, avoid: seenLines }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "Couldn't write the script.");
       setScript(d);
       setScriptText(d.lines.join("\n"));
+      setSeenLines((prev) => [...prev, ...d.lines.slice(0, 3)].slice(-12));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't write the script.");
     } finally {
