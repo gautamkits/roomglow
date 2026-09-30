@@ -680,6 +680,12 @@ export interface RevealVideoInput {
    * omitted (a design with no priceable product has no price line).
    */
   offer?: { priceLine?: string; ctaLine?: string };
+  /**
+   * Before/after export only: products' prices + hotspots (% of the image),
+   * popped on as pins with price pills once the wipe finishes. Up to three are
+   * shown; ones that would sit under the pills, caption or Noosho are skipped.
+   */
+  priceTags?: { price: string; x: number; y: number }[];
 }
 
 /** Render the branded reveal commercial (1080×1920 H.264 MP4), in-browser. */
