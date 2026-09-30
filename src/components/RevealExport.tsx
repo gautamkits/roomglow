@@ -377,7 +377,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
   };
 
   return (
-    <div className="mt-3 border-t border-zinc-200 dark:border-zinc-800 pt-3">
+    // @container: the panel also sits in half-width admin cards on phones
+    // (~170px), so its rows respond to the panel's width, not the viewport's.
+    <div className="@container mt-3 border-t border-zinc-200 dark:border-zinc-800 pt-3">
       {supported ? (
         <>
           <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-500">
@@ -385,9 +387,9 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             9:16 · 1080×1920 · whole photo shown
           </div>
           {/* Version picker: full branded commercial vs. original before/after wipe. */}
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex flex-col gap-1 @xs:flex-row @xs:items-center @xs:gap-2 mb-2">
             <span className="text-[11px] text-zinc-400 shrink-0">Style</span>
-            <div className="flex items-center gap-1 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
+            <div className="grid grid-cols-1 @xs:grid-cols-3 gap-1 flex-1 min-w-0 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
               {([
                 { id: "full", label: "Full commercial" },
                 { id: "simple", label: "Before/after" },
@@ -397,7 +399,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                   key={v.id}
                   onClick={() => setVariant(v.id)}
                   disabled={busy}
-                  className={`flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                  className={`min-w-0 px-2 py-1 rounded-md text-xs font-medium leading-tight transition-colors disabled:opacity-60 ${
                     variant === v.id
                       ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
                       : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -409,15 +411,15 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
             </div>
           </div>
           {variant === "full" && allProducts.length > 0 && (
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex flex-col gap-1 @xs:flex-row @xs:items-center @xs:gap-2 mb-2">
               <span className="text-[11px] text-zinc-400 shrink-0">Shop cards</span>
-              <div className="flex items-center gap-1 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
+              <div className="flex items-center gap-1 flex-1 min-w-0 rounded-lg border border-zinc-200 dark:border-zinc-800 p-0.5">
                 {Array.from({ length: Math.min(allProducts.length, 3) + 1 }, (_, n) => (
                   <button
                     key={n}
                     onClick={() => setCardCount(n)}
                     disabled={busy}
-                    className={`flex-1 px-2 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
+                    className={`flex-1 min-w-0 px-1 py-1 rounded-md text-xs font-medium transition-colors disabled:opacity-60 ${
                       cardCount === n
                         ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
                         : "text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
@@ -471,7 +473,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                 checked={noosho}
                 onChange={(e) => setNoosho(e.target.checked)}
                 disabled={busy}
-                className="accent-orange-700"
+                className="shrink-0 accent-orange-700"
               />
               <span className="text-[11px] text-zinc-500">Noosho slides it</span>
             </label>
@@ -483,7 +485,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                 checked={priceTags}
                 onChange={(e) => setPriceTags(e.target.checked)}
                 disabled={busy}
-                className="accent-orange-700"
+                className="shrink-0 accent-orange-700"
               />
               <span className="text-[11px] text-zinc-500">
                 Price tags on products <span className="text-zinc-400">(up to 3, +1.2s)</span>
@@ -521,13 +523,13 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
                       Rewrite
                     </button>
                   </div>
-                  <label className="flex items-center gap-2 text-[11px] text-zinc-500">
+                  <label className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
                     Voice
                     <select
                       value={voice}
                       onChange={(e) => setVoice(e.target.value as "Laomedeia" | "Leda")}
                       disabled={busy}
-                      className="px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                      className="min-w-0 max-w-full px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
                     >
                       <option value="Laomedeia">Laomedeia (Indian accent)</option>
                       <option value="Leda">Leda</option>
@@ -545,7 +547,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
               checked={outro}
               onChange={(e) => setOutro(e.target.checked)}
               disabled={busy}
-              className="accent-orange-700"
+              className="shrink-0 accent-orange-700"
             />
             <span className="text-[11px] text-zinc-500">
               Append brand outro <span className="text-zinc-400">(+2.9s, with CTA)</span>
@@ -590,7 +592,7 @@ export default function RevealExport({ design }: { design: RevealDesign }) {
       {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
       <div className="mt-3">
-        <div className="flex items-center justify-between mb-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 mb-1.5">
           <span className="text-[11px] uppercase tracking-wide text-zinc-400">
             Caption
           </span>
