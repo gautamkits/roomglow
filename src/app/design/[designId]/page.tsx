@@ -13,6 +13,7 @@ import {
   isAdminEmail,
 } from "@/lib/admin";
 import DesignViewer from "./DesignViewer";
+import RelatedDesigns from "@/components/RelatedDesigns";
 import { SITE_URL as BASE } from "@/lib/site";
 
 export async function generateMetadata({
@@ -205,6 +206,7 @@ export default async function DesignPage({
             : null
         }
       />
+      {d && <RelatedDesigns design={d as Parameters<typeof RelatedDesigns>[0]["design"]} />}
     </>
   );
 }
