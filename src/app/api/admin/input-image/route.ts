@@ -47,14 +47,14 @@ export async function POST(request: Request) {
 
   // Build the list of briefs to render.
   let briefs: string[];
+  let kind = body.kind as InputBriefRequest["kind"] | undefined;
   if (typeof body.brief === "string" && body.brief.trim()) {
     briefs = [body.brief.trim().slice(0, MAX_TEXT)];
   } else {
-    const kind = body.kind as InputBriefRequest["kind"];
     const state = body.state as InputBriefRequest["state"];
     const light = body.light as InputBriefRequest["light"];
     const preset = typeof body.preset === "string" ? body.preset.trim().slice(0, 120) : "";
-    if (!KINDS.includes(kind) || !STATES.includes(state) || !LIGHTS.includes(light) || !preset) {
+    if (!kind || !KINDS.includes(kind) || !STATES.includes(state) || !LIGHTS.includes(light) || !preset) {
       return NextResponse.json({ error: "Missing or invalid options" }, { status: 400 });
     }
     const count = Math.min(MAX_COUNT, Math.max(1, Number(body.count) || 1));
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     briefs = [];
     try {
       for (let i = 0; i < count; i++) {
-        const b = await writeInputBrief({ kind, preset, state, light, extra, avoid: [...avoid, ...briefs] });
+        const b = await writeInputBrief({ kind: kind!, preset, state, light, extra, avoid: [...avoid, ...briefs] });
         briefs.push(b);
       }
     } catch (err) {
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
   const results = await Promise.all(
     briefs.map(async (brief) => {
       try {
-        const img = await generateInputPhoto(brief);
+        const img = await generateInputPhoto(brief, kind);
         await recordImageGen("admin-input", userId);
         return { brief, imageBase64: img.data, mimeType: img.mimeType };
       } catch (err) {

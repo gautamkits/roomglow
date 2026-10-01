@@ -1883,11 +1883,21 @@ the examples below: the city or region it is in, flooring material, wall colour 
 finish, number and position of windows or doors, ceiling (fan, false ceiling, beams),
 switchboards, AC unit, radiator or none, and the room's proportions.
 
-Viewpoint — this matters most. The photographer stands IN A CORNER of the room (or
+${
+    req.kind === "venue"
+      ? `Viewpoint — this matters most. The photographer stands back against the opposite
+wall and faces ONE wall straight on, so that single wall fills most of the frame,
+edge to edge, its full height from floor to ceiling visible, with its two side
+corners just visible at the frame edges. The floor in front of it is open and clear
+— room for a backdrop, stage or table. Say which wall is shown and what is on it
+(windows, doors, switchboards). NEVER a two-wall corner view, NEVER through a
+doorway, never a long, narrow, corridor-like space.`
+      : `Viewpoint — this matters most. The photographer stands IN A CORNER of the room (or
 against a side wall), looking DIAGONALLY across it, so TWO walls meet in the frame
 and the room's full width and floor area are visible. Say which corner and which
 two walls are seen. NEVER stand in or behind a doorway, NEVER look straight down
-the length of the room, and never describe a long, narrow, corridor-like space.
+the length of the room, and never describe a long, narrow, corridor-like space.`
+  }
 The room should read as spacious and roomy.${
     req.state === "empty"
       ? ""
@@ -1923,16 +1933,25 @@ ${
 
 /** Draw one 9:16 input photo from a brief. Returns base64 PNG/JPEG data. */
 export async function generateInputPhoto(
-  brief: string
+  brief: string,
+  kind?: InputBriefRequest["kind"]
 ): Promise<{ data: string; mimeType: string }> {
+  const composition =
+    kind === "venue"
+      ? `Composition: facing ONE wall straight on — the whole wall in frame, floor to
+ceiling and edge to edge, its two side corners just visible at the frame edges,
+clear open floor in front of it. Natural, undistorted perspective at a normal focal
+length (no fisheye, no ultra-wide stretch). NOT a two-wall corner view, NOT framed
+through a doorway, NOT corridor-like.`
+      : `Composition: shot from a corner looking diagonally across the room — two walls
+visible, generous open floor, the room's full width in frame. Natural, undistorted
+perspective at a normal focal length (no fisheye, no ultra-wide stretch). NOT a
+view straight down a long room, NOT framed through a doorway, NOT corridor-like.`;
   const prompt = `An ordinary vertical photo of a room taken on a smartphone, held at chest height.
 
 ${brief}
 
-Composition: shot from a corner looking diagonally across the room — two walls
-visible, generous open floor, the room's full width in frame. Natural, undistorted
-perspective at a normal focal length (no fisheye, no ultra-wide stretch). NOT a
-view straight down a long room, NOT framed through a doorway, NOT corridor-like.
+${composition}
 
 Style: a real, unedited phone snapshot — true-to-life colours, realistic uneven
 lighting, visible everyday details. It must NOT look like a 3D render,

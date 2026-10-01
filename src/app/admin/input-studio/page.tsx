@@ -130,10 +130,10 @@ function Studio() {
     }
   }
 
-  async function rerender(id: string, brief: string) {
+  async function rerender(id: string, brief: string, k?: Kind) {
     setResults((prev) => prev.map((r) => (r.id === id ? { ...r, busy: true, error: undefined } : r)));
     try {
-      const [out] = await call({ brief });
+      const [out] = await call({ brief, kind: k });
       setResults((prev) => prev.map((r) => (r.id === id ? { ...out, id, kind: r.kind, busy: false } : r)));
     } catch (e) {
       setResults((prev) =>
@@ -256,7 +256,7 @@ function Studio() {
               r={r}
               src={r.imageBase64 ? dataUrl(r) : null}
               canUse
-              onRerender={(brief) => rerender(r.id, brief)}
+              onRerender={(brief) => rerender(r.id, brief, r.kind)}
               onUse={() => sendToCreate(r)}
             />
           ))}
