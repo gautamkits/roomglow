@@ -32,12 +32,12 @@ export function spoken(text: string): string {
     .replace(/(?:₹|Rs\.?|INR)\s?([\d,]+)(?:\.\d+)?/gi, (_, d: string) => `${d} rupees`);
 }
 
-export async function tts(ai: GoogleGenAI, text: string, voice: string): Promise<Buffer> {
+export async function tts(ai: GoogleGenAI, text: string, voice: string, direction = DIRECTION): Promise<Buffer> {
   // The preview TTS model sometimes returns an empty (text-only) candidate; retry.
   for (let attempt = 0; attempt < 3; attempt++) {
     const res = await ai.models.generateContent({
       model: TTS_MODEL,
-      contents: [{ role: "user", parts: [{ text: `${DIRECTION}\n\n${text}` }] }],
+      contents: [{ role: "user", parts: [{ text: `${direction}\n\n${text}` }] }],
       config: {
         responseModalities: ["AUDIO"],
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
