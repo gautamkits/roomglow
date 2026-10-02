@@ -71,6 +71,19 @@ async function recordVoice(): Promise<{ pcm: Buffer; tl: GreetingTimeline }> {
   return { pcm, tl: greetingTimeline(segments) };
 }
 
+/** The slice of playwright this script uses (it's an optional, local-only dependency). */
+type Page = {
+  on(event: "pageerror", cb: (e: Error) => void): void;
+  goto(url: string, opts?: { waitUntil?: string }): Promise<unknown>;
+  waitForFunction(fn: () => unknown, arg: null, opts?: { timeout?: number }): Promise<unknown>;
+  evaluate<R, A>(fn: (arg: A) => R, arg: A): Promise<R>;
+};
+type Playwright = {
+  chromium: {
+    launch(opts?: { executablePath?: string }): Promise<{ newPage(): Promise<Page>; close(): Promise<void> }>;
+  };
+};
+
 function run(bin: string, argv: string[]) {
   return new Promise<void>((resolve, reject) => {
     const p = spawn(bin, argv, { stdio: ["ignore", "ignore", "pipe"] });
@@ -113,9 +126,12 @@ async function main() {
   }
   tl.segs.forEach(([s, e], i) => console.log(`  ${s.toFixed(2)}–${e.toFixed(2)}s  ${GANDHI_LINES[i]}`));
 
-  let pw: typeof import("playwright");
+  let pw: Playwright;
   try {
-    pw = await import("playwright");
+    // Not a project dependency: the module name is a variable so the app's
+    // type check (and Vercel's build) never tries to resolve it.
+    const name = "playwright";
+    pw = (await import(name)) as Playwright;
   } catch {
     throw new Error("playwright isn't installed — run `npm i --no-save playwright`.");
   }
@@ -132,13 +148,13 @@ async function main() {
       await page.goto(`http://localhost:${PORT}/dev/greeting`, { waitUntil: "networkidle" });
       await page.waitForFunction(() => window.__ready, null, { timeout: 120_000 });
       const n = await page.evaluate(
-        ([t, env]) => window.__setVoice!(t, env),
+        ([t, env]: readonly [GreetingTimeline, number[] | null]) => window.__setVoice!(t, env),
         [tl, pcm ? envelope(pcm) : null] as const
       );
       rmSync(FRAMES, { recursive: true, force: true });
       mkdirSync(FRAMES, { recursive: true });
       for (let i = 0; i < n; i++) {
-        const url = await page.evaluate((t) => window.__frame!(t), i / 30);
+        const url = await page.evaluate((t: number) => window.__frame!(t), i / 30);
         writeFileSync(path.join(FRAMES, `f${String(i).padStart(4, "0")}.png`), Buffer.from(url.split(",")[1], "base64"));
         if (i % 60 === 0) process.stdout.write(`\rFrames ${i}/${n}`);
       }
