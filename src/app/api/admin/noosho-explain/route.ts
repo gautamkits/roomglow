@@ -13,7 +13,8 @@ import { getDesign } from "@/lib/db";
 import { ensureHotspots } from "@/lib/hotspots";
 import { designTotal } from "@/lib/price";
 import type { ProductResult } from "@/lib/types";
-import { recordVoice, wav } from "@/lib/promo/explainVoice";
+import { recordLines, recordVoice, wav } from "@/lib/promo/explainVoice";
+import { GANDHI_LINES, GANDHI_DIRECTION } from "@/lib/greetings/gandhiJayantiScript";
 import { writeExplainLines, type ScriptPhoto } from "@/lib/promo/explainScript";
 
 export const runtime = "nodejs";
@@ -26,6 +27,8 @@ export const maxDuration = 120;
 //   voice  — one Gemini TTS take, cut into lines at its pauses, tightened, sped
 //            up 15%, with synthesised sound effects mixed in. Cached in Blob.
 //   mux    — phones: adds that voice to a silent render as AAC.
+//   greeting — Noosho's Gandhi Jayanti greeting (/admin/greeting): the same
+//            voice and processing, no sound effects, no design. Cached in Blob.
 
 const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_API_KEY! });
 const blobToken = process.env.newblob_READ_WRITE_TOKEN || process.env.BLOB_READ_WRITE_TOKEN;
@@ -117,7 +120,12 @@ async function buildScript(designId: string, avoid: string[] = []) {
 
 async function buildVoice(designId: string, lines: string[], voice: string, fx: { prices: number; total: boolean }) {
   const hash = createHash("sha1").update(JSON.stringify({ v: 6, lines, voice, fx })).digest("hex").slice(0, 12);
-  const key = `promo-vo/${designId}-${hash}.json`;
+  return cachedVoice(`${designId}-${hash}`, () => recordVoice(ai, lines, voice, fx));
+}
+
+/** A take stored as promo-vo/<id>.wav + .json, recorded once per id. */
+async function cachedVoice(id: string, record: () => Promise<{ pcm: Buffer; segments: [number, number][] }>) {
+  const key = `promo-vo/${id}.json`;
   try {
     const existing = await head(key, { token: blobToken });
     if (existing?.url) return { ...(await fetch(existing.url).then((r) => r.json())), cached: true };
@@ -125,8 +133,8 @@ async function buildVoice(designId: string, lines: string[], voice: string, fx: 
     /* not cached yet */
   }
 
-  const { pcm, segments } = await recordVoice(ai, lines, voice, fx);
-  const audio = await put(`promo-vo/${designId}-${hash}.wav`, wav(pcm), {
+  const { pcm, segments } = await record();
+  const audio = await put(`promo-vo/${id}.wav`, wav(pcm), {
     access: "public",
     contentType: "audio/wav",
     addRandomSuffix: false,
@@ -197,6 +205,20 @@ export async function POST(request: Request) {
   }
   try {
     const body = await request.json();
+    if (body.action === "greeting") {
+      const voice = VOICES.includes(body.voice) ? body.voice : VOICES[0];
+      // Lines and direction are fixed server-side; `take` > 0 re-records.
+      const take = Math.max(0, Math.min(20, Number(body.take) || 0));
+      const hash = createHash("sha1")
+        .update(JSON.stringify({ v: 1, lines: GANDHI_LINES, direction: GANDHI_DIRECTION, voice, take }))
+        .digest("hex")
+        .slice(0, 12);
+      return NextResponse.json(
+        await cachedVoice(`greeting-gandhi-jayanti-${hash}`, () =>
+          recordLines(ai, GANDHI_LINES, voice, { direction: GANDHI_DIRECTION })
+        )
+      );
+    }
     const designId = String(body.designId || "");
     if (!designId) return NextResponse.json({ error: "Missing designId" }, { status: 400 });
 
