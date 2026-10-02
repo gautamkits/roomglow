@@ -167,6 +167,31 @@ export async function speedUp(pcm: Buffer, tempo: number): Promise<Buffer> {
 
 export const TEMPO = 1.15; // punchier read, accent intact
 
+/**
+ * One continuous take of `lines`, cut at its pauses, tightened and sped up —
+ * no sound effects. One take, like the finalised promo VO: the accent and
+ * energy stay consistent across lines (separate calls drift between reads).
+ */
+export async function recordLines(
+  ai: GoogleGenAI,
+  lines: string[],
+  voice: string,
+  opts: { direction?: string; holdAfter?: number; hold?: number } = {}
+): Promise<{ pcm: Buffer; segments: [number, number][] }> {
+  const script = lines.map(spoken).join("\n\n");
+  let pcm: Buffer | null = null;
+  let segments: [number, number][] | null = null;
+  for (let take = 0; take < 3 && !segments; take++) {
+    pcm = await tts(ai, script, voice, opts.direction);
+    segments = splitTake(pcm, lines.length, lines.map((l) => spoken(l).length));
+  }
+  if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
+  ({ pcm, segments } = tighten(pcm, segments, opts.holdAfter, opts.hold));
+  pcm = await speedUp(pcm, TEMPO);
+  segments = segments.map(([s, e]) => [+(s / TEMPO).toFixed(3), +(e / TEMPO).toFixed(3)] as [number, number]);
+  return { pcm, segments };
+}
+
 /** Record, cut, tighten, speed up and add SFX — everything but storage. */
 export async function recordVoice(
   ai: GoogleGenAI,
@@ -174,19 +199,7 @@ export async function recordVoice(
   voice: string,
   fx: { prices: number; total: boolean }
 ): Promise<{ pcm: Buffer; segments: [number, number][] }> {
-  // One continuous take, like the finalised promo VO: the accent and energy
-  // stay consistent across lines (separate calls drift between reads).
-  const script = lines.map(spoken).join("\n\n");
-  let pcm: Buffer | null = null;
-  let segments: [number, number][] | null = null;
-  for (let take = 0; take < 3 && !segments; take++) {
-    pcm = await tts(ai, script, voice);
-    segments = splitTake(pcm, lines.length, lines.map((l) => spoken(l).length));
-  }
-  if (!pcm || !segments) throw new Error("Couldn't find the line breaks in Noosho's take — try again.");
   // hold the real-products beat a moment so the prices can land
-  ({ pcm, segments } = tighten(pcm, segments, 3, 0.2));
-  pcm = await speedUp(pcm, TEMPO);
-  segments = segments.map(([s, e]) => [+(s / TEMPO).toFixed(3), +(e / TEMPO).toFixed(3)] as [number, number]);
+  const { pcm, segments } = await recordLines(ai, lines, voice, { holdAfter: 3, hold: 0.2 });
   return { pcm: mixSfx(pcm, RATE, segments, fx), segments };
 }

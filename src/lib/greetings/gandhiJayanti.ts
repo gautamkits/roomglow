@@ -17,6 +17,19 @@ import { GANDHI_LINES, type GreetingTimeline } from "./gandhiJayantiScript";
 
 export { GANDHI_LINES, estimateTimeline, type GreetingTimeline } from "./gandhiJayantiScript";
 
+/**
+ * The 30°/40° wave frames swing past the sprite's 200×260 viewBox and clip
+ * her hand; wave between −6° and 18° instead. Mutates the kit's frames.
+ */
+export function tameWave(kit: NooshoKit) {
+  if (!kit.expr) return;
+  for (const key of [...kit.expr.keys()]) {
+    const m = key.match(/^(wave\|.*\|)(30|40)$/);
+    const keep = m && kit.expr.get(`${m[1]}18`);
+    if (keep) kit.expr.set(key, keep);
+  }
+}
+
 const SAFFRON = "#FF9933", GREEN = "#138808";
 
 function windowAlpha(t: number, s: number, e: number, fade = 0.35) {

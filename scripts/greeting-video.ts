@@ -25,8 +25,14 @@ import path from "path";
 import dotenv from "dotenv";
 import ffmpegPath from "ffmpeg-static";
 import { GoogleGenAI } from "@google/genai";
-import { RATE, TEMPO, spoken, tts, splitTake, tighten, speedUp, wav } from "../src/lib/promo/explainVoice";
-import { GANDHI_LINES, GANDHI_DIRECTION, estimateTimeline, type GreetingTimeline } from "../src/lib/greetings/gandhiJayantiScript";
+import { RATE, recordLines, wav } from "../src/lib/promo/explainVoice";
+import {
+  GANDHI_LINES,
+  GANDHI_DIRECTION,
+  estimateTimeline,
+  greetingTimeline,
+  type GreetingTimeline,
+} from "../src/lib/greetings/gandhiJayantiScript";
 
 dotenv.config({ path: ".env.local" });
 
@@ -59,20 +65,10 @@ function envelope(pcm: Buffer): number[] {
 async function recordVoice(): Promise<{ pcm: Buffer; tl: GreetingTimeline }> {
   const key = process.env.GOOGLE_AI_API_KEY;
   if (!key) throw new Error("GOOGLE_AI_API_KEY missing — set it in the environment or .env.local (or use --silent).");
+  console.log("Recording Noosho…");
   const ai = new GoogleGenAI({ apiKey: key });
-  const script = GANDHI_LINES.map(spoken).join("\n\n");
-  for (let take = 1; take <= 3; take++) {
-    console.log(`Recording Noosho (take ${take})…`);
-    const raw = await tts(ai, script, VOICE, GANDHI_DIRECTION);
-    const segs = splitTake(raw, GANDHI_LINES.length, GANDHI_LINES.map((l) => spoken(l).length));
-    if (!segs) continue;
-    let { pcm, segments } = tighten(raw, segs);
-    pcm = await speedUp(pcm, TEMPO);
-    segments = segments.map(([s, e]) => [+(s / TEMPO).toFixed(3), +(e / TEMPO).toFixed(3)] as [number, number]);
-    const duration = +(pcm.length / 2 / RATE + 1.6).toFixed(3); // hold the outro after her last word
-    return { pcm, tl: { segs: segments, duration } };
-  }
-  throw new Error("Couldn't find the line breaks in Noosho's take after 3 tries — run again.");
+  const { pcm, segments } = await recordLines(ai, GANDHI_LINES, VOICE, { direction: GANDHI_DIRECTION });
+  return { pcm, tl: greetingTimeline(segments) };
 }
 
 function run(bin: string, argv: string[]) {

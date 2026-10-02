@@ -6,6 +6,7 @@ import { REEL_W, REEL_H } from "@/lib/revealVideo";
 import {
   renderGandhiJayanti,
   estimateTimeline,
+  tameWave,
   type GreetingTimeline,
 } from "@/lib/greetings/gandhiJayanti";
 
@@ -30,12 +31,7 @@ export default function GreetingCanvas() {
       }
       const kit = await loadNooshoKit();
       if (!kit?.expr) throw new Error("Couldn't draw Noosho.");
-      // The 30°/40° wave frames swing past the sprite's 200×260 viewBox and
-      // clip her hand; wave between −6° and 18° instead.
-      for (const key of [...kit.expr.keys()]) {
-        const m = key.match(/^(wave\|.*\|)(30|40)$/);
-        if (m) kit.expr.set(key, kit.expr.get(`${m[1]}18`)!);
-      }
+      tameWave(kit);
       const ctx = ref.current!.getContext("2d")!;
       let tl = estimateTimeline();
       window.__setVoice = (next, envelope) => {

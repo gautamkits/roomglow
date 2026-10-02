@@ -26,6 +26,11 @@ export const GANDHI_DIRECTION =
 /** Per-line [start, end] seconds in the final audio, and the reel length. */
 export type GreetingTimeline = { segs: [number, number][]; duration: number };
 
+/** Timeline from a recorded take's line segments; holds the outro after her last word. */
+export function greetingTimeline(segs: [number, number][]): GreetingTimeline {
+  return { segs, duration: +(segs[segs.length - 1][1] + 1.6).toFixed(3) };
+}
+
 /** Timing without a recording (layout checks): ~16 chars/s, short gaps. */
 export function estimateTimeline(lines = GANDHI_LINES): GreetingTimeline {
   let t = 0.4;
